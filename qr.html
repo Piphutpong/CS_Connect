@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>พิมพ์ QR ตรวจสอบสถานะ - CS Connect</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=Sarabun:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- Standalone staff tool (not gated behind login -- it never touches any
+     backend data, it only builds a QR code from a constant URL) for printing
+     a QR label pointing customers to track.html. Opened from a request
+     card's "พิมพ์ QR" button as qr.html?tn=690001 so the reference number
+     is prefilled instead of retyped -- see qr.js. -->
+<!-- Batch mode: qr.html?tn=690001,690002,... renders a printable sheet of
+     labels instead of the single card below. Same page rather than a separate
+     one so the short link and QR generation stay in one place. -->
+<div class="qr-sheet" id="qrSheet" hidden>
+  <div class="qr-sheet-head">
+    <h1>QR ตรวจสอบสถานะคำร้อง</h1>
+    <p id="qrSheetCount"></p>
+    <button type="button" id="qrSheetPrintBtn" class="btn btn-primary">พิมพ์ทั้งหมด</button>
+  </div>
+  <div class="qr-labels" id="qrLabels"></div>
+</div>
+
+<div class="qr-page" id="qrSingle">
+  <section class="qr-card" id="printCard">
+    <div class="qr-brand">CS Connect</div>
+    <h1>สแกนเพื่อตรวจสอบสถานะคำร้อง</h1>
+    <p class="qr-lede">ใช้มือถือสแกน QR นี้เพื่อเช็คสถานะคำร้องได้ทันที ไม่ต้องติดตั้งแอป</p>
+    <div class="qr-frame" id="qr" aria-label="QR code สำหรับสแกนไปยังหน้าตรวจสอบสถานะ"></div>
+    <p class="qr-url" id="urlText"></p>
+    <p class="qr-tracking-line">เลขที่คำร้องของท่าน: <span id="trackingFillValue" class="qr-blank"></span></p>
+    <!-- One line instead of a numbered how-to: the batch labels proved that
+         naming the two things to type is all a customer actually needs, and
+         it keeps the printed card short. -->
+    <p class="qr-scan-hint">สแกนแล้วกรอกเลขนี้คู่กับเบอร์โทรที่แจ้งไว้</p>
+  </section>
+
+  <aside class="qr-side">
+    <div class="field">
+      <label for="trackingNumberInput">เลขที่คำร้องของลูกค้ารายนี้ (ถ้ามี)</label>
+      <input type="text" id="trackingNumberInput" placeholder="เช่น 690001" inputmode="numeric" autocomplete="off">
+      <p class="qr-hint">มาจากคำร้องที่เปิดไว้ให้อัตโนมัติเมื่อกดพิมพ์ QR จากการ์ดคำร้อง แก้ไขเองได้ หรือเว้นว่างไว้แล้วเขียนด้วยลายมือทีหลัง</p>
+    </div>
+
+    <button type="button" id="printBtn" class="btn btn-primary btn-block">พิมพ์ป้าย QR นี้</button>
+    <button type="button" id="copyBtn" class="btn btn-ghost btn-block">คัดลอกลิงก์</button>
+    <p class="copy-feedback" id="copyFeedback" role="status" aria-live="polite"></p>
+
+    <p class="qr-note">พิมพ์แล้วนำไปติดหน้าเคาน์เตอร์บริการหรือแนบไปกับใบเสร็จให้ลูกค้าสแกนได้เลย แถบนี้จะไม่ปรากฏตอนสั่งพิมพ์</p>
+  </aside>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script src="qr.js"></script>
+</body>
+</html>

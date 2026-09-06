@@ -1,0 +1,27 @@
+# NOTE: a "#" only starts a comment at the START of a line. A comment placed
+# after a pattern becomes part of the pattern and silently matches nothing, so
+# every rule below is kept on its own line.
+
+# Local tooling / scratch work
+.agents/
+scratchpad/
+skills-lock.json
+
+# Internal material -- deliberately NOT published.
+#
+# The repo is public because GitHub Pages serves the site from it, so anything
+# committed here is readable by anyone. Only the files the browser actually
+# needs belong in it. The rules below describe how the backend works, how it
+# is operated and where it is weak, and none are needed to serve the site.
+
+# backend source: admin email, invite code, auth scheme, sheet layout
+apps-script/
+
+# architecture notes, including documented weaknesses
+CLAUDE.md
+
+# operating manual (member approval, maintenance)
+README.md
+
+# migration plan and target schema
+django/

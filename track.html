@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ติดตามสถานะคำร้อง - CS Connect</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=Sarabun:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- Standalone page (not part of the index.html single-page app) so it can
+     have its own short URL / QR code for customers, independent of the
+     staff login app. See track.js for its script. -->
+<section class="auth-view">
+  <div class="auth-card">
+    <div class="brand">
+      <div class="brand-mark">CS</div>
+      <h1>ติดตามสถานะคำร้อง</h1>
+      <p class="brand-sub">กรอกเลขที่คำร้อง (ระบบ) เพื่อตรวจสอบสถานะล่าสุด</p>
+    </div>
+
+    <form id="trackForm" class="auth-form" novalidate>
+      <div class="field">
+        <label for="trackNumber">เลขที่คำร้อง</label>
+        <input type="text" id="trackNumber" placeholder="เช่น 690001" required autocomplete="off">
+      </div>
+      <div class="field">
+        <label for="trackPhone">เบอร์โทรศัพท์ที่แจ้งไว้</label>
+        <input type="tel" id="trackPhone" placeholder="เบอร์โทรศัพท์ที่ใช้ยื่นคำร้อง" required autocomplete="off">
+      </div>
+      <p id="trackError" class="form-error" hidden></p>
+      <button type="submit" class="btn btn-primary btn-block">ตรวจสอบสถานะ</button>
+    </form>
+
+    <div id="trackResult" class="track-result" hidden>
+      <dl class="track-result-details">
+        <div><dt>ชื่อ</dt><dd id="trackResultName"></dd></div>
+        <div><dt>เลขที่คำร้อง</dt><dd id="trackResultNumber"></dd></div>
+        <div><dt>วันที่รับคำร้อง</dt><dd id="trackResultDate"></dd></div>
+        <div class="plain"><dd id="trackResultPurpose"></dd></div>
+        <div><dt>สถานะ</dt><dd><span id="trackStatusBadge" class="request-badge request-badge-status"></span></dd></div>
+      </dl>
+
+      <div id="trackPaymentSection" class="track-payment" hidden>
+        <p class="track-payment-heading">บัญชีสำหรับโอนเงิน</p>
+        <!-- ค่าว่างโดยตั้งใจ: เลขบัญชีและชื่อหน่วยงานถูกย้ายไปฝั่งเซิร์ฟเวอร์
+             (PAYMENT_ACCOUNT ใน Code.gs) แล้วส่งมาเฉพาะคนที่ค้นเจอคำร้องของ
+             ตัวเองจริงและสถานะเป็น "รอชำระเงิน" -- ถ้าเขียนไว้ตรงนี้ ใครกด
+             View Source ก็อ่านได้หมดโดยไม่ต้องค้นอะไรเลย -->
+        <dl class="track-result-details">
+          <div><dt>ชื่อบัญชี</dt><dd id="payAccountName"></dd></div>
+          <div><dt>ธนาคาร</dt><dd id="payBank"></dd></div>
+          <div><dt>สาขา</dt><dd id="payBranch"></dd></div>
+          <div><dt>เลขที่บัญชี</dt><dd id="payAccountNumber"></dd></div>
+        </dl>
+      </div>
+
+      <div id="trackSlipSection" class="track-slip">
+        <p class="track-payment-heading">สลิปการโอนเงิน</p>
+        <img id="trackSlipImage" alt="สลิปการโอนเงิน" hidden>
+
+        <form id="trackSlipForm" class="auth-form" novalidate>
+          <div class="field">
+            <label for="trackSlipFile" id="trackSlipFileLabel">แนบสลิปการโอนเงิน</label>
+            <input type="file" id="trackSlipFile" accept="image/*">
+          </div>
+          <p id="trackSlipError" class="form-error" hidden></p>
+          <button type="submit" id="trackSlipSubmitBtn" class="btn btn-primary btn-block">ยืนยันการชำระเงิน</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===== POPUP: SLIP UPLOAD SUCCESS ===== -->
+<div id="slipSuccessModal" class="modal-overlay" hidden>
+  <div class="modal-card">
+    <span class="modal-icon" aria-hidden="true">
+      <svg viewBox="0 0 24 24" fill="none"><path d="M20 6 9 17l-5-5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </span>
+    <h3>แนบสลิปสำเร็จ</h3>
+    <p>รอเจ้าหน้าที่ตรวจสอบการชำระเงิน</p>
+    <button type="button" id="slipSuccessOkBtn" class="btn btn-primary btn-block">ตกลง</button>
+  </div>
+</div>
+
+<script src="track.js"></script>
+</body>
+</html>
