@@ -1067,10 +1067,7 @@
     try {
       const name = document.getElementById("regName").value.trim();
       const email = document.getElementById("regEmail").value.trim().toLowerCase();
-      const employeeId = document.getElementById("regEmployeeId").value.trim();
       const position = document.getElementById("regPosition").value.trim();
-      const department = document.getElementById("regDepartment").value.trim();
-      const affiliation = document.getElementById("regAffiliation").value.trim();
       const password = document.getElementById("regPassword").value;
       const confirm = document.getElementById("regPasswordConfirm").value;
       const registrationCode = document.getElementById("regCode").value.trim();
@@ -1085,23 +1082,8 @@
         return;
       }
 
-      if (!employeeId) {
-        showError(registerError, "กรุณากรอกรหัสพนักงาน");
-        return;
-      }
-
       if (!position) {
         showError(registerError, "กรุณากรอกตำแหน่ง");
-        return;
-      }
-
-      if (!department) {
-        showError(registerError, "กรุณากรอกแผนก");
-        return;
-      }
-
-      if (!affiliation) {
-        showError(registerError, "กรุณากรอกสังกัด");
         return;
       }
 
@@ -1128,7 +1110,7 @@
       // bypassed, since anyone can call the endpoint directly. This only
       // carries the value.
       setBusy(registerSubmitBtn, true, "กำลังสมัครสมาชิก...");
-      await backend.register({ name, email, employeeId, position, department, affiliation, password, registrationCode });
+      await backend.register({ name, email, position, password, registrationCode });
 
       registerForm.reset();
       // Not "กรุณาเข้าสู่ระบบ" -- the account can't log in yet. registerUser_

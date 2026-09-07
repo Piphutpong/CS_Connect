@@ -83,27 +83,15 @@
     <form id="registerForm" class="auth-form" novalidate>
       <div class="field">
         <label for="regName">ชื่อ - นามสกุล</label>
-        <input type="text" id="regName" placeholder="ชื่อผู้ใช้งาน" required autocomplete="name">
+        <input type="text" id="regName" placeholder="ชื่อผู้ใช้งาน" required autocomplete="name" maxlength="200">
       </div>
       <div class="field">
         <label for="regEmail">อีเมล (ใช้เป็น Username)</label>
         <input type="email" id="regEmail" placeholder="name@pea.co.th" required autocomplete="username">
       </div>
       <div class="field">
-        <label for="regEmployeeId">รหัสพนักงาน</label>
-        <input type="text" id="regEmployeeId" placeholder="รหัสพนักงาน" required autocomplete="off">
-      </div>
-      <div class="field">
         <label for="regPosition">ตำแหน่ง</label>
-        <input type="text" id="regPosition" placeholder="ตำแหน่งงาน" required autocomplete="off">
-      </div>
-      <div class="field">
-        <label for="regDepartment">แผนก</label>
-        <input type="text" id="regDepartment" placeholder="แผนก" required autocomplete="off">
-      </div>
-      <div class="field">
-        <label for="regAffiliation">สังกัด</label>
-        <input type="text" id="regAffiliation" placeholder="สังกัด" required autocomplete="off">
+        <input type="text" id="regPosition" placeholder="ตำแหน่งงาน" required autocomplete="off" maxlength="150">
       </div>
       <div class="field">
         <label for="regPassword">รหัสผ่าน</label>
