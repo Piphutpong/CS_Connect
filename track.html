@@ -25,7 +25,7 @@
 <title>ติดตามสถานะคำร้อง - CS Connect</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=Sarabun:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="style.css?v=20260907a">
 </head>
 <body>
 
@@ -105,6 +105,13 @@
   </div>
 </div>
 
-<script src="track.js"></script>
+<!-- ?v= คือตัวบังคับให้เบราว์เซอร์โหลดไฟล์ใหม่ -- GitHub Pages ส่ง
+     Cache-Control: max-age=600 มาด้วย แปลว่าหลัง push ไปแล้ว เบราว์เซอร์จะ
+     ยังใช้ไฟล์เก่าต่ออีก 10 นาทีโดยไม่ถามเซิร์ฟเวอร์เลย ซึ่งเคยทำให้ผู้ใช้
+     เจอหลังบ้านเวอร์ชันใหม่คู่กับ app.js เวอร์ชันเก่าพร้อมกัน แล้วเกิดอาการ
+     ที่หาสาเหตุยากมาก
+     **ต้องเปลี่ยนเลขนี้ทุกครั้งที่แก้ app.js / style.css / track.js / qr.js**
+     ไม่งั้นผู้ใช้บางคนจะยังได้ไฟล์เก่าไปอีกพักใหญ่ -->
+<script src="track.js?v=20260907a"></script>
 </body>
 </html>

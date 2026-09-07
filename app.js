@@ -1119,7 +1119,7 @@
       enterApp();
     } catch (err) {
       console.error("CS Connect login error:", err);
-      showError(loginError, err.message || "เกิดข้อผิดพลาด ไม่สามารถเข้าสู่ระบบได้ กรุณาลองใหม่อีกครั้ง");
+      showError(loginError, friendlyError(err, "เกิดข้อผิดพลาด ไม่สามารถเข้าสู่ระบบได้ กรุณาลองใหม่อีกครั้ง"));
     } finally {
       setBusy(submitBtn, false);
     }
