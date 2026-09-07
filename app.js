@@ -1234,10 +1234,20 @@
   }
 
   /**
-   * ล้างค่าที่ไม่ควรค้างอยู่บนหน้าจอหลังออกจากระบบ -- รหัสผ่านชั่วคราวที่ผู้ดูแล
-   * ระบบเพิ่งสุ่มให้คนอื่น เป็นค่าที่ระบบไม่ได้เก็บไว้ที่ไหนเลยและตั้งใจให้เห็น
-   * ครั้งเดียว การปล่อยให้ค้างอยู่ในหน้าที่ซ่อนไว้เฉย ๆ ทำให้คนถัดไปที่ล็อกอิน
-   * บนเครื่องเดียวกันกดกลับเข้ามาดูได้
+   * ล้างทุกอย่างบนหน้าจอที่เป็นของผู้ใช้คนก่อน -- เรียกตอนออกจากระบบ ตอนเซสชัน
+   * หมดอายุ และตอนเตะทุกอุปกรณ์ออก
+   *
+   * สองกลุ่ม และสำคัญคนละแบบ:
+   *
+   * 1. รหัสผ่านชั่วคราวที่ผู้ดูแลระบบเพิ่งสุ่มให้คนอื่น -- ระบบไม่ได้เก็บไว้ที่ไหน
+   *    เลยและตั้งใจให้เห็นครั้งเดียว ถ้าค้างอยู่ในหน้าที่แค่ซ่อนไว้ คนถัดไปที่
+   *    ล็อกอินบนเครื่องเดียวกันกดกลับเข้ามาดูได้
+   *
+   * 2. ชื่อผู้ใช้บนแถบบนและปุ่มของผู้ดูแลระบบ -- เดิมไม่เคยถูกล้าง ทำให้หลังจาก
+   *    ผู้ดูแลระบบออกจากระบบแล้วมีคนอื่นล็อกอินต่อบนเครื่องเดียวกัน หน้าแรกยัง
+   *    ขึ้นชื่อผู้ดูแลระบบและยังโชว์ปุ่ม "ออกจากระบบทุกอุปกรณ์" อยู่ ซึ่งทำให้
+   *    เข้าใจผิดว่ากำลังใช้งานด้วยบัญชีผู้ดูแลระบบ (สิทธิ์จริงไม่ได้หลุดตามไปด้วย
+   *    เพราะฝั่งเซิร์ฟเวอร์ตัดสินจาก token เสมอ แต่หน้าจอที่โกหกก็อันตรายพอกัน)
    */
   function clearSensitiveScreens() {
     document.getElementById("tempPasswordValue").textContent = "";
@@ -1245,6 +1255,11 @@
     document.getElementById("adminResetResult").hidden = true;
     document.getElementById("changePasswordForm").reset();
     document.getElementById("adminResetForm").reset();
+
+    document.getElementById("revokeAllBtn").hidden = true;
+    document.getElementById("userGreeting").textContent = "";
+    document.getElementById("userGreeting2").textContent = "";
+    document.getElementById("userGreeting3").textContent = "";
   }
 
   function logout() {
@@ -1307,7 +1322,10 @@
 
   document.getElementById("accountBackLink").addEventListener("click", (e) => {
     e.preventDefault();
-    showView("home");
+    // ต้องผ่าน enterApp() ไม่ใช่ showView("home") ตรง ๆ -- enterApp() เป็นที่เดียว
+    // ที่เขียนชื่อผู้ใช้บนแถบบนและตัดสินว่าปุ่มของผู้ดูแลระบบควรโผล่ไหม ถ้าข้ามไป
+    // หน้าแรกจะยังโชว์ชื่อของคนที่ใช้เครื่องนี้ก่อนหน้า
+    enterApp();
   });
 
   accountView.changeForm.addEventListener("submit", async (e) => {
@@ -1372,7 +1390,13 @@
         try {
           await refreshAll();
           updateTabBadges();
+
+          // ตั้งรหัสใหม่เสร็จ = ผ่านด่านแล้ว พาเข้าหน้าใช้งานเลย การค้างอยู่หน้า
+          // เดิมทำให้ไม่รู้ว่าสำเร็จหรือยัง และเป็นสิ่งที่ผู้ใช้ต้องเดาเอง
+          enterApp();
         } catch (loadErr) {
+          // โหลดข้อมูลไม่ผ่าน = ยังไม่พาเข้าหน้าใช้งาน เพราะจะเจอรายการว่างเปล่า
+          // โดยไม่รู้สาเหตุ -- อยู่หน้านี้ต่อพร้อมข้อความบอกดีกว่า
           console.error("CS Connect: โหลดข้อมูลหลังเปลี่ยนรหัสผ่านไม่สำเร็จ", loadErr);
           accountView.changeSuccess.textContent +=
             " (โหลดข้อมูลไม่สำเร็จ กรุณารีเฟรชหน้าเว็บอีกครั้ง)";
@@ -1490,9 +1514,11 @@
     });
   });
 
-  document.getElementById("backBtn").addEventListener("click", () => showView("home"));
-  document.getElementById("backToHomeBtn").addEventListener("click", () => showView("home"));
-  document.getElementById("requestsBackBtn").addEventListener("click", () => showView("home"));
+  // ทุกปุ่ม "กลับหน้าแรก" ผ่าน enterApp() เหมือนกันหมด เพื่อให้มีทางเข้าหน้าแรก
+  // ทางเดียว และชื่อผู้ใช้บนแถบบนตรงกับ session ปัจจุบันเสมอ
+  document.getElementById("backBtn").addEventListener("click", enterApp);
+  document.getElementById("backToHomeBtn").addEventListener("click", enterApp);
+  document.getElementById("requestsBackBtn").addEventListener("click", enterApp);
 
   // ---------- requests workspace ----------
   const requestsListMode = document.getElementById("requestsListMode");
