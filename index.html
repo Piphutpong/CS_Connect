@@ -3,6 +3,21 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<!-- Content-Security-Policy: ชั้นสุดท้ายที่ทำให้ "ต่อให้มีช่องโหว่จนแทรก
+     สคริปต์ได้ ก็ส่งข้อมูลออกไปไหนไม่ได้" -- script-src กันสคริปต์ที่ไม่ได้มาจาก
+     ไฟล์ของเราเอง และ connect-src อนุญาตให้ยิงได้ที่เดียวคือ Apps Script
+     หมายเหตุ: frame-ancestors ใช้ผ่าน <meta> ไม่ได้ (ต้องเป็น HTTP header ซึ่ง
+     GitHub Pages ตั้งให้ไม่ได้) การกันการถูกฝังใน iframe จึงยังทำไม่ได้ที่นี่ -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'none';
+        script-src 'self';
+        style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
+        font-src https://fonts.gstatic.com;
+        img-src 'self' data: https://drive.google.com https://*.googleusercontent.com;
+        connect-src https://script.google.com;
+        form-action 'none';
+        base-uri 'none';
+        object-src 'none'">
+<meta name="referrer" content="no-referrer">
 <title>CS Connect</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=Sarabun:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
@@ -18,7 +33,9 @@
     <div id="bootError" class="boot-error" hidden>
       <p>เชื่อมต่อฐานข้อมูลไม่สำเร็จ</p>
       <p class="boot-error-hint">กรุณาตรวจสอบอินเทอร์เน็ตแล้วลองใหม่อีกครั้ง</p>
-      <button type="button" class="btn btn-primary" onclick="location.reload()">ลองใหม่</button>
+      <!-- เดิมเป็น onclick="location.reload()" ตรงนี้ ซึ่ง CSP script-src บล็อก
+           ทั้งหมด ปุ่มนี้จึงถูกผูก event ใน app.js แทน (ดู bootRetryBtn) -->
+      <button type="button" id="bootRetryBtn" class="btn btn-primary">ลองใหม่</button>
     </div>
   </div>
 </div>
@@ -90,7 +107,7 @@
       </div>
       <div class="field">
         <label for="regPassword">รหัสผ่าน</label>
-        <input type="password" id="regPassword" placeholder="อย่างน้อย 6 ตัวอักษร" required autocomplete="new-password">
+        <input type="password" id="regPassword" placeholder="อย่างน้อย 10 ตัวอักษร" required autocomplete="new-password">
       </div>
       <div class="field">
         <label for="regPasswordConfirm">ยืนยันรหัสผ่าน</label>
@@ -110,6 +127,64 @@
   </div>
 </section>
 
+<!-- ===== ACCOUNT: เปลี่ยนรหัสผ่าน / ตั้งรหัสชั่วคราว ===== -->
+<section id="accountView" class="auth-view" hidden>
+  <div class="auth-card">
+    <div class="brand">
+      <div class="brand-mark">CS</div>
+      <h1>บัญชีของฉัน</h1>
+      <p class="brand-sub">เปลี่ยนรหัสผ่านที่ใช้เข้าสู่ระบบ</p>
+    </div>
+
+    <form id="changePasswordForm" class="auth-form" novalidate>
+      <div class="field">
+        <label for="currentPassword">รหัสผ่านปัจจุบัน</label>
+        <input type="password" id="currentPassword" placeholder="รหัสผ่านที่ใช้อยู่" required autocomplete="current-password">
+      </div>
+      <div class="field">
+        <label for="newPassword">รหัสผ่านใหม่</label>
+        <input type="password" id="newPassword" placeholder="อย่างน้อย 10 ตัวอักษร" required autocomplete="new-password">
+      </div>
+      <div class="field">
+        <label for="newPasswordConfirm">ยืนยันรหัสผ่านใหม่</label>
+        <input type="password" id="newPasswordConfirm" placeholder="กรอกรหัสผ่านใหม่อีกครั้ง" required autocomplete="new-password">
+      </div>
+      <p id="changePasswordError" class="form-error" hidden></p>
+      <p id="changePasswordSuccess" class="form-success" hidden></p>
+      <button type="submit" class="btn btn-primary btn-block">บันทึกรหัสผ่านใหม่</button>
+    </form>
+
+    <!-- ผู้ดูแลระบบเท่านั้น -- app.js เปิดให้เห็นตาม isAdmin
+         การกันสิทธิ์จริงอยู่ที่ requireAdmin_ ฝั่ง Apps Script ไม่ใช่ที่ hidden นี้ -->
+    <div id="adminResetSection" class="admin-panel" hidden>
+      <h2 class="admin-panel-title">ตั้งรหัสผ่านชั่วคราว</h2>
+      <p class="admin-panel-hint">
+        ใช้เมื่อเจ้าหน้าที่ลืมรหัสผ่าน ระบบจะสุ่มรหัสให้และ<strong>แสดงเพียงครั้งเดียว</strong>
+        เจ้าตัวจะหลุดจากทุกอุปกรณ์ทันที และควรเปลี่ยนรหัสเองหลังเข้าระบบได้แล้ว
+      </p>
+      <form id="adminResetForm" class="auth-form" novalidate>
+        <div class="field">
+          <label for="resetEmail">อีเมลของผู้ใช้</label>
+          <input type="email" id="resetEmail" placeholder="name@pea.co.th" required autocomplete="off">
+        </div>
+        <p id="adminResetError" class="form-error" hidden></p>
+        <button type="submit" class="btn btn-ghost btn-danger-ghost btn-block">สุ่มรหัสผ่านชั่วคราว</button>
+      </form>
+
+      <div id="adminResetResult" class="temp-password" hidden>
+        <p class="temp-password-label">รหัสผ่านชั่วคราวของ <span id="tempPasswordEmail"></span></p>
+        <p id="tempPasswordValue" class="temp-password-value"></p>
+        <p class="temp-password-warn">
+          แสดงครั้งเดียวเท่านั้น — จดหรือแจ้งเจ้าตัวทันที ออกจากหน้านี้แล้วจะดูอีกไม่ได้
+          และระบบไม่ได้เก็บรหัสนี้ไว้ที่ไหนเลย
+        </p>
+      </div>
+    </div>
+
+    <p class="auth-switch"><a href="#" id="accountBackLink">กลับหน้าแรก</a></p>
+  </div>
+</section>
+
 <!-- ===== HOME ===== -->
 <section id="homeView" class="app-view" hidden>
   <header class="topbar">
@@ -119,6 +194,10 @@
     </div>
     <div class="topbar-user">
       <span id="userGreeting" class="user-greeting"></span>
+      <button id="accountBtn" class="btn btn-ghost">บัญชีของฉัน</button>
+      <!-- ผู้ดูแลระบบเท่านั้น -- app.js เปิดให้เห็นตาม isAdmin ที่ได้จากตอนล็อกอิน
+           การกันสิทธิ์จริงอยู่ที่ requireAdmin_ ฝั่ง Apps Script ไม่ใช่ที่ hidden นี้ -->
+      <button id="revokeAllBtn" class="btn btn-ghost btn-danger-ghost" hidden>ออกจากระบบทุกอุปกรณ์</button>
       <button id="logoutBtn" class="btn btn-ghost">ออกจากระบบ</button>
     </div>
   </header>

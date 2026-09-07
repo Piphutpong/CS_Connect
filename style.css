@@ -1874,3 +1874,91 @@ button:active {
     padding: 10mm;
   }
 }
+
+
+/* ปุ่มคำสั่งฉุกเฉินของผู้ดูแลระบบบน topbar -- ยังเป็นปุ่ม ghost เหมือนปุ่มข้างกัน
+   (ไม่ใช่ปุ่มทึบ) เพราะไม่ควรเด่นกว่างานประจำวัน แต่ย้อมเป็นโทนอันตรายเพื่อไม่ให้
+   กดสลับกับ "ออกจากระบบ" ที่อยู่ติดกัน ซึ่งผลลัพธ์ต่างกันคนละเรื่อง */
+.btn-danger-ghost {
+  color: var(--danger);
+  border-color: var(--danger);
+}
+
+.btn-danger-ghost:hover {
+  background: var(--danger-tint);
+  color: var(--danger);
+}
+
+/* ==========================================================================
+   Account view (เปลี่ยนรหัสผ่าน / ตั้งรหัสผ่านชั่วคราว)
+   ========================================================================== */
+
+/* แยกส่วนของผู้ดูแลระบบออกจากฟอร์มด้านบนให้ชัด -- สองฟอร์มนี้ทำคนละเรื่องกัน
+   (รหัสของตัวเอง กับรหัสของคนอื่น) การเผลอกรอกผิดฟอร์มมีราคาแพง */
+.admin-panel {
+  margin-top: 28px;
+  padding-top: 24px;
+  border-top: 1px dashed var(--border-strong);
+}
+
+/* ไม่ได้ตั้ง display ไว้ จึงยังไม่จำเป็นตอนนี้ แต่ใส่กันไว้ตามกฎ [hidden] ของ
+   โปรเจกต์ เผื่อวันหลังมีคนเติม display: flex/grid ให้คลาสนี้แล้วซ่อนไม่ลง */
+.admin-panel[hidden],
+.temp-password[hidden] {
+  display: none;
+}
+
+.admin-panel-title {
+  margin: 0 0 6px;
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--danger);
+}
+
+.admin-panel-hint {
+  margin: 0 0 16px;
+  font-size: 13px;
+  line-height: 1.75;
+  color: var(--ink-soft);
+}
+
+.temp-password {
+  margin-top: 18px;
+  padding: 16px 18px;
+  background: var(--warning-tint);
+  border: 1px solid var(--warning);
+  border-radius: 10px;
+  text-align: center;
+}
+
+.temp-password-label {
+  margin: 0 0 10px;
+  font-size: 13px;
+  color: var(--ink-soft);
+}
+
+.temp-password-label span {
+  font-weight: 600;
+  color: var(--ink);
+}
+
+/* mono + user-select: all -- รหัสนี้ต้องถูกอ่านออกเสียงหรือคัดลอกให้ถูกทุกตัว
+   ฟอนต์ที่แยก 0/O และ 1/l ได้จึงสำคัญพอ ๆ กับการคัดลอกได้ในคลิกเดียว */
+.temp-password-value {
+  margin: 0 0 12px;
+  font-family: var(--font-mono);
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: 2px;
+  color: var(--ink);
+  user-select: all;
+  word-break: break-all;
+}
+
+.temp-password-warn {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.7;
+  color: var(--warning);
+}

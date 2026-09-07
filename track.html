@@ -3,6 +3,21 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<!-- Content-Security-Policy: ชั้นสุดท้ายที่ทำให้ "ต่อให้มีช่องโหว่จนแทรก
+     สคริปต์ได้ ก็ส่งข้อมูลออกไปไหนไม่ได้" -- script-src กันสคริปต์ที่ไม่ได้มาจาก
+     ไฟล์ของเราเอง และ connect-src อนุญาตให้ยิงได้ที่เดียวคือ Apps Script
+     หมายเหตุ: frame-ancestors ใช้ผ่าน <meta> ไม่ได้ (ต้องเป็น HTTP header ซึ่ง
+     GitHub Pages ตั้งให้ไม่ได้) การกันการถูกฝังใน iframe จึงยังทำไม่ได้ที่นี่ -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'none';
+        script-src 'self';
+        style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
+        font-src https://fonts.gstatic.com;
+        img-src 'self' data: https://drive.google.com https://*.googleusercontent.com;
+        connect-src https://script.google.com;
+        form-action 'none';
+        base-uri 'none';
+        object-src 'none'">
+<meta name="referrer" content="no-referrer">
 <title>ติดตามสถานะคำร้อง - CS Connect</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=Sarabun:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">

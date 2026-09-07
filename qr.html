@@ -3,6 +3,20 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<!-- Content-Security-Policy: ชั้นสุดท้ายที่ทำให้ "ต่อให้มีช่องโหว่จนแทรก
+     สคริปต์ได้ ก็ส่งข้อมูลออกไปไหนไม่ได้" -- script-src กันสคริปต์ที่ไม่ได้มาจาก
+     ไฟล์ของเราเอง และ connect-src อนุญาตให้ยิงได้ที่เดียวคือ Apps Script
+     หมายเหตุ: frame-ancestors ใช้ผ่าน <meta> ไม่ได้ (ต้องเป็น HTTP header ซึ่ง
+     GitHub Pages ตั้งให้ไม่ได้) การกันการถูกฝังใน iframe จึงยังทำไม่ได้ที่นี่ -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'none';
+        script-src 'self' https://cdnjs.cloudflare.com;
+        style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
+        font-src https://fonts.gstatic.com;
+        img-src 'self' data:;
+        form-action 'none';
+        base-uri 'none';
+        object-src 'none'">
+<meta name="referrer" content="no-referrer">
 <title>พิมพ์ QR ตรวจสอบสถานะ - CS Connect</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=Sarabun:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
@@ -56,7 +70,14 @@
   </aside>
 </div>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<!-- integrity/crossorigin: หน้านี้อยู่ origin เดียวกับ index.html สคริปต์จาก CDN จึงอ่าน
+     localStorage ที่เก็บ session token ของเจ้าหน้าที่ได้ ถ้าไฟล์ฝั่ง CDN ถูก
+     แก้ไข hash นี้จะไม่ตรงและเบราว์เซอร์จะปฏิเสธการโหลดเอง
+     ค่า hash นี้ตรงกับที่ cdnjs ประกาศไว้สำหรับ qrcodejs 1.0.0 -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"
+        integrity="sha512-CNgIRecGo7nphbeZ04Sc13ka07paqdeTu0WR1IM4kNcpmBAUSHSQX0FslNhTDadL4O5SAGapGt4FodqL8My0mA=="
+        crossorigin="anonymous"
+        referrerpolicy="no-referrer"></script>
 <script src="qr.js"></script>
 </body>
 </html>

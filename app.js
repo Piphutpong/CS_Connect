@@ -186,7 +186,23 @@
       return user;
     },
 
-    async logout() {}
+    async logout() {},
+
+    // โหมดออฟไลน์ไม่มี session ฝั่งเซิร์ฟเวอร์ให้ยกเลิก -- มีไว้เพื่อให้หน้าเว็บ
+    // เรียกได้เหมือนกันโดยไม่พัง (ปุ่มนี้ซ่อนอยู่แล้วถ้าไม่ใช่ผู้ดูแลระบบ)
+    async revokeAllSessions() {
+      return { revoked: 0 };
+    },
+
+    // โหมดออฟไลน์เก็บรหัสผ่านแบบอ่านได้อยู่แล้ว (dev เท่านั้น) การทำให้คำสั่งนี้
+    // "เหมือนจะใช้ได้" จึงอันตรายกว่าการบอกตรง ๆ ว่าใช้ไม่ได้
+    async changePassword() {
+      throw new Error("โหมดออฟไลน์ไม่รองรับการเปลี่ยนรหัสผ่าน");
+    },
+
+    async adminResetPassword() {
+      throw new Error("โหมดออฟไลน์ไม่รองรับการตั้งรหัสผ่านชั่วคราว");
+    }
 
     // track()/uploadSlip() live in track.js now -- the public tracking page
     // is its own standalone page (see track.html) so it can have its own
@@ -224,9 +240,26 @@
       return body.data;
     }
 
-    /** Data calls carry the login token; the backend rejects them without it. */
-    function callAsUser(payload) {
-      return call({ ...payload, token: getSession()?.token });
+    /**
+     * Data calls carry the login token; the backend rejects them without it.
+     *
+     * ทุกคำสั่งที่ต้องล็อกอินผ่านที่นี่ที่เดียว จึงเป็นจุดเดียวที่ต้องดัก
+     * AUTH_REQUIRED -- แทนที่จะไปไล่ใส่ในทุก catch ของทุกฟอร์ม
+     *
+     * ยัง throw ต่อเสมอ ไม่กลืน error ทิ้ง: ผู้เรียกต้องรู้ว่างานไม่สำเร็จ เพื่อจะ
+     * ได้ไม่ไปอัปเดต cache หรือปิดฟอร์มราวกับบันทึกผ่านแล้ว (ดู saveRequests ที่
+     * ต้อง roll back cache กลับ) -- ข้อความที่ผู้เรียกเอาไปแสดงจะอยู่บนหน้าจอที่
+     * ถูกซ่อนไปแล้ว ผู้ใช้จึงเห็นแต่ข้อความเซสชันหมดอายุที่หน้า login
+     */
+    async function callAsUser(payload) {
+      try {
+        return await call({ ...payload, token: getSession()?.token });
+      } catch (err) {
+        if (String(err && err.message).includes("AUTH_REQUIRED")) {
+          handleAuthExpired();
+        }
+        throw err;
+      }
     }
 
     return {
@@ -266,6 +299,22 @@
 
       async logout(token) {
         return call({ action: "logout", token });
+      },
+
+      // ผู้ดูแลระบบเท่านั้น -- ฝั่ง Apps Script ตรวจด้วย requireAdmin_ อีกชั้น
+      async revokeAllSessions() {
+        return callAsUser({ action: "revokeAllSessions" });
+      },
+
+      // รหัสผ่านทั้งเดิมและใหม่ถูกส่งไปให้ Apps Script ตรวจและแฮชที่นั่น -- ห้าม
+      // แฮชฝั่งนี้เด็ดขาด ไม่งั้นค่าที่แฮชแล้วจะกลายเป็นรหัสผ่านตัวจริงไปเอง
+      async changePassword(currentPassword, newPassword) {
+        return callAsUser({ action: "changePassword", currentPassword, newPassword });
+      },
+
+      // ผู้ดูแลระบบเท่านั้น -- คืนรหัสผ่านชั่วคราวกลับมาแสดงครั้งเดียว ไม่มีที่ไหนเก็บ
+      async adminResetPassword(email) {
+        return callAsUser({ action: "adminResetPassword", email });
       },
 
       // loadRequests() (above) only returns still-open requests plus recently
@@ -349,7 +398,7 @@
 
   function setSession(user, remember) {
     // The token is what actually authorises data calls -- the rest is display.
-    const session = { email: user.email, name: user.name, token: user.token };
+    const session = { email: user.email, name: user.name, token: user.token, isAdmin: Boolean(user.isAdmin) };
     if (!storageAvailable) {
       memorySession = session;
       return;
@@ -399,6 +448,7 @@
   const views = {
     login: document.getElementById("loginView"),
     register: document.getElementById("registerView"),
+    account: document.getElementById("accountView"),
     home: document.getElementById("homeView"),
     service: document.getElementById("serviceView"),
     requests: document.getElementById("requestsView")
@@ -469,7 +519,11 @@
     const customerName = escapeForPrint(r.customerName || r.requesterName || "-");
     // Older slips predate the paymentSlipAt column and have no value for it.
     const slipAttachedAt = escapeForPrint(r.paymentSlipAt ? formatThaiDateTime(r.paymentSlipAt) : "-");
-    const slipSrc = driveThumbnailUrl(r.paymentSlip);
+    // ผ่าน escapeForPrint เหมือนทุกค่าอื่นในฟังก์ชันนี้ — ค่านี้เคยเป็นข้อยกเว้นเดียว
+    // ทั้งที่มันถูกวางใน attribute ของ HTML ที่สร้างด้วย document.write() เหมือนกัน
+    // ตัวค่ามาจากลูกค้าผ่าน uploadSlip -- ฝั่ง Code.gs กรองด้วย SLIP_URL_PATTERN
+    // แล้ว แต่คำร้องที่บันทึกไว้ก่อนการกรองนั้นยังค้างอยู่ในชีตได้ จึงต้องกันซ้ำที่นี่อีกชั้น
+    const slipSrc = escapeForPrint(driveThumbnailUrl(r.paymentSlip));
 
     printWindow.document.write(`
       <html>
@@ -503,11 +557,27 @@
               <span><b>วันที่แนบสลิป:</b> ${slipAttachedAt}</span>
             </div>
           </div>
-          <img src="${slipSrc}" onload="window.print();">
+          <img id="slipImage" src="${slipSrc}" alt="สลิปการชำระเงิน">
         </body>
       </html>
     `);
     printWindow.document.close();
+
+    // เดิมเป็น onload="window.print()" ใน markup ของหน้าที่พิมพ์ -- หน้าต่างที่
+    // เปิดด้วย window.open("", "_blank") สืบทอด CSP ของหน้าที่เปิดมัน สคริปต์
+    // แบบ inline จึงถูกบล็อกไปด้วย ผูก listener จากฝั่งนี้แทนได้ผลเหมือนกัน
+    // เพราะเรายังถือ Window object ของหน้าต่างนั้นอยู่
+    //
+    // ดัก error ด้วย ไม่ใช่แค่ load: เดิมถ้ารูปสลิปโหลดไม่ขึ้น (ลิงก์เสีย/เน็ตหลุด)
+    // กล่องพิมพ์จะไม่เด้งขึ้นมาเลย เจ้าหน้าที่ค้างอยู่กับหน้าเปล่าโดยไม่มีอะไรบอก
+    // ว่าเกิดอะไรขึ้น -- ให้พิมพ์ไปเลยดีกว่า อย่างน้อยหัวกระดาษก็ยังใช้ได้
+    const slipImg = printWindow.document.getElementById("slipImage");
+    if (!slipImg || slipImg.complete) {
+      printWindow.print();
+    } else {
+      slipImg.addEventListener("load", () => printWindow.print());
+      slipImg.addEventListener("error", () => printWindow.print());
+    }
   }
 
   /**
@@ -875,6 +945,38 @@
     el.hidden = false;
   }
 
+  /**
+   * เรียกเมื่อหลังบ้านตอบว่า AUTH_REQUIRED -- session หมดอายุหรือถูกยกเลิกไปแล้ว
+   *
+   * เดิมมีที่จัดการอยู่ที่เดียวคือ init() ตอนเปิดแอป ถ้า session หมดอายุ "ระหว่าง"
+   * ใช้งาน (เปิดแท็บค้างข้ามคืนแล้วกดบันทึก) ฟอร์มจะขึ้นว่า "ไม่สามารถบันทึกคำร้อง
+   * ได้ กรุณาลองใหม่อีกครั้ง" ซึ่งทำให้เข้าใจผิด -- กดใหม่กี่ครั้งก็ไม่มีทางสำเร็จ
+   * และเจ้าหน้าที่ไม่รู้เลยว่าต้องล็อกอินใหม่ เสี่ยงกรอกฟอร์มทิ้งทั้งใบ
+   *
+   * เรื่องนี้สำคัญขึ้นมากตอนที่ SESSION_DAYS ลดจาก 7 เหลือ 3 เพราะโอกาสเจอถี่ขึ้น
+   *
+   * กันเรียกซ้ำด้วย authExpiredHandled เพราะการบันทึกครั้งเดียวอาจยิงหลายคำสั่ง
+   * (เช่นบันทึกคำร้องแล้วตามด้วยบันทึกสมุดคุม) ซึ่งจะพากลับหน้า login ซ้อนกัน
+   */
+  let authExpiredHandled = false;
+
+  function handleAuthExpired() {
+    if (authExpiredHandled) return;
+    authExpiredHandled = true;
+
+    clearSession();
+    requestsCache = [];
+    dispatchesCache = [];
+    clearSensitiveScreens();
+
+    document.getElementById("bootOverlay").hidden = true;
+    showView("login");
+    showError(
+      document.getElementById("loginError"),
+      "เซสชันหมดอายุแล้ว กรุณาเข้าสู่ระบบใหม่อีกครั้ง"
+    );
+  }
+
   function hideError(el) {
     el.hidden = true;
     el.textContent = "";
@@ -1003,8 +1105,10 @@
         return;
       }
 
-      if (password.length < 6) {
-        showError(registerError, "รหัสผ่านต้องมีอย่างน้อย 6 ตัวอักษร");
+      // ต้องตรงกับ MIN_PASSWORD_LENGTH ใน Code.gs -- ที่นี่มีไว้บอกผู้ใช้ก่อนยิง
+      // ไปเสียเที่ยว การบังคับจริงอยู่ฝั่งเซิร์ฟเวอร์ เพราะการเช็คตรงนี้ข้ามได้
+      if (password.length < 10) {
+        showError(registerError, "รหัสผ่านต้องมีอย่างน้อย 10 ตัวอักษร");
         return;
       }
 
@@ -1054,11 +1158,33 @@
   // ---------- home / logout ----------
   function enterApp() {
     const session = getSession();
+
+    // ล็อกอินใหม่แล้ว = เริ่มนับใหม่ ไม่งั้นถ้าเซสชันหมดอายุอีกครั้งในรอบถัดไป
+    // handleAuthExpired จะไม่ทำงาน เพราะธงยังค้างเป็น true จากรอบก่อน
+    authExpiredHandled = false;
+
+    // ปุ่มนี้เตะทุกคนออกรวมถึงตัวเอง จึงไม่ควรอยู่ในสายตาคนที่กดไม่ได้อยู่แล้ว
+    document.getElementById("revokeAllBtn").hidden = !session?.isAdmin;
+
     const greeting = session?.name ? `สวัสดี, ${session.name}` : "";
     document.getElementById("userGreeting").textContent = greeting;
     document.getElementById("userGreeting2").textContent = greeting;
     document.getElementById("userGreeting3").textContent = greeting;
     showView("home");
+  }
+
+  /**
+   * ล้างค่าที่ไม่ควรค้างอยู่บนหน้าจอหลังออกจากระบบ -- รหัสผ่านชั่วคราวที่ผู้ดูแล
+   * ระบบเพิ่งสุ่มให้คนอื่น เป็นค่าที่ระบบไม่ได้เก็บไว้ที่ไหนเลยและตั้งใจให้เห็น
+   * ครั้งเดียว การปล่อยให้ค้างอยู่ในหน้าที่ซ่อนไว้เฉย ๆ ทำให้คนถัดไปที่ล็อกอิน
+   * บนเครื่องเดียวกันกดกลับเข้ามาดูได้
+   */
+  function clearSensitiveScreens() {
+    document.getElementById("tempPasswordValue").textContent = "";
+    document.getElementById("tempPasswordEmail").textContent = "";
+    document.getElementById("adminResetResult").hidden = true;
+    document.getElementById("changePasswordForm").reset();
+    document.getElementById("adminResetForm").reset();
   }
 
   function logout() {
@@ -1071,9 +1197,182 @@
     clearSession();
     requestsCache = [];
     dispatchesCache = [];
+    clearSensitiveScreens();
     showView("login");
   }
 
+
+  // ---------- บัญชีของฉัน ----------
+  const accountView = {
+    changeForm: document.getElementById("changePasswordForm"),
+    changeError: document.getElementById("changePasswordError"),
+    changeSuccess: document.getElementById("changePasswordSuccess"),
+    adminSection: document.getElementById("adminResetSection"),
+    adminForm: document.getElementById("adminResetForm"),
+    adminError: document.getElementById("adminResetError"),
+    adminResult: document.getElementById("adminResetResult")
+  };
+
+  /**
+   * เปิดหน้าบัญชีแบบสะอาดทุกครั้ง -- โดยเฉพาะ adminResult ที่ถือรหัสผ่านชั่วคราว
+   * อยู่ ถ้าไม่ล้าง รหัสของคนก่อนหน้าจะค้างอยู่บนจอให้คนถัดไปที่เดินผ่านเห็นได้
+   */
+  function openAccountView() {
+    const session = getSession();
+
+    accountView.changeForm.reset();
+    hideError(accountView.changeError);
+    accountView.changeSuccess.hidden = true;
+
+    accountView.adminForm.reset();
+    hideError(accountView.adminError);
+    accountView.adminResult.hidden = true;
+    document.getElementById("tempPasswordValue").textContent = "";
+    document.getElementById("tempPasswordEmail").textContent = "";
+
+    accountView.adminSection.hidden = !session?.isAdmin;
+
+    showView("account");
+  }
+
+  document.getElementById("accountBtn").addEventListener("click", openAccountView);
+
+  document.getElementById("accountBackLink").addEventListener("click", (e) => {
+    e.preventDefault();
+    showView("home");
+  });
+
+  accountView.changeForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    hideError(accountView.changeError);
+    accountView.changeSuccess.hidden = true;
+
+    const submitBtn = accountView.changeForm.querySelector("button[type=submit]");
+
+    try {
+      const currentPassword = document.getElementById("currentPassword").value;
+      const newPassword = document.getElementById("newPassword").value;
+      const confirmPassword = document.getElementById("newPasswordConfirm").value;
+
+      if (!currentPassword) {
+        showError(accountView.changeError, "กรุณากรอกรหัสผ่านปัจจุบัน");
+        return;
+      }
+
+      // ต้องตรงกับ MIN_PASSWORD_LENGTH ใน Code.gs -- ที่นี่มีไว้บอกผู้ใช้ก่อนยิง
+      // ไปเสียเที่ยว การบังคับจริงอยู่ฝั่งเซิร์ฟเวอร์
+      if (newPassword.length < 10) {
+        showError(accountView.changeError, "รหัสผ่านใหม่ต้องมีอย่างน้อย 10 ตัวอักษร");
+        return;
+      }
+
+      if (newPassword !== confirmPassword) {
+        showError(accountView.changeError, "รหัสผ่านใหม่และการยืนยันไม่ตรงกัน");
+        return;
+      }
+
+      if (newPassword === currentPassword) {
+        showError(accountView.changeError, "รหัสผ่านใหม่ต้องไม่ซ้ำกับรหัสผ่านเดิม");
+        return;
+      }
+
+      // แฮชสองรอบฝั่งเซิร์ฟเวอร์ (ตรวจของเดิม + สร้างของใหม่) จึงนานกว่าล็อกอิน
+      setBusy(submitBtn, true, "กำลังเปลี่ยนรหัสผ่าน...");
+      const result = await backend.changePassword(currentPassword, newPassword);
+
+      accountView.changeForm.reset();
+
+      const revoked = Number(result?.otherSessionsRevoked) || 0;
+      accountView.changeSuccess.textContent = revoked
+        ? `เปลี่ยนรหัสผ่านเรียบร้อยแล้ว และออกจากระบบให้อีก ${revoked} อุปกรณ์`
+        : "เปลี่ยนรหัสผ่านเรียบร้อยแล้ว";
+      accountView.changeSuccess.hidden = false;
+    } catch (err) {
+      console.error("CS Connect change password error:", err);
+      showError(accountView.changeError, err.message || "เกิดข้อผิดพลาด ไม่สามารถเปลี่ยนรหัสผ่านได้ กรุณาลองใหม่อีกครั้ง");
+    } finally {
+      setBusy(submitBtn, false);
+    }
+  });
+
+  accountView.adminForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    hideError(accountView.adminError);
+    accountView.adminResult.hidden = true;
+
+    const submitBtn = accountView.adminForm.querySelector("button[type=submit]");
+
+    try {
+      const email = document.getElementById("resetEmail").value.trim().toLowerCase();
+
+      if (!isValidEmail(email)) {
+        showError(accountView.adminError, "กรุณากรอกอีเมลให้ถูกต้อง");
+        return;
+      }
+
+      const ok = window.confirm(
+        `ยืนยันตั้งรหัสผ่านชั่วคราวให้ ${email}?\n\n` +
+        "รหัสผ่านเดิมของผู้ใช้รายนี้จะใช้ไม่ได้อีก และเขาจะหลุดจากทุกอุปกรณ์ทันที"
+      );
+      if (!ok) return;
+
+      setBusy(submitBtn, true, "กำลังสุ่มรหัสผ่าน...");
+      const result = await backend.adminResetPassword(email);
+
+      accountView.adminForm.reset();
+      document.getElementById("tempPasswordEmail").textContent = result.email;
+      document.getElementById("tempPasswordValue").textContent = result.tempPassword;
+      accountView.adminResult.hidden = false;
+    } catch (err) {
+      console.error("CS Connect admin reset error:", err);
+      showError(accountView.adminError, err.message || "เกิดข้อผิดพลาด ไม่สามารถตั้งรหัสผ่านชั่วคราวได้ กรุณาลองใหม่อีกครั้ง");
+    } finally {
+      setBusy(submitBtn, false);
+    }
+  });
+
+  /**
+   * เตะทุก session ออกทั้งระบบ -- ใช้ตอนสงสัยว่า token หลุด หรือเครื่องที่ล็อกอิน
+   * ค้างไว้หาย เดิมทำได้ทางเดียวคือเปิด Apps Script editor แล้วกด Run ซึ่งเป็น
+   * สิ่งที่ทำได้ยากที่สุดในนาทีที่จำเป็นต้องใช้จริง
+   *
+   * ใช้ confirm() ของเบราว์เซอร์ ทั้งที่ที่อื่นในโปรเจกต์ไม่ได้ใช้เลย -- เพราะ
+   * คำสั่งนี้ทำให้ทุกคนหยุดงานทันที การถามด้วยกล่องที่กดพลาดไม่ได้จึงเหมาะกว่า
+   * การสร้าง modal สวย ๆ ที่กดผ่านโดยไม่ทันอ่าน
+   */
+  async function revokeAllSessions() {
+    const ok = window.confirm(
+      "ยืนยันออกจากระบบทุกอุปกรณ์?\n\n" +
+      "เจ้าหน้าที่ทุกคนที่กำลังใช้งานอยู่จะหลุดจากระบบทันที และต้องเข้าสู่ระบบใหม่ทั้งหมด " +
+      "รวมถึงตัวคุณเองด้วย"
+    );
+    if (!ok) return;
+
+    const btn = document.getElementById("revokeAllBtn");
+    setBusy(btn, true, "กำลังดำเนินการ...");
+
+    try {
+      await backend.revokeAllSessions();
+      // token ของตัวเองก็ตายไปแล้วเช่นกัน จึงต้องกลับหน้า login เหมือนคนอื่น
+      // ไม่ใช่แค่แสดงข้อความค้างอยู่บนหน้าที่เรียกข้อมูลอะไรไม่ได้แล้ว
+      clearSession();
+      requestsCache = [];
+      dispatchesCache = [];
+      clearSensitiveScreens();
+      showView("login");
+      showError(
+        document.getElementById("loginError"),
+        "ออกจากระบบทุกอุปกรณ์เรียบร้อยแล้ว กรุณาเข้าสู่ระบบใหม่"
+      );
+    } catch (err) {
+      console.error("CS Connect revokeAllSessions error:", err);
+      window.alert("ไม่สำเร็จ: " + (err.message || "ไม่สามารถออกจากระบบทุกอุปกรณ์ได้ กรุณาลองใหม่อีกครั้ง"));
+    } finally {
+      setBusy(btn, false);
+    }
+  }
+
+  document.getElementById("revokeAllBtn").addEventListener("click", revokeAllSessions);
   document.getElementById("logoutBtn").addEventListener("click", logout);
   document.getElementById("logoutBtn2").addEventListener("click", logout);
   document.getElementById("logoutBtn3").addEventListener("click", logout);
@@ -2347,6 +2646,12 @@
   const bootOverlay = document.getElementById("bootOverlay");
   const bootError = document.getElementById("bootError");
 
+  // ผูกที่นี่แทน onclick ใน HTML เพราะ CSP บล็อกสคริปต์ inline ทั้งหมด
+  // ปุ่มนี้จะมองเห็นได้ก็ต่อเมื่อ init() ล้มเหลวไปแล้ว ซึ่งแปลว่าไฟล์นี้ทำงานอยู่
+  // การผูกตรงนี้จึงไม่ทำให้ปุ่มตายในกรณีที่มันถูกใช้จริง
+  document.getElementById("bootRetryBtn")
+    .addEventListener("click", () => location.reload());
+
   async function init() {
     const session = getSession();
 
@@ -2367,11 +2672,12 @@
 
       // An expired or revoked token is not a connection problem -- drop the
       // dead session and let them sign in again rather than showing a retry
-      // button that can never succeed.
+      // button that can never succeed. callAsUser() has usually handled this
+      // already by the time we get here; handleAuthExpired() is idempotent, so
+      // this stays as the guard for the localBackend path, which never goes
+      // through callAsUser at all.
       if (String(err.message).includes("AUTH_REQUIRED")) {
-        clearSession();
-        bootOverlay.hidden = true;
-        showView("login");
+        handleAuthExpired();
         return;
       }
 
