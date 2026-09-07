@@ -1015,6 +1015,28 @@
     );
   }
 
+  /**
+   * ข้อความที่เอาไปแสดงให้ผู้ใช้เห็นได้จริง
+   *
+   * ข้อความจากหลังบ้านเป็นภาษาไทยที่อ่านรู้เรื่องอยู่แล้วเกือบทั้งหมด ยกเว้นสอง
+   * รหัสภายในที่ตั้งใจให้โค้ดตรวจจับ ไม่ได้ตั้งใจให้คนอ่าน -- ถ้าปล่อยผ่านไป
+   * ผู้ใช้จะเห็นคำว่า AUTH_REQUIRED โด่ ๆ อยู่บนหน้าจอโดยไม่รู้ว่าต้องทำอะไร
+   */
+  const ERROR_MESSAGES = {
+    AUTH_REQUIRED: "เซสชันหมดอายุแล้ว กรุณาเข้าสู่ระบบใหม่อีกครั้ง",
+    PASSWORD_CHANGE_REQUIRED: "กรุณาตั้งรหัสผ่านใหม่ของคุณเองก่อน จึงจะใช้งานระบบได้"
+  };
+
+  function friendlyError(err, fallback) {
+    const message = String((err && err.message) || "");
+
+    for (const code of Object.keys(ERROR_MESSAGES)) {
+      if (message.includes(code)) return ERROR_MESSAGES[code];
+    }
+
+    return message || fallback;
+  }
+
   function hideError(el) {
     el.hidden = true;
     el.textContent = "";
@@ -1032,9 +1054,13 @@
       button.dataset.idleLabel = button.textContent;
       button.textContent = busyLabel || button.textContent;
       button.disabled = true;
+      // เปลี่ยนโทนสีด้วย ไม่ใช่แค่จางลง -- ปุ่มที่จางอย่างเดียวดูเหมือน "กดไม่ได้"
+      // มากกว่า "กำลังทำงานอยู่" ซึ่งคนละความหมายกันสำหรับคนที่กำลังรอ
+      button.classList.add("is-busy");
     } else {
       if (button.dataset.idleLabel) button.textContent = button.dataset.idleLabel;
       button.disabled = false;
+      button.classList.remove("is-busy");
     }
   }
 
@@ -2635,6 +2661,10 @@
 
         // One write for the whole batch: a half-saved batch would leave gaps
         // in the numbering that nobody could tell apart from real records.
+        // นี่คือการบันทึกที่ช้าที่สุดในแอป (หลายสิบรายการในครั้งเดียว) จึงยิ่ง
+        // ต้องบอกว่ากำลังทำงาน -- finally ท้าย handler เป็นตัวคืนปุ่มให้เอง
+        setBusy(requestFormSubmitBtn, true, "กำลังบันทึกคำร้อง...");
+
         await saveRequests(getRequests().concat(created));
 
         // Clear everything that was typed, so the next batch starts from a
@@ -2685,6 +2715,10 @@
           createdAt: now
         });
       }
+      // การบันทึกวิ่งผ่านเครือข่ายและใช้เวลาเห็นได้ ปุ่มจึงต้องบอกว่ากำลังทำงาน
+      // และกดซ้ำไม่ได้ ไม่งั้นเจ้าหน้าที่ที่ใจร้อนจะกดสองครั้งจนได้คำร้องซ้ำ
+      setBusy(requestFormSubmitBtn, true, "กำลังบันทึกคำร้อง...");
+
       await saveRequests(requests);
 
       editingId = null;
@@ -2694,7 +2728,17 @@
       renderRequestsList();
     } catch (err) {
       console.error("CS Connect request form error:", err);
-      showError(requestFormError, "เกิดข้อผิดพลาด ไม่สามารถบันทึกคำร้องได้ กรุณาลองใหม่อีกครั้ง");
+      // ส่งข้อความจริงจากหลังบ้านออกมา เหมือนทุกฟอร์มอื่นในไฟล์นี้ -- เดิมตรงนี้
+      // เขียนข้อความตายตัวทับทิ้ง ทำให้เวลาบันทึกไม่ผ่านไม่มีใครรู้เลยว่าเพราะอะไร
+      // (สิทธิ์หมดอายุ ข้อมูลยาวเกิน เน็ตหลุด ฯลฯ ขึ้นข้อความเดียวกันหมด)
+      showError(
+        requestFormError,
+        friendlyError(err, "เกิดข้อผิดพลาด ไม่สามารถบันทึกคำร้องได้ กรุณาลองใหม่อีกครั้ง")
+      );
+    } finally {
+      // ต้องอยู่ใน finally -- ถ้าอยู่ในเส้นทางสำเร็จอย่างเดียว ปุ่มจะค้างเป็น
+      // "กำลังบันทึก..." และกดไม่ได้ตลอดไปเมื่อบันทึกล้มเหลว
+      setBusy(requestFormSubmitBtn, false);
     }
   });
 

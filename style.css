@@ -1982,3 +1982,31 @@ button:active {
 .auth-switch[hidden] {
   display: none;
 }
+
+/* ปุ่มที่ "กำลังทำงานอยู่" ต้องดูต่างจากปุ่ม "กดไม่ได้" -- .btn:disabled ทำให้จาง
+   ลงอย่างเดียว ซึ่งสื่อว่าใช้ไม่ได้ ไม่ได้สื่อว่ากำลังรออยู่ คนละความหมายกัน
+   สำหรับคนที่เพิ่งกดบันทึกแล้วกำลังรอผล */
+.btn.is-busy,
+.btn.is-busy:hover {
+  opacity: 1;
+  background: var(--volt-300);
+  border-color: var(--volt-300);
+  color: var(--white);
+  cursor: progress;
+  box-shadow: none;
+  animation: btn-busy-pulse 1.15s ease-in-out infinite;
+}
+
+@keyframes btn-busy-pulse {
+  0%, 100% { background: var(--volt-300); }
+  50%      { background: var(--volt-500); }
+}
+
+/* เคารพการตั้งค่าของผู้ใช้ที่ขอให้ลดการเคลื่อนไหว -- ยังเปลี่ยนโทนสีให้เห็นอยู่
+   แค่ไม่กะพริบ */
+@media (prefers-reduced-motion: reduce) {
+  .btn.is-busy,
+  .btn.is-busy:hover {
+    animation: none;
+  }
+}
