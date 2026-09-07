@@ -190,6 +190,9 @@
 
     // โหมดออฟไลน์ไม่มี session ฝั่งเซิร์ฟเวอร์ให้ยกเลิก -- มีไว้เพื่อให้หน้าเว็บ
     // เรียกได้เหมือนกันโดยไม่พัง (ปุ่มนี้ซ่อนอยู่แล้วถ้าไม่ใช่ผู้ดูแลระบบ)
+    // โหมดออฟไลน์อ่านจาก localStorage ใหม่ทุกครั้งอยู่แล้ว ไม่มีสำเนาให้ทิ้ง
+    forgetCached() {},
+
     async revokeAllSessions() {
       return { revoked: 0 };
     },
@@ -315,6 +318,17 @@
 
       async logout(token) {
         return call({ action: "logout", token });
+      },
+
+      /**
+       * ทิ้งสำเนาที่ใช้เทียบว่าคำร้องใบไหนเปลี่ยนไปบ้าง
+       *
+       * อยู่ที่นี่เพราะ savedRequests เป็นของ backend ไม่ใช่ของหน้าจอ -- ที่อื่น
+       * ในแอปไม่ควรรู้ด้วยซ้ำว่ามันมีอยู่ (ดูหลักการ "ความรู้เรื่องที่เก็บข้อมูล
+       * อยู่ในอ็อบเจกต์ backend เท่านั้น")
+       */
+      forgetCached() {
+        savedRequests = new Map();
       },
 
       // ผู้ดูแลระบบเท่านั้น -- ฝั่ง Apps Script ตรวจด้วย requireAdmin_ อีกชั้น
@@ -1260,6 +1274,47 @@
     document.getElementById("userGreeting").textContent = "";
     document.getElementById("userGreeting2").textContent = "";
     document.getElementById("userGreeting3").textContent = "";
+
+    clearWorkspaceScreens();
+  }
+
+  /**
+   * ล้างข้อมูลลูกค้าที่ยัง "ค้างอยู่บนหน้าจอ" ออกให้หมดตอนออกจากระบบ
+   *
+   * การล้าง requestsCache อย่างเดียวไม่พอ -- มันแค่ทำให้ "การวาดครั้งต่อไป" ว่าง
+   * แต่การ์ดที่วาดไปแล้วยังอยู่ใน DOM ครบทุกใบ พร้อมชื่อลูกค้า ที่อยู่ เบอร์โทร
+   * และเลขที่โฉนด บนเครื่องที่ตอนนี้ขึ้นว่าออกจากระบบไปแล้ว ใครที่มานั่งต่อแล้ว
+   * เปิดเครื่องมือพัฒนาของเบราว์เซอร์ก็อ่านได้ทั้งหมด
+   *
+   * ฟอร์มคำร้องก็เหมือนกัน -- ถ้ากรอกค้างไว้ครึ่งใบแล้วออกจากระบบ ข้อมูลลูกค้า
+   * ที่พิมพ์ไว้ยังอยู่ในช่องกรอกทุกช่อง
+   *
+   * สถานะระดับโมดูล (editingId, batchMode, ...) ถูกตั้งใหม่อยู่แล้วตอนเปิด
+   * workspace/ฟอร์มรอบหน้า แต่ล้างที่นี่ด้วยเพื่อไม่ให้ต้องไปพึ่งว่า "เดี๋ยวมีคน
+   * ตั้งให้ทีหลัง" ซึ่งเป็นข้อสมมติที่พังง่ายเวลามีคนเพิ่มทางเข้าใหม่
+   */
+  function clearWorkspaceScreens() {
+    document.getElementById("requestsList").innerHTML = "";
+    document.getElementById("requestsSearchInput").value = "";
+
+    document.getElementById("requestForm").reset();
+    document.getElementById("requestFormError").hidden = true;
+    document.getElementById("requestFormMeta").hidden = true;
+    document.getElementById("requestFormStatusHistory").innerHTML = "";
+    document.getElementById("requestFormComments").innerHTML = "";
+    document.getElementById("requestCommentInput").value = "";
+
+    document.getElementById("batchRows").innerHTML = "";
+    document.getElementById("batchResult").hidden = true;
+
+    editingId = null;
+    batchMode = false;
+    currentSearchQuery = "";
+    meterSelection.clear();
+
+    // เคลียร์สำเนาที่ backend เก็บไว้เทียบว่าอะไรเปลี่ยนบ้าง -- เป็น JSON ของ
+    // คำร้องทุกใบ ไม่ควรค้างอยู่หลังผู้ใช้ออกจากระบบไปแล้ว
+    backend.forgetCached?.();
   }
 
   function logout() {
