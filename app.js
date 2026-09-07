@@ -1673,7 +1673,7 @@
   // every row, with #batchSection carrying what differs between them.
   let batchMode = false;
 
-  const BATCH_DEFAULT_ROWS = 5;
+  const BATCH_DEFAULT_ROWS = 2;
 
   /**
    * Fields a single row may override, as ids in the shared form above. The
@@ -1682,23 +1682,57 @@
    * main form, and adding a field to the form makes it overridable here for
    * free. Keyed by the record field each one feeds.
    */
-  const BATCH_OVERRIDE_FIELDS = [
+  /**
+   * ทุกช่องที่คำร้องหนึ่งใบมี -- แต่ละแถวในกลุ่มถูกสร้างโดย "โคลน" .field เหล่านี้
+   * ออกมาจากฟอร์มข้อมูลตั้งต้นด้านบน
+   *
+   * โคลนแทนที่จะเขียน markup ใหม่ เพราะรายการตัวเลือกของ อำเภอ/ตำบล ความประสงค์
+   * ขนาดมิเตอร์ และสถานะงาน จะไม่มีวันไม่ตรงกับฟอร์มหลัก และช่องที่เพิ่มเข้าฟอร์ม
+   * ในอนาคตจะโผล่ในแถวกลุ่มเองโดยไม่ต้องแก้อะไรตรงนี้ (แค่เพิ่มบรรทัดในรายการนี้)
+   *
+   * ไม่มี trackingNumber (ระบบออกให้) และไม่มี province (ล็อกไว้ที่เชียงใหม่)
+   */
+  const BATCH_ROW_FIELDS = [
+    { id: "reqNumber", key: "requestNumber" },
     { id: "reqDate", key: "receivedDate" },
+    { id: "reqCustomerName", key: "customerName" },
+    { id: "reqPhonePrimary", key: "phonePrimary" },
     { id: "reqPhoneSecondary", key: "phoneSecondary" },
     { id: "reqBP", key: "bp" },
     { id: "reqCA", key: "ca" },
-    { id: "reqDistrict", key: "district" },
-    { id: "reqSubdistrict", key: "subdistrict" },
-    { id: "reqZipcode", key: "zipcode" },
+    { id: "reqHouseNo", key: "houseNo" },
     { id: "reqMoo", key: "moo" },
     { id: "reqVillage", key: "village" },
     { id: "reqDeed", key: "deed" },
+    { id: "reqDistrict", key: "district" },
+    { id: "reqSubdistrict", key: "subdistrict" },
+    { id: "reqZipcode", key: "zipcode" },
     { id: "reqPurpose", key: "purposeChoice" },
     { id: "reqPurposeOther", key: "purposeOther" },
     { id: "reqMeterSize", key: "meterSize" },
     { id: "reqFee", key: "fee" },
     { id: "reqJobStatus", key: "jobStatus" },
     { id: "reqNote", key: "note" }
+  ];
+
+  /**
+   * เลขที่คำร้องไม่ถูกคัดลอกลงแถวจากข้อมูลตั้งต้น -- คำร้องสองใบใช้เลขเดียวกัน
+   * เป็นข้อมูลผิด ไม่ใช่ทางลัด (เหตุผลเดียวกับที่ซ่อนช่องนี้ในฟอร์มตั้งต้น)
+   */
+  const BATCH_NEVER_PREFILL = new Set(["requestNumber"]);
+
+  /** ช่องที่ต้องกรอกทุกใบ -- ตรงกับ required ของฟอร์มหลัก ใช้บอกว่าใบไหนขาดอะไร */
+  const BATCH_REQUIRED_FIELDS = [
+    { key: "requestNumber", label: "เลขที่คำร้อง" },
+    { key: "receivedDate", label: "วันที่รับคำร้อง" },
+    { key: "customerName", label: "ชื่อลูกค้า" },
+    { key: "phonePrimary", label: "เบอร์โทรศัพท์หลัก" },
+    { key: "moo", label: "หมู่ที่" },
+    { key: "district", label: "อำเภอ" },
+    { key: "subdistrict", label: "ตำบล" },
+    { key: "purposeChoice", label: "ความประสงค์" },
+    { key: "meterSize", label: "ขนาดมิเตอร์" },
+    { key: "jobStatus", label: "สถานะงาน" }
   ];
 
   // Which records are checked off on the คุมคำร้องส่งแผนกมิเตอร์ tab, ready to
@@ -2332,97 +2366,135 @@
    * their labels keep working. Built only when a row is actually expanded, so
    * a batch where nothing differs costs nothing.
    */
-  function buildRowOverrides(tr, detailCell) {
-    const grid = document.createElement("div");
-    grid.className = "batch-override-grid";
-
-    BATCH_OVERRIDE_FIELDS.forEach(({ id, key }) => {
+  /**
+   * โคลน .field ทุกช่องจากฟอร์มตั้งต้นเข้ามาในแถว พร้อมค่าเริ่มต้นจากฟอร์มนั้น
+   *
+   * ที่ต้องโคลนไม่ใช่เขียน markup ใหม่: รายการตัวเลือกของ อำเภอ/ตำบล/ความประสงค์/
+   * ขนาดมิเตอร์/สถานะงาน จะไม่มีวันไม่ตรงกับฟอร์มหลัก และช่องใหม่ที่เพิ่มเข้าฟอร์ม
+   * ในอนาคตจะมาเองแค่เพิ่มบรรทัดใน BATCH_ROW_FIELDS
+   */
+  function buildBatchRowFields(seq, grid) {
+    BATCH_ROW_FIELDS.forEach(({ id, key }) => {
       const source = document.getElementById(id);
       const wrapper = source.closest(".field").cloneNode(true);
       const control = wrapper.querySelector("input, select, textarea");
       const label = wrapper.querySelector("label");
 
-      const clonedId = `${id}__row${tr.dataset.batchRowSeq}`;
+      const clonedId = `${id}__row${seq}`;
       wrapper.removeAttribute("id");
       control.id = clonedId;
       if (label) label.setAttribute("for", clonedId);
-      control.dataset.overrideKey = key;
-      control.value = source.value;
-      // ตำบล's options depend on the chosen อำเภอ; the clone inherits the
-      // options already rendered above, so the current value survives.
+      control.dataset.batchKey = key;
+
+      // เลขที่คำร้องเริ่มว่างเสมอ ที่เหลือรับค่ามาจากฟอร์มตั้งต้น
+      // ตำบลอาศัยตัวเลือกที่ถูกสร้างไว้แล้วตามอำเภอที่เลือก การโคลนจึงพาค่ามาด้วย
+      control.value = BATCH_NEVER_PREFILL.has(key) ? "" : source.value;
       control.disabled = source.disabled;
       wrapper.hidden = false;
 
       grid.appendChild(wrapper);
     });
 
-    detailCell.appendChild(grid);
-
-    const districtEl = grid.querySelector('[data-override-key="district"]');
-    const subdistrictEl = grid.querySelector('[data-override-key="subdistrict"]');
-    const zipcodeEl = grid.querySelector('[data-override-key="zipcode"]');
+    const districtEl = grid.querySelector('[data-batch-key="district"]');
+    const subdistrictEl = grid.querySelector('[data-batch-key="subdistrict"]');
+    const zipcodeEl = grid.querySelector('[data-batch-key="zipcode"]');
     wireLocationCascade(districtEl, subdistrictEl, zipcodeEl);
 
-    const purposeEl = grid.querySelector('[data-override-key="purposeChoice"]');
-    const purposeOtherWrapper = grid.querySelector('[data-override-key="purposeOther"]').closest(".field");
-    purposeOtherWrapper.hidden = purposeEl.value !== "other";
-    purposeEl.addEventListener("change", () => {
-      purposeOtherWrapper.hidden = purposeEl.value !== "other";
-    });
+    const purposeEl = grid.querySelector('[data-batch-key="purposeChoice"]');
+    purposeEl.addEventListener("change", () => syncBatchRowConditionalFields(grid));
+
+    syncBatchRowConditionalFields(grid);
   }
 
+  /** ช่อง "โปรดระบุ" ของความประสงค์โผล่เฉพาะตอนเลือก "อื่นๆ" เหมือนฟอร์มหลัก */
+  function syncBatchRowConditionalFields(scope) {
+    const purposeEl = scope.querySelector('[data-batch-key="purposeChoice"]');
+    const otherEl = scope.querySelector('[data-batch-key="purposeOther"]');
+    if (!purposeEl || !otherEl) return;
+    otherEl.closest(".field").hidden = purposeEl.value !== "other";
+  }
+
+  /**
+   * หนึ่งแถว = คำร้องหนึ่งใบเต็ม ๆ ทุกช่องแสดงให้เห็นและกรอกมาจากข้อมูลตั้งต้นแล้ว
+   *
+   * เดิมแถวมีแค่ 4 ช่อง ที่เหลือซ่อนอยู่หลังปุ่ม "แก้ไขเพิ่มเติม" และช่องที่เว้น
+   * ว่างจะไปหยิบค่าจากฟอร์มด้านบนตอนบันทึก -- ซึ่งแปลว่าสิ่งที่เห็นบนจอไม่ตรงกับ
+   * สิ่งที่จะถูกบันทึกจริง คนกรอกจึงเดาไม่ออกว่าคำร้องแต่ละใบจะออกมาหน้าตาแบบไหน
+   * ตอนนี้ช่องทุกช่องมีค่าจริงอยู่ในนั้น สิ่งที่เห็นคือสิ่งที่จะถูกบันทึก
+   */
   function addBatchRow() {
     const seq = ++batchRowSeq;
-    const tr = document.createElement("tr");
-    tr.dataset.batchRowSeq = String(seq);
-    tr.innerHTML = `
-      <td class="batch-col-index"></td>
-      <td><input type="text" class="batch-input" data-batch-field="requestNumber" autocomplete="off"></td>
-      <td><input type="text" class="batch-input" data-batch-field="customerName" autocomplete="off"></td>
-      <td><input type="text" class="batch-input" data-batch-field="houseNo" autocomplete="off"></td>
-      <td><input type="tel" class="batch-input" data-batch-field="phonePrimary" autocomplete="off"></td>
-      <td class="batch-col-remove">
-        <button type="button" class="batch-expand-btn" title="แก้ไขข้อมูลอื่นเฉพาะแถวนี้">แก้ไขเพิ่มเติม</button>
-        <button type="button" class="batch-remove-btn" aria-label="ลบแถวนี้">&times;</button>
-      </td>
-    `;
 
-    const detailRow = document.createElement("tr");
-    detailRow.className = "batch-detail-row";
-    detailRow.hidden = true;
-    const detailCell = document.createElement("td");
-    detailCell.colSpan = 6;
-    detailRow.appendChild(detailCell);
+    const row = document.createElement("div");
+    row.className = "batch-row";
+    row.dataset.batchRowSeq = String(seq);
 
-    const expandBtn = tr.querySelector(".batch-expand-btn");
-    expandBtn.addEventListener("click", () => {
-      if (!detailCell.firstChild) buildRowOverrides(tr, detailCell);
-      detailRow.hidden = !detailRow.hidden;
-      expandBtn.classList.toggle("active", !detailRow.hidden);
-      expandBtn.textContent = detailRow.hidden ? "แก้ไขเพิ่มเติม" : "ซ่อน";
-    });
+    const head = document.createElement("div");
+    head.className = "batch-row-head";
 
-    tr.querySelector(".batch-remove-btn").addEventListener("click", () => {
-      detailRow.remove();
-      tr.remove();
+    const title = document.createElement("span");
+    title.className = "batch-row-title";
+
+    const removeBtn = document.createElement("button");
+    removeBtn.type = "button";
+    removeBtn.className = "batch-remove-btn";
+    removeBtn.textContent = "ลบคำร้องนี้";
+    removeBtn.addEventListener("click", () => {
+      row.remove();
       renumberBatchRows();
     });
 
-    batchRows.appendChild(tr);
-    batchRows.appendChild(detailRow);
+    head.append(title, removeBtn);
+
+    const grid = document.createElement("div");
+    grid.className = "batch-row-grid";
+    buildBatchRowFields(seq, grid);
+
+    row.append(head, grid);
+    batchRows.appendChild(row);
     renumberBatchRows();
   }
 
-  /** The entry rows only -- each one is followed by its hidden detail row. */
   function batchEntryRows() {
-    return Array.from(batchRows.children).filter(tr => !tr.classList.contains("batch-detail-row"));
+    return Array.from(batchRows.children);
   }
 
   function renumberBatchRows() {
-    batchEntryRows().forEach((tr, i) => {
-      tr.querySelector(".batch-col-index").textContent = String(i + 1);
+    batchEntryRows().forEach((row, i) => {
+      row.querySelector(".batch-row-title").textContent = `คำร้องที่ ${i + 1}`;
     });
   }
+
+  /** คัดลอกข้อมูลตั้งต้นด้านบนลงทุกแถว ทับค่าที่พิมพ์ไว้ (ยกเว้นเลขที่คำร้อง) */
+  function applySharedToBatchRows() {
+    batchEntryRows().forEach(row => {
+      BATCH_ROW_FIELDS.forEach(({ id, key }) => {
+        if (BATCH_NEVER_PREFILL.has(key)) return;
+        const target = row.querySelector(`[data-batch-key="${key}"]`);
+        const source = document.getElementById(id);
+        if (!target || !source) return;
+
+        target.value = source.value;
+
+        // อำเภอ/ตำบลต้องยิง change ต่อ เพื่อให้ตัวเลือกตำบลถูกสร้างใหม่ตามอำเภอ
+        // ที่เพิ่งตั้ง และรหัสไปรษณีย์ถูกเติมตาม -- ถ้าไม่ยิง การตั้งค่าตำบลจะ
+        // เงียบ ๆ ไม่ติด เพราะ option ของตำบลนั้นยังไม่มีอยู่ในแถว (ลำดับใน
+        // BATCH_ROW_FIELDS จึงต้องเป็น อำเภอ -> ตำบล -> รหัสไปรษณีย์ เสมอ)
+        if (key === "district" || key === "subdistrict") {
+          target.dispatchEvent(new Event("change"));
+          target.value = source.value;
+        }
+
+        target.disabled = source.disabled;
+      });
+      syncBatchRowConditionalFields(row);
+    });
+  }
+
+  document.getElementById("batchApplySharedBtn").addEventListener("click", () => {
+    applySharedToBatchRows();
+    hideError(requestFormError);
+  });
 
   function resetBatchRows() {
     batchRows.innerHTML = "";
@@ -2437,35 +2509,23 @@
    * design: everything defaults to one shared set, and only the exceptions
    * get typed.
    */
-  function collectBatchRows(shared) {
+  /**
+   * ค่าที่กรอกไว้ในแต่ละแถว -- ไม่มีการไปหยิบค่าจากฟอร์มตั้งต้นมาเติมตอนนี้อีกแล้ว
+   * เพราะทุกช่องถูกกรอกให้ตั้งแต่ตอนสร้างแถว สิ่งที่อ่านได้จึงตรงกับที่เห็นบนจอ
+   *
+   * ข้ามแถวที่ "ว่างทั้งใบ" โดยดูจากช่องที่ระบุตัวคำร้องเท่านั้น -- ช่องอื่นมีค่า
+   * ติดมาจากข้อมูลตั้งต้นอยู่แล้วทุกแถว จะเอามาใช้ตัดสินว่าว่างหรือไม่ไม่ได้
+   */
+  function collectBatchRows() {
     return batchEntryRows()
-      .map(tr => {
-        const row = {};
-        tr.querySelectorAll("[data-batch-field]").forEach(input => {
-          row[input.dataset.batchField] = input.value.trim();
+      .map(row => {
+        const values = {};
+        row.querySelectorAll("[data-batch-key]").forEach(control => {
+          values[control.dataset.batchKey] = control.value.trim();
         });
-
-        // Anything the row overrode in its "แก้ไขเพิ่มเติม" panel. Absent when
-        // the panel was never opened, which is the normal case.
-        const detail = tr.nextElementSibling;
-        const overrides = {};
-        if (detail && detail.classList.contains("batch-detail-row")) {
-          detail.querySelectorAll("[data-override-key]").forEach(control => {
-            overrides[control.dataset.overrideKey] = control.value.trim();
-          });
-        }
-        row.overrides = overrides;
-
-        return row;
+        return values;
       })
-      .filter(row => [row.requestNumber, row.customerName, row.houseNo, row.phonePrimary].some(Boolean))
-      .map(row => ({
-        requestNumber: row.requestNumber,
-        customerName: row.customerName || shared.customerName,
-        houseNo: row.houseNo || shared.houseNo,
-        phonePrimary: row.phonePrimary || shared.phonePrimary,
-        overrides: row.overrides
-      }));
+      .filter(v => [v.requestNumber, v.customerName, v.houseNo, v.phonePrimary].some(Boolean));
   }
 
   /** Opens qr.html for one or many requests -- it switches to a printable grid past one. */
@@ -2684,18 +2744,33 @@
       const now = Date.now();
 
       if (batchMode) {
-        // requestNumber is deliberately not in the fallback set: two requests
-        // sharing one paper reference would be a data error, not a shortcut.
-        const rows = collectBatchRows({ customerName, phonePrimary, houseNo });
+        const rows = collectBatchRows();
 
         if (!rows.length) {
-          showError(requestFormError, "กรุณากรอกอย่างน้อย 1 แถวในรายการคำร้องกลุ่ม");
+          showError(requestFormError, "กรุณากรอกอย่างน้อย 1 คำร้องในกลุ่ม");
           return;
         }
 
-        const missingAt = rows.findIndex(row => !row.requestNumber);
-        if (missingAt !== -1) {
-          showError(requestFormError, `แถวที่ ${missingAt + 1}: กรุณากรอกเลขที่คำร้อง`);
+        // ตรวจรายใบ และบอกให้ชัดว่าใบไหนขาดช่องไหน -- ฟอร์มตั้งต้นผ่านการตรวจ
+        // มาแล้วก็จริง แต่แต่ละใบแก้ทับได้ทุกช่อง จึงเว้นว่างจนไม่ครบได้
+        for (let i = 0; i < rows.length; i++) {
+          const missing = BATCH_REQUIRED_FIELDS.find(f => !rows[i][f.key]);
+          if (missing) {
+            showError(requestFormError, `คำร้องที่ ${i + 1}: กรุณากรอก${missing.label}`);
+            return;
+          }
+          if (rows[i].purposeChoice === "other" && !rows[i].purposeOther) {
+            showError(requestFormError, `คำร้องที่ ${i + 1}: กรุณาระบุความประสงค์`);
+            return;
+          }
+        }
+
+        // เลขที่คำร้องซ้ำกันเองภายในกลุ่ม -- ตรวจตรงนี้เพราะตอนนี้ทุกใบมีช่องของ
+        // ตัวเอง การคัดลอกแถวแล้วลืมแก้เลขจึงเกิดได้ง่ายกว่าเดิมมาก
+        const numbers = rows.map(row => row.requestNumber);
+        const dupAt = numbers.findIndex((n, i) => numbers.indexOf(n) !== i);
+        if (dupAt !== -1) {
+          showError(requestFormError, `คำร้องที่ ${dupAt + 1}: เลขที่คำร้อง "${numbers[dupAt]}" ซ้ำกับใบอื่นในกลุ่ม`);
           return;
         }
 
@@ -2706,40 +2781,36 @@
         const batchId = newRequestId();
 
         const created = rows.map((row, i) => {
-          const o = row.overrides || {};
-          // A row that never opened its panel has no overrides and simply
-          // takes the shared values; one that did takes its own for whatever
-          // it changed.
-          const rowPurpose = o.purposeChoice
-            ? (o.purposeChoice === "other" ? o.purposeOther : o.purposeChoice)
-            : purpose;
-          const rowJobStatus = o.jobStatus || jobStatus;
+          const rowPurpose = row.purposeChoice === "other" ? row.purposeOther : row.purposeChoice;
 
+          // ยังกาง recordData เป็นฐานไว้ เพื่อให้ช่องที่มีในฟอร์มแต่ยังไม่ได้ใส่ใน
+          // BATCH_ROW_FIELDS (เช่น จังหวัด ที่ล็อกไว้ และ type) ตกมาจากข้อมูล
+          // ตั้งต้นแทนที่จะหายไปเงียบ ๆ ที่เหลือทับด้วยค่าของใบนั้นทั้งหมด
           return {
             ...recordData,
             id: ids[i],
             trackingNumber: trackingNumbers[i],
             requestNumber: row.requestNumber,
+            receivedDate: row.receivedDate,
             customerName: row.customerName,
-            houseNo: row.houseNo,
             phonePrimary: row.phonePrimary,
-            receivedDate: o.receivedDate || receivedDate,
-            phoneSecondary: o.phoneSecondary ?? phoneSecondary,
-            bp: o.bp ?? bp,
-            ca: o.ca ?? ca,
-            district: o.district ? DISTRICTS[o.district].label : recordData.district,
-            subdistrict: o.subdistrict || subdistrict,
-            zipcode: o.zipcode || zipcode,
-            moo: o.moo || moo,
-            village: o.village ?? village,
-            deed: o.deed ?? deed,
+            phoneSecondary: row.phoneSecondary,
+            bp: row.bp,
+            ca: row.ca,
+            houseNo: row.houseNo,
+            moo: row.moo,
+            village: row.village,
+            deed: row.deed,
+            district: DISTRICTS[row.district] ? DISTRICTS[row.district].label : "",
+            subdistrict: row.subdistrict,
+            zipcode: row.zipcode,
             purpose: rowPurpose,
-            meterSize: o.meterSize || meterSize,
-            fee: o.fee ?? fee,
-            jobStatus: rowJobStatus,
-            note: o.note ?? note,
+            meterSize: row.meterSize,
+            fee: row.fee,
+            jobStatus: row.jobStatus,
+            note: row.note,
             batchId,
-            statusHistory: [{ status: rowJobStatus, byName: savedByName, byEmail: savedByEmail, at: now }],
+            statusHistory: [{ status: row.jobStatus, byName: savedByName, byEmail: savedByEmail, at: now }],
             createdByName: savedByName,
             createdByEmail: savedByEmail,
             createdAt: now

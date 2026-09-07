@@ -25,7 +25,7 @@
 <title>CS Connect</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=Sarabun:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=20260908b">
+<link rel="stylesheet" href="style.css?v=20260908c">
 </head>
 <body>
 
@@ -491,22 +491,19 @@
           <div id="batchSection" hidden>
             <hr class="form-divider">
             <h3 class="batch-heading">รายการคำร้องในกลุ่ม</h3>
-            <p class="batch-hint">ข้อมูลด้านบนจะถูกใช้กับทุกแถวเหมือนกันหมด กรอกเฉพาะส่วนที่ต่างกันในตารางนี้ — แถวที่เว้นว่างทั้งแถวจะถูกข้าม ถ้าแถวไหนต่างจากกลุ่มมากกว่านี้ (เช่น คนละความประสงค์ คนละขนาดมิเตอร์) กด <strong>แก้ไขเพิ่มเติม</strong> ที่ท้ายแถวนั้นเพื่อแก้ได้ทุกช่องเฉพาะแถวนั้น</p>
-            <div class="batch-table-scroll">
-              <table class="batch-table">
-                <thead>
-                  <tr>
-                    <th class="batch-col-index">#</th>
-                    <th>เลขที่คำร้อง</th>
-                    <th>ชื่อลูกค้า</th>
-                    <th>บ้านเลขที่</th>
-                    <th>เบอร์โทรศัพท์</th>
-                    <th class="batch-col-remove"></th>
-                  </tr>
-                </thead>
-                <tbody id="batchRows"></tbody>
-              </table>
+
+            <ul class="batch-hint">
+              <li>แต่ละคำร้องด้านล่างกรอกมาให้แล้วจาก<strong>ข้อมูลตั้งต้น</strong>ด้านบน แก้เฉพาะช่องที่ต่างกันได้เลย</li>
+              <li><strong>เลขที่คำร้อง</strong>ต้องกรอกเองทุกใบ ใช้ซ้ำกันไม่ได้</li>
+              <li>ถ้าแก้ข้อมูลตั้งต้นด้านบนทีหลัง กด <strong>“กรอกข้อมูลตั้งต้นลงทุกคำร้อง”</strong> เพื่อทับค่าเดิมทั้งหมด</li>
+              <li>คำร้องที่เว้นว่างทั้งใบจะถูกข้ามไป ไม่ถูกบันทึก</li>
+            </ul>
+
+            <div class="batch-toolbar">
+              <button type="button" id="batchApplySharedBtn" class="btn btn-ghost">กรอกข้อมูลตั้งต้นลงทุกคำร้อง</button>
             </div>
+
+            <div id="batchRows" class="batch-rows"></div>
             <button type="button" id="batchAddRowBtn" class="btn btn-ghost">+ เพิ่มแถว</button>
           </div>
 
@@ -584,6 +581,6 @@
      ที่หาสาเหตุยากมาก
      **ต้องเปลี่ยนเลขนี้ทุกครั้งที่แก้ app.js / style.css / track.js / qr.js**
      ไม่งั้นผู้ใช้บางคนจะยังได้ไฟล์เก่าไปอีกพักใหญ่ -->
-<script src="app.js?v=20260908b"></script>
+<script src="app.js?v=20260908c"></script>
 </body>
 </html>

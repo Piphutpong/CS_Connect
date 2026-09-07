@@ -34,6 +34,11 @@
      ถ้าวันหนึ่งความสูงแถบบนเปลี่ยน แก้ที่นี่ที่เดียว */
   --topbar-h: 65px;
 
+  /* ระยะขอบซ้าย/ขวาของ .requests-content -- เก็บเป็นตัวแปรเพราะกลุ่มคำร้อง
+     ต้องหักลบระยะนี้ออกเพื่อกางเต็มความกว้าง ถ้าค่าสองที่ไม่ตรงกันจะเห็นเป็น
+     ขอบเบี้ยวทันที */
+  --content-pad-x: 36px;
+
   --shadow: 0 16px 36px rgba(32, 15, 56, 0.14);
   --shadow-sm: 0 2px 10px rgba(32, 15, 56, 0.08);
   --radius: 14px;
@@ -1283,121 +1288,110 @@ button:active {
   margin: 0;
 }
 
+/* เดิมเป็นย่อหน้าเดียวยาวติดกันจนอ่านไม่ออกว่ามีกี่เรื่อง -- แยกเป็นข้อ ๆ
+   เรื่องละบรรทัด */
 .batch-hint {
+  margin: -8px 0 0;
+  padding-left: 20px;
   font-size: 13px;
   color: var(--ink-soft);
-  line-height: 1.6;
-  margin: -8px 0 0;
+  line-height: 1.85;
 }
 
-/* Narrow screens get a scroll rather than a squeezed, unusable table. */
-.batch-table-scroll {
-  overflow-x: auto;
+.batch-hint li {
+  margin-bottom: 2px;
 }
 
-.batch-table {
-  width: 100%;
-  border-collapse: collapse;
-  min-width: 560px;
-}
-
-.batch-table th {
-  text-align: left;
-  font-size: 12.5px;
+.batch-hint strong {
+  color: var(--ink);
   font-weight: 600;
-  color: var(--ink-soft);
-  padding: 0 8px 6px;
 }
 
-.batch-table td {
-  padding: 3px 4px;
+.batch-toolbar {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
 }
 
-.batch-col-index {
-  width: 32px;
-  text-align: center;
-  font-family: var(--font-mono);
-  font-size: 12.5px;
-  color: var(--ink-soft);
-}
-
-.batch-col-remove {
-  width: 140px;
-  white-space: nowrap;
-  text-align: right;
-}
-
-.batch-expand-btn {
-  font: inherit;
-  font-size: 12px;
-  padding: 5px 10px;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  background: var(--white);
-  color: var(--volt-500);
-  cursor: pointer;
-}
-
-.batch-expand-btn:hover {
-  background: var(--volt-50);
-  border-color: var(--border-strong);
-}
-
-.batch-expand-btn.active {
-  background: var(--volt-100);
-  border-color: var(--volt-300);
-  color: var(--volt-700);
-}
-
-.batch-detail-row[hidden] {
+.batch-toolbar[hidden] {
   display: none;
 }
 
-.batch-detail-row > td {
-  padding: 4px 4px 16px;
+/* กลุ่มคำร้องกางเต็มความกว้างของพื้นที่เนื้อหา โดยหักระยะขอบของ
+   .requests-content ออกทั้งสองข้าง -- แต่ละใบมีช่องกรอกครบทุกช่อง จึงต้องการ
+   ความกว้างมากกว่าฟอร์มตั้งต้นด้านบนที่เป็นสองคอลัมน์ */
+.batch-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-left: calc(var(--content-pad-x) * -1);
+  margin-right: calc(var(--content-pad-x) * -1);
+  padding-left: var(--content-pad-x);
+  padding-right: var(--content-pad-x);
 }
 
-.batch-override-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-  gap: 12px;
-  padding: 16px;
+.batch-row {
   border: 1px solid var(--border);
   border-left: 3px solid var(--volt-300);
-  border-radius: 10px;
-  background: var(--volt-50);
-}
-
-.batch-input {
-  width: 100%;
-  padding: 8px 10px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  font-size: 14px;
-  color: var(--ink);
+  border-radius: var(--radius);
   background: var(--white);
+  padding: 16px 18px;
 }
 
-.batch-input:focus {
-  outline: none;
-  border-color: var(--volt-300);
-  box-shadow: 0 0 0 3px var(--volt-100);
+.batch-row-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.batch-row-title {
+  font-family: var(--font-display);
+  font-size: 14.5px;
+  font-weight: 600;
+  color: var(--volt-700);
+}
+
+/* ทุกช่องของคำร้องหนึ่งใบเรียงเป็นกริดที่ยืดตามความกว้างจริง -- auto-fill ทำให้
+   จอกว้างได้หลายคอลัมน์ จอแคบลดเองโดยไม่ต้องมี breakpoint ของตัวเอง */
+.batch-row-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+  gap: 12px 14px;
+  align-items: start;
+}
+
+.batch-row-grid .field[hidden] {
+  display: none;
+}
+
+/* ป้ายกำกับในแถวกลุ่มเล็กกว่าฟอร์มหลัก เพราะมีจำนวนมากกว่ามากในพื้นที่เท่ากัน */
+.batch-row-grid label {
+  font-size: 12px;
+}
+
+.batch-row-grid input,
+.batch-row-grid select,
+.batch-row-grid textarea {
+  padding: 8px 10px;
+  font-size: 13.5px;
 }
 
 .batch-remove-btn {
-  width: 28px;
-  height: 28px;
-  border: none;
-  border-radius: 6px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 5px 12px;
   background: transparent;
   color: var(--ink-soft);
-  font-size: 18px;
-  line-height: 1;
+  font: inherit;
+  font-size: 12.5px;
   cursor: pointer;
 }
 
 .batch-remove-btn:hover {
   background: var(--danger-tint);
+  border-color: var(--danger);
   color: var(--danger);
 }
 
@@ -1635,6 +1629,7 @@ button:active {
   }
 
   .requests-content {
+    --content-pad-x: 24px;
     padding: 28px 24px 40px;
   }
 }
@@ -1725,6 +1720,7 @@ button:active {
   }
 
   .requests-content {
+    --content-pad-x: 16px;
     padding: 24px 16px 40px;
   }
 
