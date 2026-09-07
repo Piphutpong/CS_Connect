@@ -2044,3 +2044,60 @@ button:active {
     animation: none;
   }
 }
+
+/* ==========================================================================
+   ย่อ/ขยายคำร้องในกลุ่ม -- เวลามีหลายใบ การกางทุกใบพร้อมกันทำให้หน้ายาวจน
+   เลื่อนหาไม่เจอ
+   ========================================================================== */
+
+/* กฎ [hidden] ที่ขาดไม่ได้: .batch-row-grid ตั้ง display: grid แบบไม่มีเงื่อนไข
+   ซึ่งชนะกฎ [hidden] { display: none } ของเบราว์เซอร์เพราะ specificity เท่ากัน
+   ถ้าไม่มีบรรทัดนี้ การตั้ง .hidden = true จะไม่เกิดอะไรขึ้นเลย และเป็นความผิด
+   พลาดที่เงียบสนิท (เกิดมาแล้วห้าครั้งในโปรเจกต์นี้ ดูหัวข้อ Gotcha) */
+.batch-row-grid[hidden] {
+  display: none;
+}
+
+.batch-toggle-btn {
+  flex-shrink: 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 4px 12px;
+  background: var(--white);
+  color: var(--volt-500);
+  font: inherit;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+
+.batch-toggle-btn:hover {
+  background: var(--volt-50);
+  border-color: var(--volt-300);
+}
+
+/* ชื่อใบกดได้ด้วย -- เป้าที่ใหญ่กว่าปุ่มเล็ก ๆ สำหรับการกระทำที่ทำบ่อย */
+.batch-row-title {
+  cursor: pointer;
+  user-select: none;
+}
+
+/* สรุปย่อ ๆ ตอนย่อ: ถ้าเหลือแต่ "คำร้องที่ 3" ก็ไม่รู้ว่าใบไหนเป็นใบไหน
+   กินพื้นที่ที่เหลือทั้งหมด และตัดด้วย ... เมื่อยาวเกิน แทนที่จะดันปุ่มลบตกบรรทัด */
+.batch-row-summary {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  color: var(--ink-soft);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.batch-row.is-collapsed {
+  padding: 10px 18px;
+  background: var(--volt-50);
+}
+
+.batch-row.is-collapsed .batch-row-head {
+  margin-bottom: 0;
+}

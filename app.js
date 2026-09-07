@@ -2432,8 +2432,16 @@
     const head = document.createElement("div");
     head.className = "batch-row-head";
 
+    const toggleBtn = document.createElement("button");
+    toggleBtn.type = "button";
+    toggleBtn.className = "batch-toggle-btn";
+
     const title = document.createElement("span");
     title.className = "batch-row-title";
+
+    // เห็นเฉพาะตอนย่อ -- ถ้าย่อแล้วเหลือแต่ "คำร้องที่ 3" ก็ไม่รู้ว่าใบไหนเป็นใบไหน
+    const summary = document.createElement("span");
+    summary.className = "batch-row-summary";
 
     const removeBtn = document.createElement("button");
     removeBtn.type = "button";
@@ -2444,19 +2452,61 @@
       renumberBatchRows();
     });
 
-    head.append(title, removeBtn);
+    head.append(toggleBtn, title, summary, removeBtn);
 
     const grid = document.createElement("div");
     grid.className = "batch-row-grid";
     buildBatchRowFields(seq, grid);
 
     row.append(head, grid);
+
+    toggleBtn.addEventListener("click", () => setBatchRowCollapsed(row, !row.classList.contains("is-collapsed")));
+    title.addEventListener("click", () => setBatchRowCollapsed(row, !row.classList.contains("is-collapsed")));
+    setBatchRowCollapsed(row, false);
     batchRows.appendChild(row);
     renumberBatchRows();
   }
 
   function batchEntryRows() {
     return Array.from(batchRows.children);
+  }
+
+  /**
+   * ย่อ/ขยายคำร้องหนึ่งใบ
+   *
+   * ใช้ hidden กับ .batch-row-grid ไม่ใช่การถอดออกจาก DOM -- ช่องกรอกต้องยังอยู่
+   * ครบ ไม่งั้นค่าที่พิมพ์ไว้จะหายและ collectBatchRows() จะอ่านไม่เจอ
+   *
+   * .batch-row-grid ตั้ง display: grid ไว้ จึงต้องมี .batch-row-grid[hidden]
+   * ใน style.css คู่กันเสมอ ไม่งั้น hidden จะไม่มีผลอะไรเลย (ดูหัวข้อ Gotcha)
+   */
+  function setBatchRowCollapsed(row, collapsed) {
+    row.classList.toggle("is-collapsed", collapsed);
+    row.querySelector(".batch-row-grid").hidden = collapsed;
+
+    const toggleBtn = row.querySelector(".batch-toggle-btn");
+    toggleBtn.textContent = collapsed ? "ขยาย" : "ย่อ";
+    toggleBtn.setAttribute("aria-expanded", String(!collapsed));
+
+    const summary = row.querySelector(".batch-row-summary");
+    if (!collapsed) {
+      summary.textContent = "";
+      return;
+    }
+
+    const read = key => (row.querySelector(`[data-batch-key="${key}"]`)?.value || "").trim();
+    const parts = [read("requestNumber"), read("customerName"), read("houseNo")].filter(Boolean);
+    summary.textContent = parts.length ? parts.join(" · ") : "(ยังไม่ได้กรอก)";
+  }
+
+  /** เปิดใบที่มีปัญหาให้เห็น -- ข้อความบอกว่าใบไหนผิด แต่ถ้ามันถูกย่ออยู่ก็หาไม่เจอ */
+  function expandBatchRow(row) {
+    setBatchRowCollapsed(row, false);
+    row.scrollIntoView({ block: "center" });
+  }
+
+  function setAllBatchRowsCollapsed(collapsed) {
+    batchEntryRows().forEach(row => setBatchRowCollapsed(row, collapsed));
   }
 
   function renumberBatchRows() {
@@ -2493,13 +2543,26 @@
 
   document.getElementById("batchApplySharedBtn").addEventListener("click", () => {
     applySharedToBatchRows();
+    // ค่าที่โชว์ตอนย่อเพิ่งเปลี่ยนไปด้วย ต้องวาดใหม่ให้ตรง
+    batchEntryRows().forEach(row => {
+      if (row.classList.contains("is-collapsed")) setBatchRowCollapsed(row, true);
+    });
     hideError(requestFormError);
+  });
+
+  document.getElementById("batchCollapseAllBtn").addEventListener("click", () => {
+    // ดูจากใบแรกว่าตอนนี้อยู่สถานะไหน แล้วสลับทั้งกลุ่มไปทางตรงข้าม
+    const anyExpanded = batchEntryRows().some(row => !row.classList.contains("is-collapsed"));
+    setAllBatchRowsCollapsed(anyExpanded);
+    document.getElementById("batchCollapseAllBtn").textContent =
+      anyExpanded ? "ขยายทุกคำร้อง" : "ย่อทุกคำร้อง";
   });
 
   function resetBatchRows() {
     batchRows.innerHTML = "";
     batchRowSeq = 0;
     for (let i = 0; i < BATCH_DEFAULT_ROWS; i++) addBatchRow();
+    document.getElementById("batchCollapseAllBtn").textContent = "ย่อทุกคำร้อง";
   }
 
   /**
@@ -2518,14 +2581,16 @@
    */
   function collectBatchRows() {
     return batchEntryRows()
-      .map(row => {
+      .map((el, i) => {
         const values = {};
-        row.querySelectorAll("[data-batch-key]").forEach(control => {
+        el.querySelectorAll("[data-batch-key]").forEach(control => {
           values[control.dataset.batchKey] = control.value.trim();
         });
-        return values;
+        // position คือเลขที่แสดงบนการ์ด ไม่ใช่ลำดับหลังกรองใบว่างออก -- ข้อความ
+        // แจ้งเตือนต้องชี้ใบที่ผู้ใช้เห็นจริง ไม่ใช่ลำดับภายในของอาร์เรย์
+        return { el, position: i + 1, values };
       })
-      .filter(v => [v.requestNumber, v.customerName, v.houseNo, v.phonePrimary].some(Boolean));
+      .filter(({ values: v }) => [v.requestNumber, v.customerName, v.houseNo, v.phonePrimary].some(Boolean));
   }
 
   /** Opens qr.html for one or many requests -- it switches to a printable grid past one. */
@@ -2753,24 +2818,27 @@
 
         // ตรวจรายใบ และบอกให้ชัดว่าใบไหนขาดช่องไหน -- ฟอร์มตั้งต้นผ่านการตรวจ
         // มาแล้วก็จริง แต่แต่ละใบแก้ทับได้ทุกช่อง จึงเว้นว่างจนไม่ครบได้
-        for (let i = 0; i < rows.length; i++) {
-          const missing = BATCH_REQUIRED_FIELDS.find(f => !rows[i][f.key]);
+        for (const row of rows) {
+          const missing = BATCH_REQUIRED_FIELDS.find(f => !row.values[f.key]);
           if (missing) {
-            showError(requestFormError, `คำร้องที่ ${i + 1}: กรุณากรอก${missing.label}`);
+            expandBatchRow(row.el);
+            showError(requestFormError, `คำร้องที่ ${row.position}: กรุณากรอก${missing.label}`);
             return;
           }
-          if (rows[i].purposeChoice === "other" && !rows[i].purposeOther) {
-            showError(requestFormError, `คำร้องที่ ${i + 1}: กรุณาระบุความประสงค์`);
+          if (row.values.purposeChoice === "other" && !row.values.purposeOther) {
+            expandBatchRow(row.el);
+            showError(requestFormError, `คำร้องที่ ${row.position}: กรุณาระบุความประสงค์`);
             return;
           }
         }
 
         // เลขที่คำร้องซ้ำกันเองภายในกลุ่ม -- ตรวจตรงนี้เพราะตอนนี้ทุกใบมีช่องของ
         // ตัวเอง การคัดลอกแถวแล้วลืมแก้เลขจึงเกิดได้ง่ายกว่าเดิมมาก
-        const numbers = rows.map(row => row.requestNumber);
+        const numbers = rows.map(row => row.values.requestNumber);
         const dupAt = numbers.findIndex((n, i) => numbers.indexOf(n) !== i);
         if (dupAt !== -1) {
-          showError(requestFormError, `คำร้องที่ ${dupAt + 1}: เลขที่คำร้อง "${numbers[dupAt]}" ซ้ำกับใบอื่นในกลุ่ม`);
+          expandBatchRow(rows[dupAt].el);
+          showError(requestFormError, `คำร้องที่ ${rows[dupAt].position}: เลขที่คำร้อง "${numbers[dupAt]}" ซ้ำกับใบอื่นในกลุ่ม`);
           return;
         }
 
@@ -2780,7 +2848,7 @@
         const ids = newRequestIds(rows.length);
         const batchId = newRequestId();
 
-        const created = rows.map((row, i) => {
+        const created = rows.map(({ values: row }, i) => {
           const rowPurpose = row.purposeChoice === "other" ? row.purposeOther : row.purposeChoice;
 
           // ยังกาง recordData เป็นฐานไว้ เพื่อให้ช่องที่มีในฟอร์มแต่ยังไม่ได้ใส่ใน
