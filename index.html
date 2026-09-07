@@ -128,6 +128,13 @@
       <p class="brand-sub">เปลี่ยนรหัสผ่านที่ใช้เข้าสู่ระบบ</p>
     </div>
 
+    <!-- ขึ้นเฉพาะบัญชีที่ยังใช้รหัสผ่านชั่วคราวอยู่ -- ด่านจริงอยู่ฝั่งเซิร์ฟเวอร์
+         (requirePasswordChanged_) ตรงนี้แค่บอกให้ผู้ใช้รู้ว่าทำไมไปไหนไม่ได้ -->
+    <p id="forcePasswordNotice" class="form-notice" hidden>
+      บัญชีนี้ใช้รหัสผ่านชั่วคราวที่ผู้ดูแลระบบตั้งให้
+      กรุณาตั้งรหัสผ่านใหม่ของคุณเองก่อน จึงจะเริ่มใช้งานระบบได้
+    </p>
+
     <form id="changePasswordForm" class="auth-form" novalidate>
       <div class="field">
         <label for="currentPassword">รหัสผ่านปัจจุบัน</label>
@@ -173,7 +180,7 @@
       </div>
     </div>
 
-    <p class="auth-switch"><a href="#" id="accountBackLink">กลับหน้าแรก</a></p>
+    <p class="auth-switch" id="accountBackRow"><a href="#" id="accountBackLink">กลับหน้าแรก</a></p>
   </div>
 </section>
 

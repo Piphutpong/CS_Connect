@@ -1962,3 +1962,23 @@ button:active {
   line-height: 1.7;
   color: var(--warning);
 }
+
+/* คำอธิบายกลาง ๆ ที่ไม่ใช่ทั้ง error และ success -- ใช้กับข้อความบังคับเปลี่ยน
+   รหัสผ่านชั่วคราว ซึ่งไม่ใช่ความผิดพลาดของผู้ใช้ แต่ก็ผ่านไปเฉย ๆ ไม่ได้ */
+.form-notice {
+  margin: 0 0 18px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: var(--warning-tint);
+  border-left: 3px solid var(--warning);
+  color: var(--warning);
+  font-size: 13.5px;
+  line-height: 1.75;
+}
+
+/* ทั้งสองคลาสนี้ถูกสลับด้วย hidden -- ยังไม่ได้ตั้ง display จึงยังไม่จำเป็น
+   แต่ใส่ตามกฎของโปรเจกต์ เผื่อวันหลังมีคนเติม display ให้แล้วซ่อนไม่ลง */
+.form-notice[hidden],
+.auth-switch[hidden] {
+  display: none;
+}

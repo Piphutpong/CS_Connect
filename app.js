@@ -255,9 +255,25 @@
       try {
         return await call({ ...payload, token: getSession()?.token });
       } catch (err) {
-        if (String(err && err.message).includes("AUTH_REQUIRED")) {
+        const message = String(err && err.message);
+
+        if (message.includes("AUTH_REQUIRED")) {
           handleAuthExpired();
+        } else if (message.includes("PASSWORD_CHANGE_REQUIRED")) {
+          // ด่านฝั่งเซิร์ฟเวอร์ปฏิเสธมา -- แปลว่าหน้าจอกับความจริงไม่ตรงกัน
+          // (เช่นแอดมินเพิ่งรีเซ็ตรหัสให้ระหว่างที่เปิดเว็บค้างไว้) พากลับไป
+          // หน้าตั้งรหัสใหม่ ซึ่งเป็นสิ่งเดียวที่บัญชีนี้ทำได้ตอนนี้
+          const session = getSession();
+          if (session) {
+            session.mustChangePassword = true;
+            setSession(session, sessionIsRemembered());
+          }
+          requestsCache = [];
+          dispatchesCache = [];
+          document.getElementById("bootOverlay").hidden = true;
+          openAccountView(true);
         }
+
         throw err;
       }
     }
@@ -398,7 +414,13 @@
 
   function setSession(user, remember) {
     // The token is what actually authorises data calls -- the rest is display.
-    const session = { email: user.email, name: user.name, token: user.token, isAdmin: Boolean(user.isAdmin) };
+    const session = {
+      email: user.email,
+      name: user.name,
+      token: user.token,
+      isAdmin: Boolean(user.isAdmin),
+      mustChangePassword: Boolean(user.mustChangePassword)
+    };
     if (!storageAvailable) {
       memorySession = session;
       return;
@@ -408,6 +430,22 @@
     localStorage.removeItem(SESSION_KEY);
     sessionStorage.removeItem(SESSION_KEY);
     (remember ? localStorage : sessionStorage).setItem(SESSION_KEY, JSON.stringify(session));
+  }
+
+  /**
+   * session นี้ถูกจำไว้ข้ามการปิดเบราว์เซอร์หรือไม่ (ติ๊ก "จำรหัสผ่าน" ไว้)
+   *
+   * ต้องหุ้ม try/catch เพราะ localStorage โยน error ทันทีถ้าเบราว์เซอร์ปิดการ
+   * เก็บข้อมูลของเว็บไว้ -- ซึ่งเป็นเหตุผลเดียวกับที่มี storageAvailable อยู่แล้ว
+   * ตอบ false เมื่ออ่านไม่ได้ ซึ่งเป็นฝั่งที่ปลอดภัยกว่า (ไม่จำต่อ)
+   */
+  function sessionIsRemembered() {
+    if (!storageAvailable) return false;
+    try {
+      return localStorage.getItem(SESSION_KEY) !== null;
+    } catch {
+      return false;
+    }
   }
 
   function getSession() {
@@ -1029,6 +1067,15 @@
       const user = await backend.login(email, password);
 
       setSession(user, remember);
+      loginForm.reset();
+
+      // บัญชีที่ใช้รหัสผ่านชั่วคราวยังโหลดข้อมูลไม่ได้ (loadRequests จะถูก
+      // requirePasswordChanged_ ปฏิเสธ) จึงพาไปตั้งรหัสใหม่เลย ไม่ต้องเสียเวลา
+      // ยิงคำสั่งที่รู้อยู่แล้วว่าจะล้ม
+      if (user.mustChangePassword) {
+        openAccountView(true);
+        return;
+      }
 
       // The token only exists now, so this is the first point at which the
       // request table can be fetched at all.
@@ -1037,7 +1084,6 @@
       await migrateLocalDataOnce();
       updateTabBadges();
 
-      loginForm.reset();
       enterApp();
     } catch (err) {
       console.error("CS Connect login error:", err);
@@ -1192,14 +1238,16 @@
     adminSection: document.getElementById("adminResetSection"),
     adminForm: document.getElementById("adminResetForm"),
     adminError: document.getElementById("adminResetError"),
-    adminResult: document.getElementById("adminResetResult")
+    adminResult: document.getElementById("adminResetResult"),
+    forceNotice: document.getElementById("forcePasswordNotice"),
+    backRow: document.getElementById("accountBackRow")
   };
 
   /**
    * เปิดหน้าบัญชีแบบสะอาดทุกครั้ง -- โดยเฉพาะ adminResult ที่ถือรหัสผ่านชั่วคราว
    * อยู่ ถ้าไม่ล้าง รหัสของคนก่อนหน้าจะค้างอยู่บนจอให้คนถัดไปที่เดินผ่านเห็นได้
    */
-  function openAccountView() {
+  function openAccountView(forced) {
     const session = getSession();
 
     accountView.changeForm.reset();
@@ -1212,12 +1260,18 @@
     document.getElementById("tempPasswordValue").textContent = "";
     document.getElementById("tempPasswordEmail").textContent = "";
 
-    accountView.adminSection.hidden = !session?.isAdmin;
+    // บัญชีที่ยังติดรหัสชั่วคราวยังทำอะไรกับข้อมูลไม่ได้ จึงไม่มีเหตุให้เห็น
+    // เครื่องมือของผู้ดูแลระบบ และไม่ควรมีทางออกจากหน้านี้นอกจากตั้งรหัสใหม่
+    const mustChange = Boolean(forced || session?.mustChangePassword);
+
+    accountView.adminSection.hidden = !session?.isAdmin || mustChange;
+    accountView.forceNotice.hidden = !mustChange;
+    accountView.backRow.hidden = mustChange;
 
     showView("account");
   }
 
-  document.getElementById("accountBtn").addEventListener("click", openAccountView);
+  document.getElementById("accountBtn").addEventListener("click", () => openAccountView(false));
 
   document.getElementById("accountBackLink").addEventListener("click", (e) => {
     e.preventDefault();
@@ -1269,6 +1323,29 @@
         ? `เปลี่ยนรหัสผ่านเรียบร้อยแล้ว และออกจากระบบให้อีก ${revoked} อุปกรณ์`
         : "เปลี่ยนรหัสผ่านเรียบร้อยแล้ว";
       accountView.changeSuccess.hidden = false;
+
+      // ปลดล็อกบัญชีที่เพิ่งใช้รหัสชั่วคราว -- ฝั่งเซิร์ฟเวอร์ล้าง flag ทั้งในแถว
+      // ผู้ใช้และใน session ที่ยังใช้อยู่ไปแล้ว ตรงนี้แค่ทำให้หน้าจอตรงกัน
+      const session = getSession();
+      if (session?.mustChangePassword) {
+        session.mustChangePassword = false;
+        setSession(session, sessionIsRemembered());
+        accountView.forceNotice.hidden = true;
+        accountView.backRow.hidden = false;
+        accountView.adminSection.hidden = !session.isAdmin;
+
+        // ตอนล็อกอิน บัญชีนี้ถูกพามาที่นี่โดยไม่ได้โหลดข้อมูลเลย (loadRequests
+        // จะถูกปฏิเสธอยู่แล้ว) ตอนนี้ผ่านด่านแล้วจึงต้องโหลด ไม่งั้นกดกลับหน้าแรก
+        // ไปจะเจอรายการคำร้องว่างเปล่าทั้งที่ข้อมูลมีอยู่
+        try {
+          await refreshAll();
+          updateTabBadges();
+        } catch (loadErr) {
+          console.error("CS Connect: โหลดข้อมูลหลังเปลี่ยนรหัสผ่านไม่สำเร็จ", loadErr);
+          accountView.changeSuccess.textContent +=
+            " (โหลดข้อมูลไม่สำเร็จ กรุณารีเฟรชหน้าเว็บอีกครั้ง)";
+        }
+      }
     } catch (err) {
       console.error("CS Connect change password error:", err);
       showError(accountView.changeError, err.message || "เกิดข้อผิดพลาด ไม่สามารถเปลี่ยนรหัสผ่านได้ กรุณาลองใหม่อีกครั้ง");
@@ -2643,6 +2720,13 @@
     if (!session) {
       bootOverlay.hidden = true;
       showView("login");
+      return;
+    }
+
+    // เปิดเว็บใหม่ด้วย session เดิมที่ยังติดรหัสชั่วคราวอยู่ -- เช็คก่อนยิงโหลด
+    if (session.mustChangePassword) {
+      bootOverlay.hidden = true;
+      openAccountView(true);
       return;
     }
 
