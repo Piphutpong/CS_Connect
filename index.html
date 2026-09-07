@@ -5,7 +5,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <!-- Content-Security-Policy: ชั้นสุดท้ายที่ทำให้ "ต่อให้มีช่องโหว่จนแทรก
      สคริปต์ได้ ก็ส่งข้อมูลออกไปไหนไม่ได้" -- script-src กันสคริปต์ที่ไม่ได้มาจาก
-     ไฟล์ของเราเอง และ connect-src อนุญาตให้ยิงได้ที่เดียวคือ Apps Script
+     ไฟล์ของเราเอง และ connect-src อนุญาตให้ยิงได้เฉพาะ Apps Script
+     ต้องมี script.googleusercontent.com ด้วย ไม่ใช่แค่ script.google.com:
+     Apps Script ตอบทุก POST ด้วย 302 ไปโฮสต์นั้น และ CSP ตรวจปลายทางของ
+     redirect ด้วย ไม่ใช่แค่ URL แรก ถ้าขาดไป ทุกคำสั่งจะล้มด้วยข้อความ
+     "NetworkError when attempting to fetch resource" โดยไม่บอกว่าเป็นเพราะ CSP
      หมายเหตุ: frame-ancestors ใช้ผ่าน <meta> ไม่ได้ (ต้องเป็น HTTP header ซึ่ง
      GitHub Pages ตั้งให้ไม่ได้) การกันการถูกฝังใน iframe จึงยังทำไม่ได้ที่นี่ -->
 <meta http-equiv="Content-Security-Policy" content="default-src 'none';
@@ -13,7 +17,7 @@
         style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
         font-src https://fonts.gstatic.com;
         img-src 'self' data: https://drive.google.com https://*.googleusercontent.com;
-        connect-src https://script.google.com;
+        connect-src https://script.google.com https://script.googleusercontent.com;
         form-action 'none';
         base-uri 'none';
         object-src 'none'">
