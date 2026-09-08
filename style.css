@@ -2115,3 +2115,46 @@ button:active {
   margin-top: 2px;
   font-weight: 600;
 }
+
+/* ===== รหัสเชิญสำหรับสมัครสมาชิก (ผู้ดูแลระบบ) ===== */
+
+.invite-status {
+  margin: 0 0 12px;
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--ink-soft);
+}
+
+.invite-code-box {
+  margin: 0 0 14px;
+  padding: 14px 16px;
+  border-radius: 10px;
+  background: var(--volt-50);
+  border: 1px solid var(--volt-300);
+  text-align: center;
+}
+
+/* .invite-code-box ไม่ได้ตั้ง display จึงยังไม่จำเป็น แต่ใส่ตามกฎ [hidden] ของ
+   โปรเจกต์ เผื่อวันหลังมีคนเติม display ให้แล้วซ่อนไม่ลง (เคยพลาดมาห้าครั้ง) */
+.invite-code-box[hidden] {
+  display: none;
+}
+
+/* mono + user-select: all -- รหัสนี้ต้องอ่านออกเสียงหรือคัดลอกให้ถูกทุกตัว
+   ฟอนต์ที่แยก 0/O และ 1/l ได้จึงสำคัญพอกับการเลือกได้ในคลิกเดียว */
+.invite-code-value {
+  margin: 0 0 6px;
+  font-family: var(--font-mono);
+  font-size: 26px;
+  font-weight: 600;
+  letter-spacing: 4px;
+  color: var(--volt-700);
+  user-select: all;
+}
+
+.invite-countdown {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--warning);
+}

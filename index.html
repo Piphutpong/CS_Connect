@@ -25,7 +25,7 @@
 <title>CS Connect</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=Sarabun:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=20260908i">
+<link rel="stylesheet" href="style.css?v=20260908j">
 </head>
 <body>
 
@@ -155,6 +155,29 @@
 
     <!-- ผู้ดูแลระบบเท่านั้น -- app.js เปิดให้เห็นตาม isAdmin
          การกันสิทธิ์จริงอยู่ที่ requireAdmin_ ฝั่ง Apps Script ไม่ใช่ที่ hidden นี้ -->
+    <div id="adminInviteSection" class="admin-panel" hidden>
+      <h2 class="admin-panel-title">รหัสเชิญสำหรับสมัครสมาชิก</h2>
+      <p class="admin-panel-hint">
+        กดสร้างตอนที่กำลังจะบอกรหัสให้เจ้าตัวพิมพ์เลย
+        <strong>ใช้ได้ครั้งเดียว และหมดอายุใน 5 นาที</strong>
+        การสร้างรหัสใหม่จะยกเลิกรหัสเดิมทันที
+      </p>
+
+      <p id="inviteStatusLine" class="invite-status"></p>
+
+      <div id="inviteCodeBox" class="invite-code-box" hidden>
+        <p id="inviteCodeValue" class="invite-code-value"></p>
+        <p id="inviteCountdown" class="invite-countdown"></p>
+      </div>
+
+      <div class="batch-toolbar">
+        <button type="button" id="inviteCreateBtn" class="btn btn-primary">สร้างรหัสเชิญ</button>
+        <button type="button" id="inviteRevokeBtn" class="btn btn-ghost btn-danger-ghost" hidden>ยกเลิกรหัสนี้</button>
+      </div>
+
+      <p id="inviteError" class="form-error" hidden></p>
+    </div>
+
     <div id="adminBackupSection" class="admin-panel" hidden>
       <h2 class="admin-panel-title">สำรองข้อมูลทั้งระบบ</h2>
       <p class="admin-panel-hint">
@@ -594,6 +617,6 @@
      ที่หาสาเหตุยากมาก
      **ต้องเปลี่ยนเลขนี้ทุกครั้งที่แก้ app.js / style.css / track.js / qr.js**
      ไม่งั้นผู้ใช้บางคนจะยังได้ไฟล์เก่าไปอีกพักใหญ่ -->
-<script src="app.js?v=20260908i"></script>
+<script src="app.js?v=20260908j"></script>
 </body>
 </html>

@@ -209,6 +209,18 @@
 
     async exportAll() {
       throw new Error("โหมดออฟไลน์ไม่รองรับการสำรองข้อมูล");
+    },
+
+    async getInviteCode() {
+      throw new Error("โหมดออฟไลน์ไม่รองรับรหัสเชิญ");
+    },
+
+    async createInviteCode() {
+      throw new Error("โหมดออฟไลน์ไม่รองรับรหัสเชิญ");
+    },
+
+    async revokeInviteCode() {
+      throw new Error("โหมดออฟไลน์ไม่รองรับรหัสเชิญ");
     }
 
     // track()/uploadSlip() live in track.js now -- the public tracking page
@@ -355,6 +367,19 @@
       // ฝั่งเซิร์ฟเวอร์เสมอ ดู EXPORT_EXCLUDED_USER_COLUMNS)
       async exportAll() {
         return callAsUser({ action: "exportAll" });
+      },
+
+      // รหัสเชิญ -- ผู้ดูแลระบบเท่านั้น ทั้งสามคำสั่งกันด้วย requireAdmin_
+      async getInviteCode() {
+        return callAsUser({ action: "getInviteCode" });
+      },
+
+      async createInviteCode() {
+        return callAsUser({ action: "createInviteCode" });
+      },
+
+      async revokeInviteCode() {
+        return callAsUser({ action: "revokeInviteCode" });
       },
 
       // loadRequests() (above) only returns still-open requests plus recently
@@ -1280,6 +1305,8 @@
     document.getElementById("changePasswordForm").reset();
     document.getElementById("adminResetForm").reset();
 
+    resetInvitePanel();
+
     document.getElementById("revokeAllBtn").hidden = true;
     document.getElementById("userGreeting").textContent = "";
     document.getElementById("userGreeting2").textContent = "";
@@ -1355,7 +1382,14 @@
     backRow: document.getElementById("accountBackRow"),
     backupSection: document.getElementById("adminBackupSection"),
     backupError: document.getElementById("adminBackupError"),
-    backupResult: document.getElementById("adminBackupResult")
+    backupResult: document.getElementById("adminBackupResult"),
+    inviteSection: document.getElementById("adminInviteSection"),
+    inviteStatus: document.getElementById("inviteStatusLine"),
+    inviteBox: document.getElementById("inviteCodeBox"),
+    inviteValue: document.getElementById("inviteCodeValue"),
+    inviteCountdown: document.getElementById("inviteCountdown"),
+    inviteRevokeBtn: document.getElementById("inviteRevokeBtn"),
+    inviteError: document.getElementById("inviteError")
   };
 
   /**
@@ -1383,6 +1417,10 @@
     accountView.backupSection.hidden = !session?.isAdmin || mustChange;
     hideError(accountView.backupError);
     accountView.backupResult.hidden = true;
+
+    accountView.inviteSection.hidden = !session?.isAdmin || mustChange;
+    resetInvitePanel();
+    if (session?.isAdmin && !mustChange) refreshInviteStatus();
     accountView.forceNotice.hidden = !mustChange;
     accountView.backRow.hidden = mustChange;
 
@@ -1455,6 +1493,8 @@
         accountView.backRow.hidden = false;
         accountView.adminSection.hidden = !session.isAdmin;
         accountView.backupSection.hidden = !session.isAdmin;
+        accountView.inviteSection.hidden = !session.isAdmin;
+        if (session.isAdmin) refreshInviteStatus();
 
         // ตอนล็อกอิน บัญชีนี้ถูกพามาที่นี่โดยไม่ได้โหลดข้อมูลเลย (loadRequests
         // จะถูกปฏิเสธอยู่แล้ว) ตอนนี้ผ่านด่านแล้วจึงต้องโหลด ไม่งั้นกดกลับหน้าแรก
@@ -1479,6 +1519,117 @@
       showError(accountView.changeError, err.message || "เกิดข้อผิดพลาด ไม่สามารถเปลี่ยนรหัสผ่านได้ กรุณาลองใหม่อีกครั้ง");
     } finally {
       setBusy(submitBtn, false);
+    }
+  });
+
+  /**
+   * รหัสเชิญ: ใช้ได้ครั้งเดียว หมดอายุใน 5 นาที
+   *
+   * นับถอยหลังบนหน้าจอเพราะอายุสั้นมาก -- ผู้ดูแลระบบต้องรู้ว่าเหลือเวลาให้เจ้าตัว
+   * พิมพ์อีกเท่าไร ไม่ใช่มารู้ตอนที่เขากดสมัครแล้วไม่ผ่าน
+   */
+  let inviteTicker = null;
+
+  function stopInviteTicker() {
+    if (inviteTicker) {
+      clearInterval(inviteTicker);
+      inviteTicker = null;
+    }
+  }
+
+  /** ล้างทุกอย่างที่แสดงรหัสอยู่ -- ตัวรหัสเป็นความลับเหมือนรหัสผ่านชั่วคราว */
+  function resetInvitePanel() {
+    stopInviteTicker();
+    accountView.inviteValue.textContent = "";
+    accountView.inviteCountdown.textContent = "";
+    accountView.inviteBox.hidden = true;
+    accountView.inviteRevokeBtn.hidden = true;
+    accountView.inviteStatus.textContent = "";
+    hideError(accountView.inviteError);
+  }
+
+  function renderInviteStatus(status) {
+    stopInviteTicker();
+    hideError(accountView.inviteError);
+
+    accountView.inviteBox.hidden = status.state !== "active";
+    accountView.inviteRevokeBtn.hidden = status.state !== "active";
+
+    if (status.state === "active") {
+      accountView.inviteValue.textContent = status.code;
+      accountView.inviteStatus.textContent = "รหัสนี้ใช้สมัครได้ 1 บัญชี";
+
+      const tick = () => {
+        const left = Math.max(0, status.expiresAt - Date.now());
+        if (left <= 0) {
+          // หมดอายุระหว่างเปิดหน้าค้างไว้ -- ถามสถานะจริงจากเซิร์ฟเวอร์อีกครั้ง
+          // แทนที่จะเดาเอง เผื่อมีคนเพิ่งใช้รหัสนี้ไปพอดี
+          refreshInviteStatus();
+          return;
+        }
+        const mm = Math.floor(left / 60000);
+        const ss = Math.floor((left % 60000) / 1000);
+        accountView.inviteCountdown.textContent = `หมดอายุใน ${mm}:${String(ss).padStart(2, "0")} นาที`;
+      };
+
+      tick();
+      inviteTicker = setInterval(tick, 1000);
+      return;
+    }
+
+    if (status.state === "used") {
+      accountView.inviteStatus.textContent = status.usedByEmail
+        ? `รหัสล่าสุดถูกใช้ไปแล้ว (${status.usedByEmail}) — ขณะนี้ปิดรับสมัคร`
+        : "รหัสล่าสุดถูกใช้ไปแล้ว — ขณะนี้ปิดรับสมัคร";
+      return;
+    }
+
+    if (status.state === "expired") {
+      accountView.inviteStatus.textContent = "รหัสล่าสุดหมดอายุแล้ว — ขณะนี้ปิดรับสมัคร";
+      return;
+    }
+
+    // ยังไม่เคยสร้างรหัสจากหน้านี้เลย
+    accountView.inviteStatus.textContent = status.usingFallback
+      ? "ยังใช้รหัสเชิญตั้งต้นที่ตั้งไว้ในระบบอยู่ — กดสร้างเพื่อเปลี่ยนมาใช้รหัสครั้งเดียวแทน"
+      : "ขณะนี้ปิดรับสมัครสมาชิก";
+  }
+
+  async function refreshInviteStatus() {
+    try {
+      renderInviteStatus(await backend.getInviteCode());
+    } catch (err) {
+      console.error("CS Connect invite status error:", err);
+      stopInviteTicker();
+      showError(accountView.inviteError, friendlyError(err, "อ่านสถานะรหัสเชิญไม่สำเร็จ"));
+    }
+  }
+
+  document.getElementById("inviteCreateBtn").addEventListener("click", async (e) => {
+    const btn = e.currentTarget;
+    hideError(accountView.inviteError);
+    setBusy(btn, true, "กำลังสร้าง...");
+    try {
+      renderInviteStatus(await backend.createInviteCode());
+    } catch (err) {
+      console.error("CS Connect invite create error:", err);
+      showError(accountView.inviteError, friendlyError(err, "สร้างรหัสเชิญไม่สำเร็จ"));
+    } finally {
+      setBusy(btn, false);
+    }
+  });
+
+  accountView.inviteRevokeBtn.addEventListener("click", async (e) => {
+    const btn = e.currentTarget;
+    hideError(accountView.inviteError);
+    setBusy(btn, true, "กำลังยกเลิก...");
+    try {
+      renderInviteStatus(await backend.revokeInviteCode());
+    } catch (err) {
+      console.error("CS Connect invite revoke error:", err);
+      showError(accountView.inviteError, friendlyError(err, "ยกเลิกรหัสเชิญไม่สำเร็จ"));
+    } finally {
+      setBusy(btn, false);
     }
   });
 
