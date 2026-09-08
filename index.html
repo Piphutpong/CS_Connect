@@ -25,7 +25,7 @@
 <title>CS Connect</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=Sarabun:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=20260908k">
+<link rel="stylesheet" href="style.css?v=20260908l">
 </head>
 <body>
 
@@ -77,6 +77,9 @@
 
 <!-- ===== AUTH: REGISTER ===== -->
 <section id="registerView" class="auth-view" hidden>
+  <button type="button" id="registerBackBtn" class="btn btn-ghost btn-icon view-back-btn" aria-label="ย้อนกลับไปหน้าเข้าสู่ระบบ">
+    <svg viewBox="0 0 24 24" fill="none"><path d="M15 18l-6-6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+  </button>
   <div class="auth-card">
     <div class="brand">
       <div class="brand-mark">CS</div>
@@ -121,6 +124,11 @@
 
 <!-- ===== ACCOUNT: เปลี่ยนรหัสผ่าน / ตั้งรหัสชั่วคราว ===== -->
 <section id="accountView" class="auth-view" hidden>
+  <!-- ซ่อนพร้อมกับลิงก์ "กลับหน้าแรก" ด้านล่าง เมื่อบัญชีถูกบังคับให้ตั้งรหัสใหม่
+       -- ไม่งั้นปุ่มนี้จะกลายเป็นทางออกที่ทำให้ด่านนั้นไม่มีความหมาย -->
+  <button type="button" id="accountBackBtn" class="btn btn-ghost btn-icon view-back-btn" aria-label="ย้อนกลับไปหน้าแรก">
+    <svg viewBox="0 0 24 24" fill="none"><path d="M15 18l-6-6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+  </button>
   <div class="auth-card">
     <div class="brand">
       <div class="brand-mark">CS</div>
@@ -617,6 +625,6 @@
      ที่หาสาเหตุยากมาก
      **ต้องเปลี่ยนเลขนี้ทุกครั้งที่แก้ app.js / style.css / track.js / qr.js**
      ไม่งั้นผู้ใช้บางคนจะยังได้ไฟล์เก่าไปอีกพักใหญ่ -->
-<script src="app.js?v=20260908k"></script>
+<script src="app.js?v=20260908l"></script>
 </body>
 </html>

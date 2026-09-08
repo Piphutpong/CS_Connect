@@ -2170,3 +2170,36 @@ button:active {
 .track-status-note-part {
   white-space: nowrap;
 }
+
+/* ===== ปุ่มย้อนกลับมุมซ้ายบน (หน้าที่ไม่มีแถบบน) ===== */
+
+/* หน้าแบบการ์ด (สมัครสมาชิก / บัญชีของฉัน / พิมพ์ QR) ไม่มี .topbar ให้วางปุ่ม
+   จึงลอยไว้มุมเดียวกับปุ่มย้อนกลับของหน้าที่มีแถบบน เพื่อให้เป็นตำแหน่งเดียวกัน
+   ทั้งระบบ ไม่ใช่สองความเคยชิน
+
+   จุดยึดต่างกันสองแบบ และทั้งคู่ได้ผลเหมือนกัน: ใน index.html ปุ่มอยู่ใน
+   .auth-view ซึ่งเป็น position: relative อยู่แล้ว จึงยึดกับ view นั้น
+   ส่วนใน qr.html ปุ่มเป็นลูกของ body ตรง ๆ (.qr-page ไม่ได้เป็น relative)
+   จึงยึดกับตัวหน้าเอง ซึ่งเป็นมุมเดียวกันพอดี */
+.view-back-btn {
+  position: absolute;
+  top: 20px;
+  left: 20px;
+  z-index: 2;
+  background: var(--white);
+  text-decoration: none;
+}
+
+/* ปุ่มนี้เป็นของหน้าจอเท่านั้น ไม่ใช่ของกระดาษที่ลูกค้าถือกลับ */
+@media print {
+  .view-back-btn {
+    display: none;
+  }
+}
+
+@media (max-width: 640px) {
+  .view-back-btn {
+    top: 12px;
+    left: 12px;
+  }
+}

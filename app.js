@@ -1258,11 +1258,17 @@
     }
   });
 
-  document.getElementById("goToLogin").addEventListener("click", (e) => {
-    e.preventDefault();
+  function backToLogin() {
     hideError(registerError);
     showView("login");
+  }
+
+  document.getElementById("goToLogin").addEventListener("click", (e) => {
+    e.preventDefault();
+    backToLogin();
   });
+
+  document.getElementById("registerBackBtn").addEventListener("click", backToLogin);
 
   // ---------- home / logout ----------
   function enterApp() {
@@ -1423,11 +1429,16 @@
     if (session?.isAdmin && !mustChange) refreshInviteStatus();
     accountView.forceNotice.hidden = !mustChange;
     accountView.backRow.hidden = mustChange;
+    // ปุ่มมุมซ้ายบนต้องหายไปพร้อมกัน ไม่งั้นด่านบังคับตั้งรหัสใหม่มีทางออก
+    document.getElementById("accountBackBtn").hidden = mustChange;
 
     showView("account");
   }
 
   document.getElementById("accountBtn").addEventListener("click", () => openAccountView(false));
+
+  // ต้องผ่าน enterApp() เหมือนลิงก์ด้านล่าง ไม่ใช่ showView("home") ตรง ๆ
+  document.getElementById("accountBackBtn").addEventListener("click", enterApp);
 
   document.getElementById("accountBackLink").addEventListener("click", (e) => {
     e.preventDefault();
@@ -1491,6 +1502,7 @@
         setSession(session, sessionIsRemembered());
         accountView.forceNotice.hidden = true;
         accountView.backRow.hidden = false;
+        document.getElementById("accountBackBtn").hidden = false;
         accountView.adminSection.hidden = !session.isAdmin;
         accountView.backupSection.hidden = !session.isAdmin;
         accountView.inviteSection.hidden = !session.isAdmin;
