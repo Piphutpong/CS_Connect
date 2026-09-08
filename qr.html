@@ -20,7 +20,7 @@
 <title>พิมพ์ QR ตรวจสอบสถานะ - CS Connect</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=Sarabun:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=20260908d">
+<link rel="stylesheet" href="style.css?v=20260908e">
 </head>
 <body>
 
@@ -29,18 +29,11 @@
      a QR label pointing customers to track.html. Opened from a request
      card's "พิมพ์ QR" button as qr.html?tn=690001 so the reference number
      is prefilled instead of retyped -- see qr.js. -->
-<!-- Batch mode: qr.html?tn=690001,690002,... renders a printable sheet of
-     labels instead of the single card below. Same page rather than a separate
-     one so the short link and QR generation stay in one place. -->
-<div class="qr-sheet" id="qrSheet" hidden>
-  <div class="qr-sheet-head">
-    <h1>QR ตรวจสอบสถานะคำร้อง</h1>
-    <p id="qrSheetCount"></p>
-    <button type="button" id="qrSheetPrintBtn" class="btn btn-primary">พิมพ์ทั้งหมด</button>
-  </div>
-  <div class="qr-labels" id="qrLabels"></div>
-</div>
-
+<!-- Batch mode (qr.html?tn=690001,690002,...) uses this exact same card and
+     only swaps the single reference number for the list of them. A batch is
+     one stack of forms handed in by one person, so what they walk away with is
+     one card carrying all their numbers -- not a sheet to cut into separate
+     labels, which is what this used to print. -->
 <div class="qr-page" id="qrSingle">
   <section class="qr-card" id="printCard">
     <div class="qr-brand">CS Connect</div>
@@ -48,19 +41,32 @@
     <p class="qr-lede">ใช้มือถือสแกน QR นี้เพื่อเช็คสถานะคำร้องได้ทันที ไม่ต้องติดตั้งแอป</p>
     <div class="qr-frame" id="qr" aria-label="QR code สำหรับสแกนไปยังหน้าตรวจสอบสถานะ"></div>
     <p class="qr-url" id="urlText"></p>
-    <p class="qr-tracking-line">เลขที่คำร้องของท่าน: <span id="trackingFillValue" class="qr-blank"></span></p>
+    <p class="qr-tracking-line" id="trackingSingleLine">เลขที่คำร้องของท่าน: <span id="trackingFillValue" class="qr-blank"></span></p>
+
+    <!-- ใช้แทนบรรทัดด้านบนเมื่อเปิดมาพร้อมหลายเลข (คำร้องกลุ่ม) -->
+    <div class="qr-tracking-many" id="trackingManyBlock" hidden>
+      <p class="qr-tracking-many-label">เลขที่คำร้องของท่าน</p>
+      <ul class="qr-tracking-list" id="trackingList"></ul>
+    </div>
+
     <!-- One line instead of a numbered how-to: the batch labels proved that
          naming the two things to type is all a customer actually needs, and
          it keeps the printed card short. -->
-    <p class="qr-scan-hint">สแกนแล้วกรอกเลขนี้คู่กับเบอร์โทรที่แจ้งไว้</p>
+    <p class="qr-scan-hint" id="scanHint">สแกนแล้วกรอกเลขนี้คู่กับเบอร์โทรที่แจ้งไว้</p>
+
+    <!-- อยู่ใน .qr-card จึงติดไปกับกระดาษที่ลูกค้าถือกลับ -- คนที่สแกนแล้วติดขัด
+         ต้องมีที่ให้โทรถามบนแผ่นเดียวกัน ไม่ใช่ต้องกลับมาถามที่เคาน์เตอร์ -->
+    <p class="qr-contact">แผนกบริการและลูกค้าสัมพันธ์ โทร. 053-106510</p>
   </section>
 
   <aside class="qr-side">
-    <div class="field">
+    <div class="field" id="trackingInputField">
       <label for="trackingNumberInput">เลขที่คำร้องของลูกค้ารายนี้ (ถ้ามี)</label>
       <input type="text" id="trackingNumberInput" placeholder="เช่น 690001" inputmode="numeric" autocomplete="off">
       <p class="qr-hint">มาจากคำร้องที่เปิดไว้ให้อัตโนมัติเมื่อกดพิมพ์ QR จากการ์ดคำร้อง แก้ไขเองได้ หรือเว้นว่างไว้แล้วเขียนด้วยลายมือทีหลัง</p>
     </div>
+
+    <p class="qr-hint" id="qrBatchNote" hidden></p>
 
     <button type="button" id="printBtn" class="btn btn-primary btn-block">พิมพ์ป้าย QR นี้</button>
     <button type="button" id="copyBtn" class="btn btn-ghost btn-block">คัดลอกลิงก์</button>
@@ -85,6 +91,6 @@
      ที่หาสาเหตุยากมาก
      **ต้องเปลี่ยนเลขนี้ทุกครั้งที่แก้ app.js / style.css / track.js / qr.js**
      ไม่งั้นผู้ใช้บางคนจะยังได้ไฟล์เก่าไปอีกพักใหญ่ -->
-<script src="qr.js?v=20260908d"></script>
+<script src="qr.js?v=20260908e"></script>
 </body>
 </html>

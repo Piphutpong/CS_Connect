@@ -1426,88 +1426,6 @@ button:active {
   flex-wrap: wrap;
 }
 
-/* ===== qr.html batch label sheet ===== */
-.qr-sheet {
-  max-width: 920px;
-  margin: 0 auto;
-  padding: 32px 20px;
-}
-
-.qr-sheet[hidden] {
-  display: none;
-}
-
-.qr-sheet-head {
-  text-align: center;
-  margin-bottom: 24px;
-}
-
-.qr-sheet-head h1 {
-  font-family: var(--font-display);
-  font-size: 1.4rem;
-  margin: 0 0 4px;
-}
-
-.qr-sheet-head p {
-  color: var(--ink-soft);
-  font-size: 0.9rem;
-  margin: 0 0 16px;
-}
-
-.qr-labels {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-  gap: 12px;
-}
-
-.qr-label {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 12px;
-  border: 1px dashed var(--border-strong);
-  border-radius: 8px;
-  background: var(--white);
-  break-inside: avoid;
-}
-
-.qr-label-code canvas,
-.qr-label-code img {
-  display: block;
-  image-rendering: pixelated;
-}
-
-.qr-label-caption {
-  min-width: 0;
-}
-
-.qr-label-title {
-  font-family: var(--font-display);
-  font-size: 13px;
-  margin: 0 0 4px;
-  color: var(--volt-700);
-}
-
-.qr-label-number {
-  font-family: var(--font-mono);
-  font-size: 14px;
-  font-weight: 600;
-  margin: 0 0 4px;
-  color: var(--ink);
-}
-
-.qr-label-hint {
-  font-size: 11px;
-  line-height: 1.4;
-  color: var(--ink-soft);
-  margin: 0;
-}
-
-@media print {
-  .qr-sheet-head button { display: none; }
-  .qr-labels { grid-template-columns: repeat(2, 1fr); }
-}
-
 /* ===== Meter tab: รอส่ง / ประวัติการส่ง toggle ===== */
 .requests-modes {
   display: flex;
@@ -2100,4 +2018,59 @@ button:active {
 
 .batch-row.is-collapsed .batch-row-head {
   margin-bottom: 0;
+}
+
+/* ===== qr.html: เลขที่คำร้องหลายใบบนการ์ดเดียว (คำร้องกลุ่ม) ===== */
+
+/* auto-fit เพื่อให้กลุ่มเล็กเรียงแถวเดียว กลุ่มใหญ่พับเป็นหลายคอลัมน์เอง
+   โดยไม่ต้องมี breakpoint ของตัวเอง */
+.qr-tracking-many {
+  align-self: stretch;
+  margin-top: 2px;
+}
+
+.qr-tracking-many[hidden] {
+  display: none;
+}
+
+.qr-tracking-many-label {
+  margin: 0 0 6px;
+  font-size: 0.9rem;
+  color: var(--ink);
+}
+
+.qr-tracking-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(96px, 1fr));
+  gap: 6px 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.qr-tracking-list[hidden] {
+  display: none;
+}
+
+.qr-tracking-list li {
+  font-family: var(--font-mono);
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--volt-700);
+  text-align: center;
+  padding: 4px 6px;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+}
+
+/* เบอร์ติดต่อของเคาน์เตอร์ -- อยู่ใน .qr-card จึงติดไปกับกระดาษที่พิมพ์ออกมา
+   คนที่สแกนแล้วติดขัดต้องมีที่ให้โทรถามบนแผ่นเดียวกัน */
+.qr-contact {
+  align-self: stretch;
+  margin: 10px 0 0;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+  font-size: 0.85rem;
+  text-align: center;
+  color: var(--ink);
 }

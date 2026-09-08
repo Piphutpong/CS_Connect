@@ -10,17 +10,12 @@
   // resolves -- shortening only keeps it off the printed page itself.
   const TRACK_URL = "https://tinyurl.com/25mzpm96";
 
-  // One number -> the single big card. Several -> a printable sheet of
-  // labels, one per request, for a batch that was just entered together.
+  // ?tn= รับได้ทั้งเลขเดียวและหลายเลขคั่นด้วยจุลภาค (คำร้องกลุ่ม) -- ใช้การ์ด
+  // ใบเดียวกันทั้งสองแบบ ต่างกันแค่ตรงบรรทัดเลขที่คำร้อง
   const requestedNumbers = (new URLSearchParams(location.search).get("tn") || "")
     .split(",")
     .map(s => s.trim())
     .filter(Boolean);
-
-  if (requestedNumbers.length > 1) {
-    renderLabelSheet(requestedNumbers);
-    return;
-  }
 
   const qr = document.getElementById("qr");
   const urlText = document.getElementById("urlText");
@@ -43,15 +38,43 @@
 
   // Opened from a request card's "พิมพ์ QR" button as qr.html?tn=690001 --
   // prefill instead of making staff retype a number already on their screen.
-  const prefilledTn = new URLSearchParams(location.search).get("tn");
-  if (prefilledTn) {
-    trackingInput.value = prefilledTn;
-    trackingFillValue.textContent = prefilledTn;
+  if (requestedNumbers.length > 1) {
+    showManyNumbers(requestedNumbers);
+  } else if (requestedNumbers.length === 1) {
+    trackingInput.value = requestedNumbers[0];
+    trackingFillValue.textContent = requestedNumbers[0];
   }
 
   trackingInput.addEventListener("input", () => {
     trackingFillValue.textContent = trackingInput.value.trim();
   });
+
+  /**
+   * คำร้องกลุ่ม: การ์ดหน้าตาเดิมทุกอย่าง เปลี่ยนแค่บรรทัดเลขเดียวเป็นรายการเลข
+   *
+   * กลุ่มหนึ่งคือใบคำร้องที่ยื่นมาพร้อมกันโดยคนคนเดียว (หมู่บ้านหรือผู้จัดสรร)
+   * คนที่ถือกระดาษกลับไปจึงเป็นคนเดียวที่มีหลายเลข ไม่ใช่หลายคนที่มีคนละเลข
+   * -- ต่างจากของเดิมที่พิมพ์เป็นป้ายเล็กหลายใบให้ตัดแบ่ง ซึ่งไม่ตรงกับการใช้จริง
+   */
+  function showManyNumbers(numbers) {
+    document.getElementById("trackingSingleLine").hidden = true;
+    document.getElementById("trackingManyBlock").hidden = false;
+    document.getElementById("scanHint").textContent =
+      "สแกนแล้วกรอกเลขใดเลขหนึ่งคู่กับเบอร์โทรที่แจ้งไว้";
+
+    const list = document.getElementById("trackingList");
+    numbers.forEach(number => {
+      const li = document.createElement("li");
+      li.textContent = number;
+      list.appendChild(li);
+    });
+
+    // ช่องกรอกเลขเดียวไม่มีความหมายเมื่อมาเป็นกลุ่ม
+    document.getElementById("trackingInputField").hidden = true;
+    const note = document.getElementById("qrBatchNote");
+    note.textContent = `คำร้องกลุ่มนี้มี ${numbers.length} ใบ พิมพ์แผ่นเดียวแล้วมอบให้ผู้ยื่นคำร้องได้เลย`;
+    note.hidden = false;
+  }
 
   // A real deployed page (unlike a sandboxed preview) has no reason to route
   // around window.print() -- the @media print rules in style.css handle
@@ -74,50 +97,4 @@
     }
   });
 
-  /**
-   * A sheet of one label per tracking number, sized to cut apart after
-   * printing. Every label carries the same QR (the tracking page is one URL
-   * for everyone) and differs only in the reference number printed on it --
-   * which is the number the customer types in once they get there.
-   */
-  function renderLabelSheet(numbers) {
-    const sheet = document.getElementById("qrSheet");
-    const labels = document.getElementById("qrLabels");
-    document.getElementById("qrSingle").hidden = true;
-    sheet.hidden = false;
-    document.getElementById("qrSheetCount").textContent =
-      `${numbers.length} ใบ · ตัดแบ่งแล้วแนบไปกับใบเสร็จของลูกค้าแต่ละราย`;
-
-    numbers.forEach(number => {
-      const label = document.createElement("div");
-      label.className = "qr-label";
-
-      const code = document.createElement("div");
-      code.className = "qr-label-code";
-      label.appendChild(code);
-
-      const caption = document.createElement("div");
-      caption.className = "qr-label-caption";
-      caption.innerHTML = `
-        <p class="qr-label-title">ตรวจสอบสถานะคำร้อง</p>
-        <p class="qr-label-number"></p>
-        <p class="qr-label-hint">สแกนแล้วกรอกเลขนี้คู่กับเบอร์โทรที่แจ้งไว้</p>
-      `;
-      caption.querySelector(".qr-label-number").textContent = `เลขที่คำร้อง: ${number}`;
-      label.appendChild(caption);
-
-      labels.appendChild(label);
-
-      new QRCode(code, {
-        text: TRACK_URL,
-        width: 120,
-        height: 120,
-        colorDark: "#221530",
-        colorLight: "#ffffff",
-        correctLevel: QRCode.CorrectLevel.M
-      });
-    });
-
-    document.getElementById("qrSheetPrintBtn").addEventListener("click", () => window.print());
-  }
 })();
