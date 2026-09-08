@@ -10,6 +10,10 @@
   // resolves -- shortening only keeps it off the printed page itself.
   const TRACK_URL = "https://tinyurl.com/25mzpm96";
 
+  // สำเนาที่สามของค่านี้ (app.js, track.js, และที่นี่) -- โปรเจกต์นี้ไม่มีขั้นตอน
+  // build จึงแชร์เป็นโมดูลไม่ได้ ถ้า URL เปลี่ยนต้องแก้ทั้งสามที่
+  const SHEETS_ENDPOINT = "https://script.google.com/macros/s/AKfycbw6Ri7ctu5guRHj3MJupkt0DJcgaht2-RHhhT9_YVNjnme4x1CbMl2SnC5hKO_OH_o/exec";
+
   // ?tn= รับได้ทั้งเลขเดียวและหลายเลขคั่นด้วยจุลภาค (คำร้องกลุ่ม) -- ใช้การ์ด
   // ใบเดียวกันทั้งสองแบบ ต่างกันแค่ตรงบรรทัดเลขที่คำร้อง
   const requestedNumbers = (new URLSearchParams(location.search).get("tn") || "")
@@ -75,6 +79,30 @@
     note.textContent = `คำร้องกลุ่มนี้มี ${numbers.length} ใบ พิมพ์แผ่นเดียวแล้วมอบให้ผู้ยื่นคำร้องได้เลย`;
     note.hidden = false;
   }
+
+  /**
+   * ชื่อแผนกและเบอร์โทรที่พิมพ์ลงบนป้าย -- ดึงมาจาก Apps Script แทนที่จะฝังไว้ในนี้
+   *
+   * หน้านี้เคยไม่เรียกหลังบ้านเลย ซึ่งเป็นข้อดีด้านความปลอดภัยที่เสียไปกับการ
+   * เปลี่ยนนี้ (ดู CLAUDE.md) แลกกับการที่เบอร์ไม่ต้องอยู่ในไฟล์ที่เผยแพร่
+   *
+   * ล้มเหลวแบบเงียบโดยตั้งใจ: ถ้าหลังบ้านช้าหรือล่ม ป้ายต้องพิมพ์ได้อยู่ดี แค่
+   * ไม่มีบรรทัดเบอร์ -- ดีกว่าค้างรอ หรือพิมพ์บรรทัดว่างเปล่าออกมา
+   * ใช้ GET เฉย ๆ ไม่ต้องมี body จึงไม่โดน CORS preflight ที่ Apps Script ตอบไม่ได้
+   */
+  fetch(SHEETS_ENDPOINT)
+    .then(response => (response.ok ? response.json() : null))
+    .then(body => {
+      const contact = body && body.ok && body.data && body.data.contact;
+      if (!contact || !contact.phone) return;
+
+      const line = document.getElementById("qrContact");
+      line.textContent = [contact.department, `โทร. ${contact.phone}`]
+        .filter(Boolean)
+        .join(" ");
+      line.hidden = false;
+    })
+    .catch(err => console.warn("CS Connect: ดึงข้อมูลติดต่อไม่สำเร็จ", err));
 
   // A real deployed page (unlike a sandboxed preview) has no reason to route
   // around window.print() -- the @media print rules in style.css handle

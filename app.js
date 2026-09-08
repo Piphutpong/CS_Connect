@@ -1601,8 +1601,21 @@
   // คุมคำร้องส่งแผนกมิเตอร์ is likewise a view, not a type: ขอใช้ไฟฟ้า records
   // whose payment side is settled (paid, or nothing to pay) and so are ready
   // to hand over to the meter department.
+  /**
+   * สถานะที่ถือว่า "พร้อมส่งแผนกมิเตอร์"
+   *
+   * สองตัวแรกคือคำร้องที่เรื่องเงินจบแล้ว ส่วน "ผมต. ตีกลับ" คือคำร้องที่ส่งไป
+   * แล้วแต่ถูกตีกลับมา จึงต้องกลับเข้าคิวส่งใหม่ ไม่ต่างจากคำร้องที่เพิ่งพร้อมส่ง
+   *
+   * ทั้งสามตัวต้องไม่อยู่ใน CLOSED_STATUSES ของ Code.gs เด็ดขาด -- สถานะที่อยู่
+   * ในนั้นจะไม่ถูกโหลดมาถ้าเก่าเกิน 1 ปี แท็บนี้ก็จะกลืนคำร้องที่ยังต้องทำต่อไป
+   * เงียบ ๆ (ตรวจแล้ว: CLOSED_STATUSES มีแค่ ส่งแผนกมิเตอร์แล้ว / ยกเลิกคำร้อง /
+   * จัดเก็บเอกสาร (ผบส.))
+   */
+  const METER_DISPATCH_STATUSES = ["ชำระเงินแล้ว", "ไม่มีค่าใช้จ่าย", "ผมต. ตีกลับ"];
+
   function isMeterDispatch(r) {
-    return r.type === "power" && (r.jobStatus === "ชำระเงินแล้ว" || r.jobStatus === "ไม่มีค่าใช้จ่าย");
+    return r.type === "power" && METER_DISPATCH_STATUSES.includes(r.jobStatus);
   }
 
   // Tabs that filter existing records instead of holding their own type --
@@ -1720,6 +1733,22 @@
    * เป็นข้อมูลผิด ไม่ใช่ทางลัด (เหตุผลเดียวกับที่ซ่อนช่องนี้ในฟอร์มตั้งต้น)
    */
   const BATCH_NEVER_PREFILL = new Set(["requestNumber"]);
+
+  /**
+   * สถานะ "รอชำระเงิน" ต้องมียอดมากกว่า 0 เสมอ
+   *
+   * ผูกกันเพราะหน้าติดตามสถานะส่งยอดไปให้ลูกค้าเฉพาะสถานะนี้ -- ไม่มียอดก็เท่ากับ
+   * บอกให้จ่ายเงินโดยไม่บอกว่าเท่าไร ส่วนยอด 0 ขัดกันเองกับสถานะ (มีสถานะ
+   * "ไม่มีค่าใช้จ่าย" ไว้ให้แล้ว)
+   */
+  const FEE_REQUIRED_MESSAGE =
+    'สถานะ "รอชำระเงิน" ต้องระบุค่าธรรมเนียมมากกว่า 0 (ถ้าไม่มีค่าใช้จ่าย ให้เลือกสถานะ "ไม่มีค่าใช้จ่าย")';
+
+  function isFeeValidForStatus(jobStatus, fee) {
+    if (jobStatus !== "รอชำระเงิน") return true;
+    const amount = Number(String(fee || "").replace(/,/g, ""));
+    return isFinite(amount) && amount > 0;
+  }
 
   /** ช่องที่ต้องกรอกทุกใบ -- ตรงกับ required ของฟอร์มหลัก ใช้บอกว่าใบไหนขาดอะไร */
   const BATCH_REQUIRED_FIELDS = [
@@ -2767,6 +2796,14 @@
         showError(requestFormError, "กรุณาเลือกความประสงค์");
         return;
       }
+
+      // สถานะนี้ทำให้หน้าติดตามสถานะบอกลูกค้าว่าต้องโอนเท่าไร ถ้าไม่มียอด
+      // ลูกค้าจะเห็นคำว่า "รอชำระเงิน" โดยไม่มีตัวเลขให้โอน (ฝั่งเซิร์ฟเวอร์
+      // ปฏิเสธซ้ำอีกชั้นที่ assertFeeForPayment_ -- ที่นี่แค่บอกก่อนเสียเที่ยว)
+      if (!batchMode && !isFeeValidForStatus(jobStatus, fee)) {
+        showError(requestFormError, FEE_REQUIRED_MESSAGE);
+        return;
+      }
       if (purposeChoice === "other") {
         if (!purposeOther) {
           showError(requestFormError, "กรุณาระบุความประสงค์");
@@ -2828,6 +2865,11 @@
           if (row.values.purposeChoice === "other" && !row.values.purposeOther) {
             expandBatchRow(row.el);
             showError(requestFormError, `คำร้องที่ ${row.position}: กรุณาระบุความประสงค์`);
+            return;
+          }
+          if (!isFeeValidForStatus(row.values.jobStatus, row.values.fee)) {
+            expandBatchRow(row.el);
+            showError(requestFormError, `คำร้องที่ ${row.position}: ${FEE_REQUIRED_MESSAGE}`);
             return;
           }
         }

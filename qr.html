@@ -13,6 +13,7 @@
         style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
         font-src https://fonts.gstatic.com;
         img-src 'self' data:;
+        connect-src https://script.google.com https://script.googleusercontent.com;
         form-action 'none';
         base-uri 'none';
         object-src 'none'">
@@ -20,7 +21,7 @@
 <title>พิมพ์ QR ตรวจสอบสถานะ - CS Connect</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=Sarabun:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=20260908e">
+<link rel="stylesheet" href="style.css?v=20260908g">
 </head>
 <body>
 
@@ -55,8 +56,10 @@
     <p class="qr-scan-hint" id="scanHint">สแกนแล้วกรอกเลขนี้คู่กับเบอร์โทรที่แจ้งไว้</p>
 
     <!-- อยู่ใน .qr-card จึงติดไปกับกระดาษที่ลูกค้าถือกลับ -- คนที่สแกนแล้วติดขัด
-         ต้องมีที่ให้โทรถามบนแผ่นเดียวกัน ไม่ใช่ต้องกลับมาถามที่เคาน์เตอร์ -->
-    <p class="qr-contact">แผนกบริการและลูกค้าสัมพันธ์ โทร. 053-106510</p>
+         ต้องมีที่ให้โทรถามบนแผ่นเดียวกัน ไม่ใช่ต้องกลับมาถามที่เคาน์เตอร์
+         เว้นว่างไว้ตั้งใจ: ชื่อแผนกและเบอร์มาจาก Apps Script ตอนโหลดหน้า จะได้
+         ไม่ต้องฝังไว้ในไฟล์ที่เผยแพร่บน GitHub (ดู CONTACT_INFO ใน Code.gs) -->
+    <p class="qr-contact" id="qrContact" hidden></p>
   </section>
 
   <aside class="qr-side">
@@ -91,6 +94,6 @@
      ที่หาสาเหตุยากมาก
      **ต้องเปลี่ยนเลขนี้ทุกครั้งที่แก้ app.js / style.css / track.js / qr.js**
      ไม่งั้นผู้ใช้บางคนจะยังได้ไฟล์เก่าไปอีกพักใหญ่ -->
-<script src="qr.js?v=20260908e"></script>
+<script src="qr.js?v=20260908g"></script>
 </body>
 </html>

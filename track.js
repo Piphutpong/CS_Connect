@@ -42,6 +42,19 @@
     });
   }
 
+  /**
+   * ยอดเงินให้อ่านง่ายแบบเงินจริง -- ค่าที่เก็บมาเป็นข้อความจากช่องตัวเลข
+   * ("1500", "1500.5") ถ้าแปลงเป็นตัวเลขไม่ได้ก็แสดงตามที่เก็บไว้ ดีกว่าโชว์ NaN
+   */
+  function formatFee(value) {
+    const amount = Number(String(value).replace(/,/g, ""));
+    if (!isFinite(amount)) return String(value);
+    return `${amount.toLocaleString("th-TH", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    })} บาท`;
+  }
+
   function showError(el, message) {
     el.textContent = message;
     el.hidden = false;
@@ -117,6 +130,27 @@
     document.getElementById("trackResultNumber").textContent = match.trackingNumber;
     document.getElementById("trackResultDate").textContent = formatThaiDate(match.receivedDate);
     document.getElementById("trackResultPurpose").textContent = match.purpose || "-";
+
+    // ค่าธรรมเนียมมาจากหลังบ้านเฉพาะตอนสถานะรอชำระเงิน (ดู publicRequest_)
+    // จึงไม่ต้องตรวจสถานะซ้ำที่นี่ -- มีค่ามาเมื่อไหร่แปลว่าต้องแสดง
+    const feeRow = document.getElementById("trackFeeRow");
+    feeRow.hidden = !match.fee;
+    if (match.fee) {
+      document.getElementById("trackResultFee").textContent = formatFee(match.fee);
+    }
+
+    // บางสถานะหลังบ้านแนบข้อความติดต่อมาด้วย เช่นงานที่ส่งต่อไปแผนกอื่นแล้ว
+    // -- โทรมาถามที่เดิมจะไม่ได้คำตอบ จึงต้องบอกไปเลยว่าต้องถามใคร
+    const noteEl = document.getElementById("trackStatusNote");
+    const statusContact = match.statusContact;
+    noteEl.hidden = !statusContact;
+    if (statusContact) {
+      noteEl.textContent = [
+        statusContact.message,
+        statusContact.phone ? `โทร. ${statusContact.phone}` : "",
+        statusContact.department ? `(${statusContact.department})` : ""
+      ].filter(Boolean).join(" ");
+    }
 
     const statusBadge = document.getElementById("trackStatusBadge");
     statusBadge.textContent = match.jobStatus || "-";

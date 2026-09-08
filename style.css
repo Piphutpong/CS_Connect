@@ -2074,3 +2074,32 @@ button:active {
   text-align: center;
   color: var(--ink);
 }
+
+/* ===== track.html: ค่าธรรมเนียมตอนรอชำระเงิน ===== */
+
+/* กฎ [hidden] ที่ขาดไม่ได้: .track-result-details > div ตั้ง display: flex ไว้
+   ซึ่งชนะกฎ [hidden] ของเบราว์เซอร์เพราะ specificity เท่ากัน ถ้าไม่มีบรรทัดนี้
+   แถวค่าธรรมเนียมจะโผล่ตลอดแม้ตอนที่ไม่มีค่าให้แสดง (ดูหัวข้อ Gotcha) */
+.track-result-details > div[hidden] {
+  display: none;
+}
+
+/* ยอดเงินคือสิ่งที่คนอ่านหน้านี้กำลังมองหาก่อนไปโอน จึงเน้นให้เห็นชัดกว่าแถวอื่น */
+.track-fee {
+  font-family: var(--font-mono);
+  font-weight: 600;
+  color: var(--volt-700);
+}
+
+/* ข้อความบอกว่าต้องติดต่อใครต่อ เมื่อคำร้องอยู่ในสถานะที่งานไปอยู่กับแผนกอื่นแล้ว
+   ใช้โทน info เพราะเป็นข้อมูลที่ช่วยได้ ไม่ใช่คำเตือนหรือข้อผิดพลาด */
+.track-status-note {
+  margin: 14px 0 0;
+  padding: 11px 14px;
+  border-radius: 10px;
+  border-left: 3px solid var(--info);
+  background: var(--info-tint);
+  font-size: 13.5px;
+  line-height: 1.7;
+  color: var(--ink);
+}
