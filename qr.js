@@ -1,14 +1,14 @@
 (() => {
   "use strict";
 
-  // Short link instead of the real GitHub Pages URL -- the real URL's path
-  // contains the personal GitHub account name, which a printed public-facing
-  // label shouldn't carry. Kept in sync by hand, the same way SHEETS_ENDPOINT
-  // is duplicated between app.js and track.js: if the real destination ever
-  // moves, this constant AND the short link itself both need updating.
-  // Scanning still eventually lands on the real URL once the redirect
-  // resolves -- shortening only keeps it off the printed page itself.
-  const TRACK_URL = "https://tinyurl.com/25mzpm96";
+  // ปลายทางจริงของหน้าติดตามสถานะ ไม่ผ่านตัวย่อลิงก์อีกแล้ว
+  //
+  // เดิมใช้ tinyurl เพื่อไม่ให้ชื่อบัญชี GitHub ไปโผล่บนป้ายที่ยื่นให้ประชาชน
+  // แต่การเอาบรรทัด URL ออกจากป้ายไปเลยแก้เรื่องนั้นได้ตรงกว่า -- และตัวย่อลิงก์
+  // ก็ไม่เคยซ่อนอะไรได้จริงอยู่แล้ว เพราะพอสแกนเสร็จ URL จริงก็ขึ้นบนแถบที่อยู่
+  // ของเบราว์เซอร์อยู่ดี สิ่งที่ได้คืนมาคือไม่ต้องพึ่งบริการภายนอกอีกหนึ่งเจ้า
+  // และไม่ต้องคอยดูแลลิงก์ย่อให้ตรงกับปลายทางด้วยมือ
+  const TRACK_URL = "https://piphutpong.github.io/CS_Connect/track.html";
 
   // สำเนาที่สามของค่านี้ (app.js, track.js, และที่นี่) -- โปรเจกต์นี้ไม่มีขั้นตอน
   // build จึงแชร์เป็นโมดูลไม่ได้ ถ้า URL เปลี่ยนต้องแก้ทั้งสามที่
@@ -22,14 +22,11 @@
     .filter(Boolean);
 
   const qr = document.getElementById("qr");
-  const urlText = document.getElementById("urlText");
   const trackingInput = document.getElementById("trackingNumberInput");
   const trackingFillValue = document.getElementById("trackingFillValue");
   const printBtn = document.getElementById("printBtn");
   const copyBtn = document.getElementById("copyBtn");
   const copyFeedback = document.getElementById("copyFeedback");
-
-  urlText.textContent = TRACK_URL;
 
   new QRCode(qr, {
     text: TRACK_URL,

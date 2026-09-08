@@ -1746,17 +1746,6 @@ button:active {
   image-rendering: pixelated;
 }
 
-.qr-url {
-  font-family: var(--font-mono);
-  font-size: 0.82rem;
-  color: var(--volt-700);
-  background: var(--volt-50);
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  padding: 8px 16px;
-  word-break: break-all;
-}
-
 .qr-tracking-line {
   font-family: var(--font-mono);
   font-size: 0.95rem;
