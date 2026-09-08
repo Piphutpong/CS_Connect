@@ -205,6 +205,10 @@
 
     async adminResetPassword() {
       throw new Error("โหมดออฟไลน์ไม่รองรับการตั้งรหัสผ่านชั่วคราว");
+    },
+
+    async exportAll() {
+      throw new Error("โหมดออฟไลน์ไม่รองรับการสำรองข้อมูล");
     }
 
     // track()/uploadSlip() live in track.js now -- the public tracking page
@@ -345,6 +349,12 @@
       // ผู้ดูแลระบบเท่านั้น -- คืนรหัสผ่านชั่วคราวกลับมาแสดงครั้งเดียว ไม่มีที่ไหนเก็บ
       async adminResetPassword(email) {
         return callAsUser({ action: "adminResetPassword", email });
+      },
+
+      // ผู้ดูแลระบบเท่านั้น -- ทุกแถวของทุกแท็บในก้อนเดียว (รหัสผ่านถูกตัดออก
+      // ฝั่งเซิร์ฟเวอร์เสมอ ดู EXPORT_EXCLUDED_USER_COLUMNS)
+      async exportAll() {
+        return callAsUser({ action: "exportAll" });
       },
 
       // loadRequests() (above) only returns still-open requests plus recently
@@ -1342,7 +1352,10 @@
     adminError: document.getElementById("adminResetError"),
     adminResult: document.getElementById("adminResetResult"),
     forceNotice: document.getElementById("forcePasswordNotice"),
-    backRow: document.getElementById("accountBackRow")
+    backRow: document.getElementById("accountBackRow"),
+    backupSection: document.getElementById("adminBackupSection"),
+    backupError: document.getElementById("adminBackupError"),
+    backupResult: document.getElementById("adminBackupResult")
   };
 
   /**
@@ -1367,6 +1380,9 @@
     const mustChange = Boolean(forced || session?.mustChangePassword);
 
     accountView.adminSection.hidden = !session?.isAdmin || mustChange;
+    accountView.backupSection.hidden = !session?.isAdmin || mustChange;
+    hideError(accountView.backupError);
+    accountView.backupResult.hidden = true;
     accountView.forceNotice.hidden = !mustChange;
     accountView.backRow.hidden = mustChange;
 
@@ -1438,6 +1454,7 @@
         accountView.forceNotice.hidden = true;
         accountView.backRow.hidden = false;
         accountView.adminSection.hidden = !session.isAdmin;
+        accountView.backupSection.hidden = !session.isAdmin;
 
         // ตอนล็อกอิน บัญชีนี้ถูกพามาที่นี่โดยไม่ได้โหลดข้อมูลเลย (loadRequests
         // จะถูกปฏิเสธอยู่แล้ว) ตอนนี้ผ่านด่านแล้วจึงต้องโหลด ไม่งั้นกดกลับหน้าแรก
@@ -1462,6 +1479,55 @@
       showError(accountView.changeError, err.message || "เกิดข้อผิดพลาด ไม่สามารถเปลี่ยนรหัสผ่านได้ กรุณาลองใหม่อีกครั้ง");
     } finally {
       setBusy(submitBtn, false);
+    }
+  });
+
+  /**
+   * ดึงข้อมูลทั้งระบบออกมาเป็นไฟล์ให้ผู้ดูแลระบบเก็บไว้เอง
+   *
+   * มีไว้เพราะเดิมการสำรองข้อมูลทำได้ทางเดียวคือเปิด Apps Script แล้วสั่ง
+   * backupNow -- ซึ่งใช้ไม่ได้เลยในวันที่ Google Drive เองเปิดไม่ขึ้น ทั้งที่
+   * ข้อมูลยังอ่านผ่าน Web App ได้ตามปกติ ปุ่มนี้จึงเป็นทางออกสำรองที่ไม่ต้อง
+   * พึ่งหน้าจอของ Google เลย
+   *
+   * ไฟล์ถูกสร้างในเบราว์เซอร์แล้วให้ดาวน์โหลด ไม่ได้ไปเก็บบน Drive -- จุดสำคัญ
+   * คือได้สำเนาที่อยู่ "นอก" ระบบที่กำลังมีปัญหา
+   */
+  document.getElementById("adminBackupBtn").addEventListener("click", async (e) => {
+    const btn = e.currentTarget;
+    hideError(accountView.backupError);
+    accountView.backupResult.hidden = true;
+
+    setBusy(btn, true, "กำลังดึงข้อมูล...");
+
+    try {
+      const data = await backend.exportAll();
+
+      const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, "");
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `csconnect-backup-${stamp}.json`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      // ปล่อยหน่วยความจำคืน หลังเบราว์เซอร์เริ่มดาวน์โหลดแล้ว
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
+
+      const counts = [
+        `คำร้อง ${(data.requests || []).length}`,
+        `สมุดคุม ${(data.meterDispatches || []).length}`,
+        `ผู้ใช้ ${(data.users || []).length}`
+      ].join(" · ");
+      accountView.backupResult.textContent = `ดาวน์โหลดแล้ว (${counts})`;
+      accountView.backupResult.hidden = false;
+    } catch (err) {
+      console.error("CS Connect backup error:", err);
+      showError(accountView.backupError, friendlyError(err, "ดึงข้อมูลไม่สำเร็จ กรุณาลองใหม่อีกครั้ง"));
+    } finally {
+      setBusy(btn, false);
     }
   });
 

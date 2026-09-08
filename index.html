@@ -25,7 +25,7 @@
 <title>CS Connect</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=Sarabun:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=20260908g">
+<link rel="stylesheet" href="style.css?v=20260908h">
 </head>
 <body>
 
@@ -155,6 +155,18 @@
 
     <!-- ผู้ดูแลระบบเท่านั้น -- app.js เปิดให้เห็นตาม isAdmin
          การกันสิทธิ์จริงอยู่ที่ requireAdmin_ ฝั่ง Apps Script ไม่ใช่ที่ hidden นี้ -->
+    <div id="adminBackupSection" class="admin-panel" hidden>
+      <h2 class="admin-panel-title">สำรองข้อมูลทั้งระบบ</h2>
+      <p class="admin-panel-hint">
+        ดาวน์โหลดข้อมูลทุกแถวเป็นไฟล์ JSON หนึ่งไฟล์ (คำร้อง สมุดคุม บันทึกการเข้าถึง และรายชื่อผู้ใช้)
+        <strong>ไม่มีรหัสผ่านอยู่ในไฟล์</strong> ระบบตัดออกให้เสมอ
+        ใช้ได้แม้ตอนที่เปิด Google ชีตหรือ Apps Script ไม่ได้ เพราะดึงผ่านระบบหลังบ้านโดยตรง
+      </p>
+      <button type="button" id="adminBackupBtn" class="btn btn-ghost btn-block">ดาวน์โหลดไฟล์สำรองข้อมูล</button>
+      <p id="adminBackupError" class="form-error" hidden></p>
+      <p id="adminBackupResult" class="form-success" hidden></p>
+    </div>
+
     <div id="adminResetSection" class="admin-panel" hidden>
       <h2 class="admin-panel-title">ตั้งรหัสผ่านชั่วคราว</h2>
       <p class="admin-panel-hint">
@@ -582,6 +594,6 @@
      ที่หาสาเหตุยากมาก
      **ต้องเปลี่ยนเลขนี้ทุกครั้งที่แก้ app.js / style.css / track.js / qr.js**
      ไม่งั้นผู้ใช้บางคนจะยังได้ไฟล์เก่าไปอีกพักใหญ่ -->
-<script src="app.js?v=20260908g"></script>
+<script src="app.js?v=20260908h"></script>
 </body>
 </html>
