@@ -25,7 +25,7 @@
 <title>CS Connect</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=Sarabun:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=20260908l">
+<link rel="stylesheet" href="style.css?v=20260908m">
 </head>
 <body>
 
@@ -355,6 +355,11 @@
       <!-- add-form mode -->
       <div id="requestsFormMode" hidden>
         <div class="requests-content-heading">
+          <!-- อยู่เหนือหัวข้อและชิดซ้าย ตรงกับปุ่มย้อนกลับของหน้าอื่น ๆ
+               พาไปที่ "รายการคำร้อง" ไม่ใช่หน้าแรก เพราะย้อนกลับควรถอยทีละขั้น -->
+          <button type="button" id="requestFormBackBtn" class="btn btn-ghost form-back-btn">
+            ← กลับไปรายการคำร้อง
+          </button>
           <h2 id="requestFormTitle">เพิ่มคำร้อง</h2>
           <p id="requestFormSubtitle">กรอกรายละเอียดคำร้องใหม่</p>
         </div>
@@ -625,6 +630,6 @@
      ที่หาสาเหตุยากมาก
      **ต้องเปลี่ยนเลขนี้ทุกครั้งที่แก้ app.js / style.css / track.js / qr.js**
      ไม่งั้นผู้ใช้บางคนจะยังได้ไฟล์เก่าไปอีกพักใหญ่ -->
-<script src="app.js?v=20260908l"></script>
+<script src="app.js?v=20260908m"></script>
 </body>
 </html>

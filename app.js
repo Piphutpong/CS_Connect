@@ -1802,7 +1802,18 @@
   // ทางเดียว และชื่อผู้ใช้บนแถบบนตรงกับ session ปัจจุบันเสมอ
   document.getElementById("backBtn").addEventListener("click", enterApp);
   document.getElementById("backToHomeBtn").addEventListener("click", enterApp);
-  document.getElementById("requestsBackBtn").addEventListener("click", enterApp);
+  // ปุ่มย้อนกลับบนแถบบนของ workspace ถอยทีละขั้น: จากฟอร์มกลับไปที่รายการก่อน
+  // แล้วค่อยจากรายการออกไปหน้าแรก -- เดิมกระโดดออกไปหน้าแรกทีเดียวจากในฟอร์ม
+  // ซึ่งทิ้งสิ่งที่กำลังกรอกโดยไม่ได้พาไปที่ที่ผู้ใช้คาดว่าจะกลับไป
+  document.getElementById("requestsBackBtn").addEventListener("click", () => {
+    if (!requestsFormMode.hidden) {
+      renderRequestsList();
+      return;
+    }
+    enterApp();
+  });
+
+  document.getElementById("requestFormBackBtn").addEventListener("click", renderRequestsList);
 
   // ---------- requests workspace ----------
   const requestsListMode = document.getElementById("requestsListMode");
