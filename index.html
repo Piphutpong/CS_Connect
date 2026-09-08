@@ -25,7 +25,7 @@
 <title>CS Connect</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=Sarabun:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=20260908n">
+<link rel="stylesheet" href="style.css?v=20260908o">
 </head>
 <body>
 
@@ -397,11 +397,21 @@
           <div class="field-row">
             <div class="field">
               <label for="reqPhonePrimary">เบอร์โทรศัพท์ (หลัก)</label>
-              <input type="tel" id="reqPhonePrimary" placeholder="เบอร์โทรศัพท์หลัก" required autocomplete="off">
+              <div class="field-input-row">
+                <input type="tel" id="reqPhonePrimary" placeholder="เบอร์โทรศัพท์หลัก" required autocomplete="off">
+                <a href="#" id="reqPhonePrimaryCallBtn" class="btn btn-ghost btn-icon" aria-label="โทรออก" hidden>
+                  <svg viewBox="0 0 24 24" fill="none"><path d="M6.6 10.8c1.4 2.8 3.8 5.2 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1C10.9 21 3 13.1 3 3.9c0-.6.4-1 1-1h3.4c.6 0 1 .4 1 1 0 1.3.2 2.5.6 3.6.1.4 0 .8-.2 1L6.6 10.8Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>
+                </a>
+              </div>
             </div>
             <div class="field">
               <label for="reqPhoneSecondary">เบอร์โทรศัพท์ (รอง)</label>
-              <input type="tel" id="reqPhoneSecondary" placeholder="เบอร์โทรศัพท์รอง (ถ้ามี)" autocomplete="off">
+              <div class="field-input-row">
+                <input type="tel" id="reqPhoneSecondary" placeholder="เบอร์โทรศัพท์รอง (ถ้ามี)" autocomplete="off">
+                <a href="#" id="reqPhoneSecondaryCallBtn" class="btn btn-ghost btn-icon" aria-label="โทรออก" hidden>
+                  <svg viewBox="0 0 24 24" fill="none"><path d="M6.6 10.8c1.4 2.8 3.8 5.2 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1C10.9 21 3 13.1 3 3.9c0-.6.4-1 1-1h3.4c.6 0 1 .4 1 1 0 1.3.2 2.5.6 3.6.1.4 0 .8-.2 1L6.6 10.8Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>
+                </a>
+              </div>
             </div>
           </div>
           <div class="field-section">
@@ -457,6 +467,27 @@
               <div class="field">
                 <label for="reqZipcode">รหัสไปรษณีย์</label>
                 <input type="text" id="reqZipcode" placeholder="เลือกตำบลเพื่อกรอกอัตโนมัติ" readonly>
+              </div>
+            </div>
+
+            <!-- ไม่บังคับกรอก -- ไม่มี Google Maps API key ให้คลิกเลือกตำแหน่ง
+                 ในหน้านี้โดยตรง ปุ่ม "เปิด Google Maps" จึงพาไปหาตำแหน่งบน
+                 Google Maps จริงแทน คัดลอกพิกัดจากที่นั่นแล้ววางกลับมาได้เลย -->
+            <div class="field-row">
+              <div class="field">
+                <label for="reqLat">ละติจูด</label>
+                <input type="text" id="reqLat" placeholder="เช่น 18.7883" inputmode="decimal" autocomplete="off">
+              </div>
+              <div class="field">
+                <label for="reqLng">ลองจิจูด</label>
+                <input type="text" id="reqLng" placeholder="เช่น 98.9853" inputmode="decimal" autocomplete="off">
+              </div>
+            </div>
+            <div class="field">
+              <p class="field-hint">พิกัดไม่บังคับกรอก จะใส่ทีหลังก็ได้</p>
+              <div class="batch-toolbar">
+                <a href="https://www.google.com/maps" target="_blank" rel="noopener" id="reqMapBtn" class="btn btn-ghost">เปิด Google Maps เพื่อหาตำแหน่ง</a>
+                <a href="#" target="_blank" rel="noopener" id="reqNavBtn" class="btn btn-ghost" hidden>นำทาง</a>
               </div>
             </div>
           </div>
@@ -560,6 +591,119 @@
           <button type="submit" id="requestFormSubmitBtn" class="btn btn-primary btn-block">บันทึกคำร้อง</button>
         </form>
 
+        <!-- ขอขยายเขตระบบจำหน่ายไฟฟ้า -- ฟอร์มของตัวเอง แยกจาก #requestForm
+             (ขอใช้ไฟฟ้า) เพราะช่องที่ต้องใช้ต่างกันทั้งชุด (ไม่มีมิเตอร์/ค่าธรรมเนียม/
+             ที่อยู่แบบโครงสร้าง) ไม่มีโหมดเพิ่มหลายคำร้องด้วย -- ดูตัวจัดการปุ่ม
+             requestsAddBatchBtn ใน app.js -->
+        <form id="extendForm" class="auth-form request-form" novalidate hidden>
+          <div class="field-row">
+            <div class="field">
+              <label for="extNumber">เลขที่คำร้อง</label>
+              <input type="text" id="extNumber" placeholder="เลขที่คำร้อง" required autocomplete="off">
+            </div>
+            <div class="field">
+              <label for="extDate">วันที่รับคำร้อง</label>
+              <input type="date" id="extDate" required>
+            </div>
+          </div>
+          <div class="field">
+            <label for="extCustomerName">ชื่อลูกค้า</label>
+            <input type="text" id="extCustomerName" placeholder="ชื่อ - นามสกุลลูกค้า" required autocomplete="off">
+          </div>
+          <div class="field-row">
+            <div class="field">
+              <label for="extPhonePrimary">เบอร์โทรศัพท์ (หลัก)</label>
+              <div class="field-input-row">
+                <input type="tel" id="extPhonePrimary" placeholder="เบอร์โทรศัพท์หลัก" required autocomplete="off">
+                <a href="#" id="extPhonePrimaryCallBtn" class="btn btn-ghost btn-icon" aria-label="โทรออก" hidden>
+                  <svg viewBox="0 0 24 24" fill="none"><path d="M6.6 10.8c1.4 2.8 3.8 5.2 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1C10.9 21 3 13.1 3 3.9c0-.6.4-1 1-1h3.4c.6 0 1 .4 1 1 0 1.3.2 2.5.6 3.6.1.4 0 .8-.2 1L6.6 10.8Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>
+                </a>
+              </div>
+            </div>
+            <div class="field">
+              <label for="extPhoneSecondary">เบอร์โทรศัพท์ (รอง)</label>
+              <div class="field-input-row">
+                <input type="tel" id="extPhoneSecondary" placeholder="เบอร์โทรศัพท์รอง (ถ้ามี)" autocomplete="off">
+                <a href="#" id="extPhoneSecondaryCallBtn" class="btn btn-ghost btn-icon" aria-label="โทรออก" hidden>
+                  <svg viewBox="0 0 24 24" fill="none"><path d="M6.6 10.8c1.4 2.8 3.8 5.2 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1C10.9 21 3 13.1 3 3.9c0-.6.4-1 1-1h3.4c.6 0 1 .4 1 1 0 1.3.2 2.5.6 3.6.1.4 0 .8-.2 1L6.6 10.8Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>
+                </a>
+              </div>
+            </div>
+          </div>
+          <div class="field">
+            <label for="extLocation">สถานที่ขอขยายเขตฯ</label>
+            <textarea id="extLocation" rows="2" placeholder="บ้านเลขที่ / หมู่บ้าน / ตำบล / อำเภอ ฯลฯ" required></textarea>
+          </div>
+
+          <!-- ไม่บังคับกรอก -- ดูหมายเหตุเดียวกันที่ #reqLat ในฟอร์มขอใช้ไฟฟ้า
+               เรื่องทำไมไม่มีแผนที่ให้คลิกเลือกตำแหน่งโดยตรง -->
+          <div class="field-row">
+            <div class="field">
+              <label for="extLat">ละติจูด</label>
+              <input type="text" id="extLat" placeholder="เช่น 18.7883" inputmode="decimal" autocomplete="off">
+            </div>
+            <div class="field">
+              <label for="extLng">ลองจิจูด</label>
+              <input type="text" id="extLng" placeholder="เช่น 98.9853" inputmode="decimal" autocomplete="off">
+            </div>
+          </div>
+          <div class="field">
+            <p class="field-hint">พิกัดไม่บังคับกรอก จะใส่ทีหลังก็ได้</p>
+            <div class="batch-toolbar">
+              <a href="https://www.google.com/maps" target="_blank" rel="noopener" id="extMapBtn" class="btn btn-ghost">เปิด Google Maps เพื่อหาตำแหน่ง</a>
+              <a href="#" target="_blank" rel="noopener" id="extNavBtn" class="btn btn-ghost" hidden>นำทาง</a>
+            </div>
+          </div>
+
+          <div class="field">
+            <label for="extPurpose">ความประสงค์</label>
+            <select id="extPurpose" required>
+              <option value="">-- เลือกความประสงค์ --</option>
+              <option value="ขอขยายเขตระบบจำหน่ายไฟฟ้าแรงต่ำ 1 เฟส">ขอขยายเขตระบบจำหน่ายไฟฟ้าแรงต่ำ 1 เฟส</option>
+              <option value="ขอขยายเขตระบบจำหน่ายไฟฟ้าแรงต่ำ 3 เฟส">ขอขยายเขตระบบจำหน่ายไฟฟ้าแรงต่ำ 3 เฟส</option>
+              <option value="ขอขยายเขตระบบจำหน่ายไฟฟ้าแรงสูง 1 เฟส">ขอขยายเขตระบบจำหน่ายไฟฟ้าแรงสูง 1 เฟส</option>
+              <option value="ขอขยายเขตระบบจำหน่ายไฟฟ้าแรงสูง 3 เฟส">ขอขยายเขตระบบจำหน่ายไฟฟ้าแรงสูง 3 เฟส</option>
+              <option value="ขอย้ายแนวเสาและ/หรืออุปกรณ์ต่างๆ">ขอย้ายแนวเสาและ/หรืออุปกรณ์ต่างๆ</option>
+              <option value="ขอติดตั้งหม้อแปลงชั่วคราว">ขอติดตั้งหม้อแปลงชั่วคราว</option>
+              <option value="ขอเปลี่ยนเพิ่ม/ลดขนาดหม้อแปลง">ขอเปลี่ยนเพิ่ม/ลดขนาดหม้อแปลง</option>
+              <option value="ขอเช่าหม้อแปลง">ขอเช่าหม้อแปลง</option>
+              <option value="อื่นๆ (หมายเหตุเพิ่มเติม)">อื่นๆ (หมายเหตุเพิ่มเติม)</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="extJobStatus">สถานะงาน</label>
+            <select id="extJobStatus" required>
+              <option value="รอจ่ายงาน">รอจ่ายงาน</option>
+              <option value="รอสำรวจ">รอสำรวจ</option>
+              <option value="รอเขียนผัง">รอเขียนผัง</option>
+              <option value="รอประมาณการ">รอประมาณการ</option>
+              <option value="ส่งตรวจแผนผังและประมาณการ">ส่งตรวจแผนผังและประมาณการ</option>
+              <option value="เสนออนุมัติ">เสนออนุมัติ</option>
+              <option value="อนุมัติและแจ้งค่าใช้จ่ายแล้ว">อนุมัติและแจ้งค่าใช้จ่ายแล้ว</option>
+              <option value="ส่ง ผบร.">ส่ง ผบร.</option>
+              <option value="ส่ง ผปบ.">ส่ง ผปบ.</option>
+              <option value="ส่ง ผกส.">ส่ง ผกส.</option>
+              <option value="ส่งหนังสือแจ้ง ทต./อบต. แล้ว">ส่งหนังสือแจ้ง ทต./อบต. แล้ว</option>
+              <option value="รอเอกสารเพิ่มเติม">รอเอกสารเพิ่มเติม</option>
+              <option value="อื่นๆ (หมายเหตุเพิ่มเติม)">อื่นๆ (หมายเหตุเพิ่มเติม)</option>
+              <option value="หมดกำหนดยืนราคา">หมดกำหนดยืนราคา</option>
+              <option value="ยกเลิกคำร้อง">ยกเลิกคำร้อง</option>
+            </select>
+          </div>
+          <!-- ปรากฏก็ต่อเมื่อสถานะพ้น "รอจ่ายงาน" แล้ว -- ดูตัวจัดการ change
+               ของ #extJobStatus ใน app.js -->
+          <div class="field" id="extAssigneeField" hidden>
+            <label for="extAssignee">ผู้รับผิดชอบ</label>
+            <input type="text" id="extAssignee" placeholder="ชื่อผู้รับผิดชอบสำรวจ/ดำเนินเรื่อง" autocomplete="off">
+          </div>
+          <div class="field">
+            <label for="extNote">หมายเหตุ</label>
+            <textarea id="extNote" rows="2" placeholder="หมายเหตุเพิ่มเติม (ถ้ามี)"></textarea>
+          </div>
+          <p id="extendFormError" class="form-error" hidden></p>
+          <button type="submit" id="extendFormSubmitBtn" class="btn btn-primary btn-block">บันทึกคำร้อง</button>
+        </form>
+
         <!-- Shown after a batch save: what got created, and the one action
              that is only convenient right now (printing all the QR labels). -->
         <div id="batchResult" class="batch-result" hidden>
@@ -630,6 +774,6 @@
      ที่หาสาเหตุยากมาก
      **ต้องเปลี่ยนเลขนี้ทุกครั้งที่แก้ app.js / style.css / track.js / qr.js**
      ไม่งั้นผู้ใช้บางคนจะยังได้ไฟล์เก่าไปอีกพักใหญ่ -->
-<script src="app.js?v=20260908n"></script>
+<script src="app.js?v=20260908o"></script>
 </body>
 </html>

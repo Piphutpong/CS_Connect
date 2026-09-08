@@ -30,7 +30,24 @@
     "รอขยายเขตฯ": "warning",
     "ยกเลิกคำร้อง": "danger",
     "จัดเก็บเอกสาร (ผบส.)": "success",
-    "ผมต. ตีกลับ": "danger"
+    "ผมต. ตีกลับ": "danger",
+    // ขอขยายเขตระบบจำหน่ายไฟฟ้า -- คนละชุดสถานะกับขอใช้ไฟฟ้าด้านบน แต่ใช้แผนที่
+    // สี/ความหมายเดียวกัน: warning = ยังรอใครสักคนทำต่อ, info = ส่งต่อให้หน่วยงาน
+    // อื่นแล้ว, success = จบงานด้วยดี, danger = ยกเลิก/หมดอายุ (รอเอกสารเพิ่มเติม
+    // และยกเลิกคำร้อง ใช้คีย์ร่วมกับขอใช้ไฟฟ้าด้านบนอยู่แล้ว ไม่ต้องเพิ่มซ้ำ)
+    "รอจ่ายงาน": "warning",
+    "รอสำรวจ": "warning",
+    "รอเขียนผัง": "warning",
+    "รอประมาณการ": "warning",
+    "ส่งตรวจแผนผังและประมาณการ": "info",
+    "เสนออนุมัติ": "info",
+    "อนุมัติและแจ้งค่าใช้จ่ายแล้ว": "success",
+    "ส่ง ผบร.": "info",
+    "ส่ง ผปบ.": "info",
+    "ส่ง ผกส.": "info",
+    "ส่งหนังสือแจ้ง ทต./อบต. แล้ว": "success",
+    "อื่นๆ (หมายเหตุเพิ่มเติม)": "info",
+    "หมดกำหนดยืนราคา": "danger"
   };
 
   // Service area currently covers only these Chiang Mai districts;
@@ -961,6 +978,25 @@
       return parts.join(" ");
     }
     return r.location || r.address || "";
+  }
+
+  /**
+   * ต่อ statusHistory ก้อนใหม่เมื่อ jobStatus เปลี่ยนจริงเท่านั้น -- ใช้ร่วมกัน
+   * ระหว่างการบันทึกแก้ไขรายเดี่ยวของทั้งฟอร์มขอใช้ไฟฟ้าและขอขยายเขตฯ (ไม่ใช้ใน
+   * โหมดกลุ่ม ซึ่งเป็นการสร้างใหม่เสมอ ไม่มี prev ให้เทียบ)
+   */
+  function appendStatusHistoryIfChanged(prevHistory, prevStatus, jobStatus, byName, byEmail, at) {
+    const statusHistory = Array.isArray(prevHistory) ? prevHistory.slice() : [];
+    if (prevStatus !== jobStatus) {
+      // A record that predates statusHistory has no trail yet -- seed it with
+      // the status it was already on, un-attributed, so the chain still reads
+      // correctly instead of starting at the new status.
+      if (!statusHistory.length && prevStatus) {
+        statusHistory.push({ status: prevStatus, byName: "", byEmail: "", at: null });
+      }
+      statusHistory.push({ status: jobStatus, byName, byEmail, at });
+    }
+    return statusHistory;
   }
 
   // System-issued tracking number: last 2 digits of the Buddhist Era year
@@ -1901,14 +1937,32 @@
   const reqPurposeOtherField = document.getElementById("reqPurposeOtherField");
   const reqPurposeOther = document.getElementById("reqPurposeOther");
   const reqDate = document.getElementById("reqDate");
+  const reqLat = document.getElementById("reqLat");
+  const reqLng = document.getElementById("reqLng");
+  const reqMapBtn = document.getElementById("reqMapBtn");
+  const reqNavBtn = document.getElementById("reqNavBtn");
 
-  // Only "power" has a built form. The แจ้งเตือนการรับชำระเงิน tab isn't a
-  // separate type with its own data -- it's power records filtered down to
-  // ones with a paymentSlip (see isPaymentNotice below), so those cards are
-  // already power records and click-to-edit "just works" for them too.
-  // deposit/extend/general still show a placeholder until their own field
-  // sets are defined (see openRequestForm).
-  const FORM_SUPPORTED_TYPES = new Set(["power"]);
+  // ---------- ขอขยายเขตระบบจำหน่ายไฟฟ้า (แยกฟอร์มจาก #requestForm ด้านบน) ----------
+  const extendForm = document.getElementById("extendForm");
+  const extendFormError = document.getElementById("extendFormError");
+  const extendFormSubmitBtn = document.getElementById("extendFormSubmitBtn");
+  const extDate = document.getElementById("extDate");
+  const extJobStatus = document.getElementById("extJobStatus");
+  const extAssigneeField = document.getElementById("extAssigneeField");
+  const extLat = document.getElementById("extLat");
+  const extLng = document.getElementById("extLng");
+  const extMapBtn = document.getElementById("extMapBtn");
+  const extNavBtn = document.getElementById("extNavBtn");
+
+  // "power" and "extend" have built forms (#requestForm and #extendForm --
+  // two separate <form> elements, since their field sets don't overlap
+  // enough to share one template the way batch rows share #requestForm's).
+  // The แจ้งเตือนการรับชำระเงิน tab isn't a separate type with its own data --
+  // it's power records filtered down to ones with a paymentSlip (see
+  // isPaymentNotice below), so those cards are already power records and
+  // click-to-edit "just works" for them too. deposit/general still show a
+  // placeholder until their own field sets are defined (see openRequestForm).
+  const FORM_SUPPORTED_TYPES = new Set(["power", "extend"]);
 
   let currentRequestFilter = "power";
   let currentAddType = "power";
@@ -2017,7 +2071,7 @@
     const haystack = [
       r.trackingNumber, r.requestNumber, r.customerName, r.requesterName,
       r.phonePrimary, r.phoneSecondary, r.phone, r.bp, r.ca,
-      r.houseNo, r.deed, r.jobStatus
+      r.houseNo, r.deed, r.jobStatus, r.location, r.assignee
     ].filter(Boolean).join(" ").toLowerCase();
     return haystack.includes(query.toLowerCase());
   }
@@ -2034,6 +2088,14 @@
     const mm = String(now.getMonth() + 1).padStart(2, "0");
     const dd = String(now.getDate()).padStart(2, "0");
     reqDate.value = `${yyyy}-${mm}-${dd}`;
+  }
+
+  function setDefaultExtendDate() {
+    const now = new Date();
+    const yyyy = now.getFullYear();
+    const mm = String(now.getMonth() + 1).padStart(2, "0");
+    const dd = String(now.getDate()).padStart(2, "0");
+    extDate.value = `${yyyy}-${mm}-${dd}`;
   }
 
   function resetPurposeFields() {
@@ -2079,6 +2141,82 @@
     }
   });
 
+  /**
+   * พิกัด GPS ไม่บังคับกรอกทั้งขอใช้ไฟฟ้าและขอขยายเขตฯ -- ไม่มีแผนที่ให้คลิก
+   * เลือกตำแหน่งฝังอยู่ในหน้านี้โดยตรง เพราะนั่นต้องมี Google Maps JavaScript
+   * API key ที่ผูกบัตร และต้องเปิด CSP ให้ maps.googleapis.com ซึ่งเป็นการขยาย
+   * พื้นผิวที่ต้องตัดสินใจแยกต่างหาก ปุ่ม "เปิด Google Maps" จึงพาไปหาตำแหน่งบน
+   * เว็บ Google Maps จริงแทน (ไม่ต้องใช้ API key เลย) แล้วเจ้าหน้าที่คัดลอกพิกัด
+   * (คลิกขวาที่จุด -> คัดลอกพิกัด) กลับมาวางในสองช่องนี้เอง
+   */
+  function wireCoordControls(latEl, lngEl, mapBtn, navBtn) {
+    function update() {
+      const lat = parseFloat(latEl.value);
+      const lng = parseFloat(lngEl.value);
+      const hasCoord = isFinite(lat) && isFinite(lng) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180;
+
+      if (hasCoord) {
+        mapBtn.href = `https://www.google.com/maps?q=${lat},${lng}`;
+        mapBtn.textContent = "เปิดแผนที่ตำแหน่งนี้";
+        navBtn.href = `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`;
+        navBtn.hidden = false;
+      } else {
+        mapBtn.href = "https://www.google.com/maps";
+        mapBtn.textContent = "เปิด Google Maps เพื่อหาตำแหน่ง";
+        navBtn.hidden = true;
+      }
+    }
+    latEl.addEventListener("input", update);
+    lngEl.addEventListener("input", update);
+    update();
+    return update;
+  }
+
+  const updateReqCoords = wireCoordControls(reqLat, reqLng, reqMapBtn, reqNavBtn);
+  const updateExtCoords = wireCoordControls(extLat, extLng, extMapBtn, extNavBtn);
+
+  /**
+   * พิกัดไม่บังคับกรอก แต่ถ้ากรอกต้องกรอกให้ครบคู่และเป็นพิกัดจริง -- ใช้ร่วมกัน
+   * ทั้งฟอร์มขอใช้ไฟฟ้าและขอขยายเขตฯ คืนข้อความ error หรือ null ถ้าผ่าน
+   */
+  function validateCoordPair(lat, lng) {
+    if (!lat && !lng) return null;
+    if (!lat || !lng) return "กรุณากรอกพิกัดให้ครบทั้งละติจูดและลองจิจูด (หรือเว้นว่างทั้งคู่)";
+    const latNum = parseFloat(lat);
+    const lngNum = parseFloat(lng);
+    if (!isFinite(latNum) || Math.abs(latNum) > 90 || !isFinite(lngNum) || Math.abs(lngNum) > 180) {
+      return "พิกัดไม่ถูกต้อง";
+    }
+    return null;
+  }
+
+  /** ปุ่มโทรออกข้างช่องเบอร์โทร -- tel: link ธรรมดา กดได้จริงเฉพาะเปิดผ่านมือถือ */
+  function wireCallButton(phoneEl, callBtn) {
+    function update() {
+      const digits = phoneEl.value.replace(/[^0-9+]/g, "");
+      callBtn.hidden = !digits;
+      if (digits) callBtn.href = `tel:${digits}`;
+    }
+    phoneEl.addEventListener("input", update);
+    update();
+    return update;
+  }
+
+  const updateReqPhonePrimaryCall = wireCallButton(
+    document.getElementById("reqPhonePrimary"), document.getElementById("reqPhonePrimaryCallBtn"));
+  const updateReqPhoneSecondaryCall = wireCallButton(
+    document.getElementById("reqPhoneSecondary"), document.getElementById("reqPhoneSecondaryCallBtn"));
+  const updateExtPhonePrimaryCall = wireCallButton(
+    document.getElementById("extPhonePrimary"), document.getElementById("extPhonePrimaryCallBtn"));
+  const updateExtPhoneSecondaryCall = wireCallButton(
+    document.getElementById("extPhoneSecondary"), document.getElementById("extPhoneSecondaryCallBtn"));
+
+  // ผู้รับผิดชอบปรากฏก็ต่อเมื่อสถานะพ้น "รอจ่ายงาน" แล้ว (งานถูกจ่ายออกไปแล้ว
+  // จริง ๆ) -- ค่าเริ่มต้นของฟอร์มใหม่คือ "รอจ่ายงาน" จึงซ่อนโดยปริยาย
+  extJobStatus.addEventListener("change", () => {
+    extAssigneeField.hidden = extJobStatus.value === "รอจ่ายงาน" || !extJobStatus.value;
+  });
+
   function setActiveNavItem(filter) {
     requestsNavItems.forEach(item => {
       item.classList.toggle("active", item.dataset.filter === filter);
@@ -2103,6 +2241,9 @@
     requestsListTitle.textContent = REQUEST_TYPES[currentRequestFilter];
     requestsListCount.textContent = `ทั้งหมด ${filtered.length} รายการ`;
     requestsAddBtn.hidden = Boolean(derivedFilter);
+    // เพิ่มหลายคำร้องมีเฉพาะขอใช้ไฟฟ้า -- ขอขยายเขตฯ (และแท็บอื่นที่ยังไม่มี
+    // ฟอร์มของตัวเอง) ไม่มีปุ่มนี้
+    requestsAddBatchBtn.hidden = Boolean(derivedFilter) || currentRequestFilter !== "power";
 
     const isMeterTab = currentRequestFilter === "meter";
     meterModes.hidden = !isMeterTab;
@@ -2161,6 +2302,7 @@
           <span class="request-date"></span>
         </div>
         <div class="request-name"></div>
+        <div class="request-meta request-meta-phone"></div>
         <div class="request-meta request-meta-location"></div>
         <div class="request-meta request-meta-note"></div>
       `;
@@ -2190,6 +2332,23 @@
       }
 
       card.querySelector(".request-name").textContent = r.customerName || r.requesterName || "";
+
+      // tel: link ธรรมดา ไม่ใช้ innerHTML กับข้อความที่มาจากฟอร์ม -- สร้างผ่าน
+      // createElement เหมือนทุกจุดอื่นในไฟล์นี้ที่วาดข้อมูลจากคำร้อง
+      const phoneEl = card.querySelector(".request-meta-phone");
+      const phoneNumber = r.phonePrimary || r.phone;
+      if (phoneNumber) {
+        const digits = phoneNumber.replace(/[^0-9+]/g, "");
+        phoneEl.textContent = "โทร: ";
+        const phoneLink = document.createElement("a");
+        phoneLink.href = `tel:${digits}`;
+        phoneLink.textContent = phoneNumber;
+        phoneLink.addEventListener("click", (e) => e.stopPropagation());
+        phoneEl.appendChild(phoneLink);
+      } else {
+        phoneEl.remove();
+      }
+
       card.querySelector(".request-meta-location").textContent = `สถานที่: ${buildLocationText(r)}`;
 
       const noteEl = card.querySelector(".request-meta-note");
@@ -2536,6 +2695,34 @@
     document.getElementById("reqFee").value = r.fee || "";
     document.getElementById("reqJobStatus").value = r.jobStatus || "รอตรวจสอบ";
     document.getElementById("reqNote").value = r.note || "";
+
+    reqLat.value = r.lat || "";
+    reqLng.value = r.lng || "";
+    updateReqCoords();
+    updateReqPhonePrimaryCall();
+    updateReqPhoneSecondaryCall();
+  }
+
+  /** เหมือน fillRequestForm ด้านบนแต่สำหรับ #extendForm -- ชุดฟิลด์ไม่เหมือนกัน */
+  function fillExtendForm(r) {
+    document.getElementById("extNumber").value = r.requestNumber || "";
+    extDate.value = r.receivedDate || "";
+    document.getElementById("extCustomerName").value = r.customerName || "";
+    document.getElementById("extPhonePrimary").value = r.phonePrimary || "";
+    document.getElementById("extPhoneSecondary").value = r.phoneSecondary || "";
+    document.getElementById("extLocation").value = r.location || "";
+    document.getElementById("extPurpose").value = r.purpose || "";
+    extJobStatus.value = r.jobStatus || "รอจ่ายงาน";
+    // ต้องยิง change เอง -- ตัวจัดการที่ซ่อน/แสดง #extAssigneeField ฟังอีเวนต์นี้
+    extJobStatus.dispatchEvent(new Event("change"));
+    document.getElementById("extAssignee").value = r.assignee || "";
+    document.getElementById("extNote").value = r.note || "";
+
+    extLat.value = r.lat || "";
+    extLng.value = r.lng || "";
+    updateExtCoords();
+    updateExtPhonePrimaryCall();
+    updateExtPhoneSecondaryCall();
   }
 
   // One stamp per status the record has been through, oldest first so the
@@ -2893,14 +3080,32 @@
   function openRequestForm(type, record, options = {}) {
     currentAddType = type;
     editingId = record ? record.id : null;
-    batchMode = Boolean(options.batch);
+    // เพิ่มหลายคำร้องมีเฉพาะขอใช้ไฟฟ้า -- ปุ่มที่ส่ง { batch: true } มา ก็ถูก
+    // ซ่อนไว้แล้วสำหรับแท็บอื่น (ดู renderRequestsList) การ์ดนี้กันไว้อีกชั้น
+    batchMode = Boolean(options.batch) && type === "power";
     hideError(requestFormError);
+    hideError(extendFormError);
     requestForm.reset();
     resetLocationFields();
     resetPurposeFields();
     setDefaultRequestDate();
+    extendForm.reset();
+    setDefaultExtendDate();
+    // .reset() ล้างค่าในช่อง แต่ไม่ยิง input event -- ปุ่มเปิดแผนที่/นำทาง/โทรออก
+    // ต้องสั่งคำนวณใหม่เองไม่งั้นจะค้างสถานะของคำร้องก่อนหน้า
+    updateReqCoords();
+    updateExtCoords();
+    updateReqPhonePrimaryCall();
+    updateReqPhoneSecondaryCall();
+    updateExtPhonePrimaryCall();
+    updateExtPhoneSecondaryCall();
+    // ค่าเริ่มต้นของฟอร์มใหม่คือ "รอจ่ายงาน" จึงซ่อนผู้รับผิดชอบไว้ก่อน
+    extAssigneeField.hidden = true;
 
     const isSupported = FORM_SUPPORTED_TYPES.has(type);
+    const isPower = type === "power";
+    const isExtend = type === "extend";
+
     requestFormTitle.textContent = batchMode
       ? `เพิ่มหลายคำร้อง: ${REQUEST_TYPES[type]}`
       : `${record ? "แก้ไขคำร้อง" : "เพิ่มคำร้อง"}: ${REQUEST_TYPES[type]}`;
@@ -2912,17 +3117,21 @@
     requestFormSubmitBtn.textContent = batchMode
       ? "บันทึกทั้งกลุ่ม"
       : (record ? "บันทึกการแก้ไข" : "บันทึกคำร้อง");
-    requestForm.hidden = !isSupported;
+    // ขอขยายเขตฯ ไม่มีโหมดกลุ่ม ปุ่มของมันจึงมีแค่สองข้อความ
+    extendFormSubmitBtn.textContent = record ? "บันทึกการแก้ไข" : "บันทึกคำร้อง";
+
+    requestForm.hidden = !(isSupported && isPower);
+    extendForm.hidden = !(isSupported && isExtend);
     requestFormPlaceholder.hidden = isSupported;
 
     batchResult.hidden = true;
-    batchSection.hidden = !(isSupported && batchMode);
+    batchSection.hidden = !(isSupported && isPower && batchMode);
     // Every paper form in a batch carries its own เลขที่คำร้อง, so a single
     // shared value would be wrong by definition -- it moves into the table.
     document.getElementById("reqNumberField").hidden = batchMode;
-    if (isSupported && batchMode) resetBatchRows();
+    if (isSupported && isPower && batchMode) resetBatchRows();
 
-    if (isSupported) {
+    if (isSupported && isPower) {
       // In batch mode each row gets its own number at save time, so the
       // single-record preview field would be misleading here.
       const trackingField = document.getElementById("reqTrackingNumber");
@@ -2931,11 +3140,16 @@
         : (record ? (record.trackingNumber || "-") : generateTrackingNumber());
     }
 
-    if (isSupported && record) {
+    if (isSupported && isPower && record) {
       fillRequestForm(record);
     }
+    if (isSupported && isExtend && record) {
+      fillExtendForm(record);
+    }
 
-    // Audit strip only makes sense for a record that already exists.
+    // Audit strip only makes sense for a record that already exists -- and
+    // it's entirely generic (reads only `record`, not the type), so every
+    // FORM_SUPPORTED_TYPES form shares it as-is with no extra wiring.
     requestFormMeta.hidden = !record;
     requestCommentInput.value = "";
     hideError(requestCommentError);
@@ -2986,6 +3200,8 @@
       const fee = document.getElementById("reqFee").value.trim();
       const jobStatus = document.getElementById("reqJobStatus").value;
       const note = document.getElementById("reqNote").value.trim();
+      const lat = reqLat.value.trim();
+      const lng = reqLng.value.trim();
 
       // In batch mode this field is hidden and each row carries its own,
       // checked per row further down.
@@ -3029,8 +3245,16 @@
         return;
       }
 
-      // This form only mounts for FORM_SUPPORTED_TYPES ("power"), so a
-      // purpose selection is always required here.
+      if (!batchMode) {
+        const coordError = validateCoordPair(lat, lng);
+        if (coordError) {
+          showError(requestFormError, coordError);
+          return;
+        }
+      }
+
+      // This form only mounts for type "power", so a purpose selection is
+      // always required here.
       let purpose = "";
       if (!purposeChoice) {
         showError(requestFormError, "กรุณาเลือกความประสงค์");
@@ -3076,7 +3300,9 @@
         meterSize,
         fee,
         jobStatus,
-        note
+        note,
+        lat,
+        lng
       };
 
       // Stamped from the signed-in session so the form's audit strip can show
@@ -3192,17 +3418,8 @@
         const idx = requests.findIndex(req => req.id === editingId);
         if (idx !== -1) {
           const prev = requests[idx];
-          const statusHistory = Array.isArray(prev.statusHistory) ? prev.statusHistory.slice() : [];
-
-          if (prev.jobStatus !== jobStatus) {
-            // A record that predates statusHistory has no trail yet -- seed it
-            // with the status it was already on, un-attributed, so the chain
-            // still reads correctly instead of starting at the new status.
-            if (!statusHistory.length && prev.jobStatus) {
-              statusHistory.push({ status: prev.jobStatus, byName: "", byEmail: "", at: null });
-            }
-            statusHistory.push({ status: jobStatus, byName: savedByName, byEmail: savedByEmail, at: now });
-          }
+          const statusHistory = appendStatusHistoryIfChanged(
+            prev.statusHistory, prev.jobStatus, jobStatus, savedByName, savedByEmail, now);
 
           requests[idx] = {
             ...prev,
@@ -3247,6 +3464,133 @@
       // ต้องอยู่ใน finally -- ถ้าอยู่ในเส้นทางสำเร็จอย่างเดียว ปุ่มจะค้างเป็น
       // "กำลังบันทึก..." และกดไม่ได้ตลอดไปเมื่อบันทึกล้มเหลว
       setBusy(requestFormSubmitBtn, false);
+    }
+  });
+
+  /**
+   * ขอขยายเขตระบบจำหน่ายไฟฟ้า -- ไม่มีโหมดกลุ่ม ไม่มีมิเตอร์/ค่าธรรมเนียม/
+   * ที่อยู่แบบโครงสร้าง จึงเป็น handler แยกที่สั้นกว่ามาก แต่รูปแบบการบันทึก
+   * (editingId / statusHistory / actingStaff / saveRequests) เหมือนกันทุก
+   * ประการกับสาขาบันทึกรายเดี่ยวของ #requestForm ด้านบน
+   */
+  extendForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    hideError(extendFormError);
+
+    try {
+      const requestNumber = document.getElementById("extNumber").value.trim();
+      const receivedDate = extDate.value;
+      const customerName = document.getElementById("extCustomerName").value.trim();
+      const phonePrimary = document.getElementById("extPhonePrimary").value.trim();
+      const phoneSecondary = document.getElementById("extPhoneSecondary").value.trim();
+      const location = document.getElementById("extLocation").value.trim();
+      const purpose = document.getElementById("extPurpose").value;
+      const jobStatus = extJobStatus.value;
+      const assignee = document.getElementById("extAssignee").value.trim();
+      const note = document.getElementById("extNote").value.trim();
+      const lat = extLat.value.trim();
+      const lng = extLng.value.trim();
+
+      if (!requestNumber) {
+        showError(extendFormError, "กรุณากรอกเลขที่คำร้อง");
+        return;
+      }
+      if (!receivedDate) {
+        showError(extendFormError, "กรุณาเลือกวันที่รับคำร้อง");
+        return;
+      }
+      if (!customerName) {
+        showError(extendFormError, "กรุณากรอกชื่อลูกค้า");
+        return;
+      }
+      if (!phonePrimary) {
+        showError(extendFormError, "กรุณากรอกเบอร์โทรศัพท์ (หลัก)");
+        return;
+      }
+      if (!location) {
+        showError(extendFormError, "กรุณากรอกสถานที่ขอขยายเขตฯ");
+        return;
+      }
+      if (!purpose) {
+        showError(extendFormError, "กรุณาเลือกความประสงค์");
+        return;
+      }
+      if (!jobStatus) {
+        showError(extendFormError, "กรุณาเลือกสถานะงาน");
+        return;
+      }
+      const coordError = validateCoordPair(lat, lng);
+      if (coordError) {
+        showError(extendFormError, coordError);
+        return;
+      }
+
+      const recordData = {
+        type: "extend",
+        requestNumber,
+        receivedDate,
+        customerName,
+        phonePrimary,
+        phoneSecondary,
+        location,
+        purpose,
+        jobStatus,
+        assignee,
+        note,
+        lat,
+        lng
+      };
+
+      const { byName: savedByName, byEmail: savedByEmail } = actingStaff();
+      const now = Date.now();
+
+      const requests = getRequests();
+      if (editingId) {
+        const idx = requests.findIndex(req => req.id === editingId);
+        if (idx !== -1) {
+          const prev = requests[idx];
+          const statusHistory = appendStatusHistoryIfChanged(
+            prev.statusHistory, prev.jobStatus, jobStatus, savedByName, savedByEmail, now);
+
+          requests[idx] = {
+            ...prev,
+            ...recordData,
+            statusHistory,
+            updatedByName: savedByName,
+            updatedByEmail: savedByEmail,
+            updatedAt: now
+          };
+        }
+      } else {
+        requests.push({
+          id: newRequestId(),
+          ...recordData,
+          statusHistory: [{ status: jobStatus, byName: savedByName, byEmail: savedByEmail, at: now }],
+          createdByName: savedByName,
+          createdByEmail: savedByEmail,
+          createdAt: now
+        });
+      }
+
+      setBusy(extendFormSubmitBtn, true, "กำลังบันทึกคำร้อง...");
+      await saveRequests(requests);
+
+      editingId = null;
+      extendForm.reset();
+      setDefaultExtendDate();
+      updateExtCoords();
+      updateExtPhonePrimaryCall();
+      updateExtPhoneSecondaryCall();
+      extAssigneeField.hidden = true;
+      renderRequestsList();
+    } catch (err) {
+      console.error("CS Connect extend form error:", err);
+      showError(
+        extendFormError,
+        friendlyError(err, "เกิดข้อผิดพลาด ไม่สามารถบันทึกคำร้องได้ กรุณาลองใหม่อีกครั้ง")
+      );
+    } finally {
+      setBusy(extendFormSubmitBtn, false);
     }
   });
 

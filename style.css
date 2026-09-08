@@ -331,6 +331,18 @@ button:active {
   gap: 16px;
 }
 
+/* ช่องเบอร์โทร + ปุ่มโทรออก (tel: link ธรรมดา ใช้ได้จริงเฉพาะเปิดผ่านมือถือ) */
+.field-input-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.field-input-row input {
+  flex: 1;
+  min-width: 0;
+}
+
 .field-row > .field {
   flex: 1;
   min-width: 0;
