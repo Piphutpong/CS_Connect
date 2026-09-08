@@ -154,12 +154,26 @@
       what.className = "track-status-note-line";
       what.textContent = statusContact.message || "";
 
+      // เบอร์กับชื่อแผนกเป็นก้อนละชิ้นที่ห้ามตัดกลาง -- ถ้าปล่อยเป็นข้อความเดียว
+      // จอแคบจะตัดตรงไหนก็ได้ แล้ววงเล็บปิดไปห้อยอยู่บรรทัดใหม่ตัวเดียว
+      // แยกแบบนี้ทำให้ถ้าจำเป็นต้องขึ้นบรรทัด จะขึ้นระหว่างเบอร์กับแผนกเท่านั้น
       const who = document.createElement("span");
       who.className = "track-status-note-line track-status-note-contact";
-      who.textContent = [
-        statusContact.phone ? `โทร. ${statusContact.phone}` : "",
-        statusContact.department ? `(${statusContact.department})` : ""
-      ].filter(Boolean).join(" ");
+
+      if (statusContact.phone) {
+        const phone = document.createElement("span");
+        phone.className = "track-status-note-part";
+        phone.textContent = `โทร. ${statusContact.phone}`;
+        who.appendChild(phone);
+      }
+
+      if (statusContact.department) {
+        const dept = document.createElement("span");
+        dept.className = "track-status-note-part";
+        dept.textContent = `(${statusContact.department})`;
+        if (who.childNodes.length) who.append(" ");
+        who.appendChild(dept);
+      }
 
       if (what.textContent) noteEl.appendChild(what);
       if (who.textContent) noteEl.appendChild(who);
