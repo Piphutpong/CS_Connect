@@ -2103,3 +2103,15 @@ button:active {
   line-height: 1.7;
   color: var(--ink);
 }
+
+/* ข้อความติดต่อตามสถานะแยกเป็นสองบรรทัดเสมอ: บรรทัดแรกบอกว่าจะติดตามเรื่องอะไร
+   บรรทัดที่สองคือเบอร์และแผนก -- แยกด้วย element ไม่ใช่ปล่อยให้ตัดบรรทัดตาม
+   ความกว้างจอ เบอร์โทรจึงไม่มีทางถูกตัดคาบรรทัด */
+.track-status-note-line {
+  display: block;
+}
+
+.track-status-note-contact {
+  margin-top: 2px;
+  font-weight: 600;
+}

@@ -143,13 +143,26 @@
     // -- โทรมาถามที่เดิมจะไม่ได้คำตอบ จึงต้องบอกไปเลยว่าต้องถามใคร
     const noteEl = document.getElementById("trackStatusNote");
     const statusContact = match.statusContact;
+
+    // สร้างเป็นสองบรรทัดด้วย element แยก ไม่ใช่ต่อสตริงเดียวแล้วหวังให้ตัดบรรทัดเอง
+    // -- การขึ้นบรรทัดจะได้ไม่ขึ้นกับความกว้างจอ และเบอร์โทรไม่มีทางถูกตัดคาบรรทัด
+    noteEl.textContent = "";
     noteEl.hidden = !statusContact;
+
     if (statusContact) {
-      noteEl.textContent = [
-        statusContact.message,
+      const what = document.createElement("span");
+      what.className = "track-status-note-line";
+      what.textContent = statusContact.message || "";
+
+      const who = document.createElement("span");
+      who.className = "track-status-note-line track-status-note-contact";
+      who.textContent = [
         statusContact.phone ? `โทร. ${statusContact.phone}` : "",
         statusContact.department ? `(${statusContact.department})` : ""
       ].filter(Boolean).join(" ");
+
+      if (what.textContent) noteEl.appendChild(what);
+      if (who.textContent) noteEl.appendChild(who);
     }
 
     const statusBadge = document.getElementById("trackStatusBadge");
