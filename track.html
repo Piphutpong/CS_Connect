@@ -43,7 +43,9 @@
     <form id="trackForm" class="auth-form" novalidate>
       <div class="field">
         <label for="trackNumber">เลขที่คำร้อง</label>
-        <input type="text" id="trackNumber" placeholder="เช่น 690001" required autocomplete="off">
+        <!-- ตัวอย่างถูกเขียนทับด้วยเลขของปี พ.ศ. ปัจจุบันใน track.js -- ค่าที่ใส่ไว้
+             ตรงนี้เป็นตัวสำรองเผื่อสคริปต์ไม่ทำงาน -->
+        <input type="text" id="trackNumber" placeholder="เช่น 6910001" required autocomplete="off">
       </div>
       <div class="field">
         <label for="trackPhone">เบอร์โทรศัพท์ที่แจ้งไว้</label>

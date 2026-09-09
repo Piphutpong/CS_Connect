@@ -28,9 +28,9 @@
 <!-- Standalone staff tool (not gated behind login -- it never touches any
      backend data, it only builds a QR code from a constant URL) for printing
      a QR label pointing customers to track.html. Opened from a request
-     card's "พิมพ์ QR" button as qr.html?tn=690001 so the reference number
+     card's "พิมพ์ QR" button as qr.html?tn=6910001 so the reference number
      is prefilled instead of retyped -- see qr.js. -->
-<!-- Batch mode (qr.html?tn=690001,690002,...) uses this exact same card and
+<!-- Batch mode (qr.html?tn=6910001,6910002,...) uses this exact same card and
      only swaps the single reference number for the list of them. A batch is
      one stack of forms handed in by one person, so what they walk away with is
      one card carrying all their numbers -- not a sheet to cut into separate
@@ -70,7 +70,7 @@
   <aside class="qr-side">
     <div class="field" id="trackingInputField">
       <label for="trackingNumberInput">เลขที่คำร้องของลูกค้ารายนี้ (ถ้ามี)</label>
-      <input type="text" id="trackingNumberInput" placeholder="เช่น 690001" inputmode="numeric" autocomplete="off">
+      <input type="text" id="trackingNumberInput" placeholder="เช่น 6910001" inputmode="numeric" autocomplete="off">
       <p class="qr-hint">มาจากคำร้องที่เปิดไว้ให้อัตโนมัติเมื่อกดพิมพ์ QR จากการ์ดคำร้อง แก้ไขเองได้ หรือเว้นว่างไว้แล้วเขียนด้วยลายมือทีหลัง</p>
     </div>
 

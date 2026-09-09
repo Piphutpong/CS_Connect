@@ -119,6 +119,23 @@
   const trackForm = document.getElementById("trackForm");
   const trackError = document.getElementById("trackError");
   const trackResult = document.getElementById("trackResult");
+  /**
+   * ตัวอย่างเลขที่คำร้องของ "ปีนี้" -- ปี พ.ศ. 2 หลัก + เลขประเภท 1 (ขอใช้ไฟฟ้า)
+   * + ลำดับ 4 หลัก เช่น 6910001 และปีหน้าจะกลายเป็น 7010001 เอง
+   *
+   * เขียนทับ placeholder ที่ใส่ไว้ใน HTML (ซึ่งเป็นตัวสำรองเผื่อสคริปต์ไม่ทำงาน)
+   * ตัวอย่างที่ค้างอยู่ปีเก่าทำให้คนกรอกเข้าใจรูปแบบผิดตั้งแต่บรรทัดแรก
+   *
+   * สำเนาของตรรกะเดียวกันใน app.js (generateTrackingNumbers) -- ไม่มีขั้นตอน
+   * build ให้แชร์โค้ดกัน แก้ที่ไหนต้องแก้ให้ตรงกันทุกที่
+   */
+  function sampleTrackingNumber() {
+    const beYear = new Date().getFullYear() + 543;
+    return `${String(beYear % 100).padStart(2, "0")}10001`;
+  }
+
+  document.getElementById("trackNumber").placeholder = `เช่น ${sampleTrackingNumber()}`;
+
   const trackPaymentSection = document.getElementById("trackPaymentSection");
   const trackSlipSection = document.getElementById("trackSlipSection");
   const trackSlipForm = document.getElementById("trackSlipForm");
