@@ -2219,6 +2219,7 @@
   const extPlanFile = document.getElementById("extPlanFile");
   const extPlanError = document.getElementById("extPlanError");
   const extPlanSuccess = document.getElementById("extPlanSuccess");
+  const extPlanPreview = document.getElementById("extPlanPreview");
   const extPhotoSection = document.getElementById("extPhotoSection");
   const extPhotoError = document.getElementById("extPhotoError");
   const extPhotoSuccess = document.getElementById("extPhotoSuccess");
@@ -2672,8 +2673,17 @@
 
     if (!record.planFile) {
       extPlanCurrent.textContent = "ยังไม่ได้แนบแผนผัง";
+      extPlanPreview.hidden = true;
+      // ล้าง src ด้วย ไม่ใช่แค่ซ่อน -- ไม่งั้นแผนผังของคำร้องใบก่อนยังค้างใน DOM
+      extPlanPreview.removeAttribute("src");
       return;
     }
+
+    // ลิงก์แบบ thumbnail เรนเดอร์ได้ทั้งไฟล์ภาพและ PDF (PDF ได้ภาพหน้าแรก)
+    // จึงใช้เส้นทางเดียวกันหมด ไม่ต้องแยกตามชนิดไฟล์ -- ส่วนไฟล์ที่ Drive ทำ
+    // ภาพตัวอย่างไม่ได้ ตัวรูปจะซ่อนตัวเองผ่าน error ด้านล่าง เหลือลิงก์เปิดไฟล์
+    extPlanPreview.hidden = false;
+    extPlanPreview.src = driveThumbnailUrl(record.planFile);
 
     extPlanCurrent.textContent = "แผนผังที่แนบไว้: ";
     const link = document.createElement("a");
@@ -4286,6 +4296,10 @@
       setBusy(button, false);
     }
   }
+
+  // PDF บางไฟล์ Drive ทำภาพตัวอย่างไม่ได้ -- ซ่อนกรอบรูปไปเลยดีกว่าโชว์ไอคอน
+  // รูปเสีย ลิงก์ "เปิดไฟล์" ยังอยู่ครบ
+  extPlanPreview.addEventListener("error", () => { extPlanPreview.hidden = true; });
 
   document.getElementById("extSitePhotoBtn").addEventListener("click", (e) =>
     uploadExtendPhoto(e.currentTarget, "sitePhoto", document.getElementById("extSitePhotoFile")));

@@ -1359,6 +1359,21 @@ button:active {
   min-width: 220px;
 }
 
+/* ตัวอย่างแผนผังที่แนบไว้ (ไฟล์ภาพ หรือหน้าแรกของ PDF) */
+.plan-preview {
+  width: 100%;
+  max-height: 460px;
+  object-fit: contain;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--white);
+}
+
+/* ตั้ง display ไว้ในกฎด้านบนของรูปทั่วไป จึงต้องกันไว้ (ดู Gotcha ใน CLAUDE.md) */
+.plan-preview[hidden] {
+  display: none;
+}
+
 /* ===== ภาพหน้างาน ===== */
 .photo-grid {
   display: grid;

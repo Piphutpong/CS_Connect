@@ -25,7 +25,7 @@
 <title>CS Connect</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=Sarabun:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=20260909h">
+<link rel="stylesheet" href="style.css?v=20260909i">
 </head>
 <body>
 
@@ -971,6 +971,11 @@
 
           <p id="extPlanCurrent" class="field-hint"></p>
 
+  <!-- แสดงตัวอย่างแผนผัง -- ใช้ลิงก์แบบ thumbnail ของ Drive ซึ่งเรนเดอร์ให้ทั้ง
+       ไฟล์ภาพและ PDF (PDF จะได้ภาพหน้าแรก) ถ้าเรนเดอร์ไม่ได้จะซ่อนตัวเองไป
+       เหลือแค่ลิงก์เปิดไฟล์ -->
+  <img id="extPlanPreview" class="plan-preview" alt="ตัวอย่างแผนผังที่แนบไว้" hidden>
+
           <div class="field">
             <label for="extPlanFile">ไฟล์แผนผัง (PDF หรือรูปภาพ ไม่เกิน 10 MB)</label>
             <input type="file" id="extPlanFile" accept="application/pdf,image/*">
@@ -1178,6 +1183,6 @@
      ที่หาสาเหตุยากมาก
      **ต้องเปลี่ยนเลขนี้ทุกครั้งที่แก้ app.js / style.css / track.js / qr.js**
      ไม่งั้นผู้ใช้บางคนจะยังได้ไฟล์เก่าไปอีกพักใหญ่ -->
-<script src="app.js?v=20260909h"></script>
+<script src="app.js?v=20260909i"></script>
 </body>
 </html>
