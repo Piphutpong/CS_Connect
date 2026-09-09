@@ -4543,15 +4543,6 @@
     estimateView.success.hidden = true;
   }
 
-  function fillDatalist(datalist, values) {
-    datalist.innerHTML = "";
-    values.forEach(value => {
-      const option = document.createElement("option");
-      option.value = value;
-      datalist.appendChild(option);
-    });
-  }
-
   /**
    * แค็ตตาล็อกรายการและลิสต์ตัวเลือก -- อยู่ในชีต ไม่ได้ฝังในไฟล์เว็บ เพราะยาว
    * สองพันกว่ารายการ เปลี่ยนตามประกาศของ กฟภ. และไฟล์เว็บทุกไฟล์เป็นสาธารณะ
@@ -4564,11 +4555,9 @@
     estimateCatalog = data.items || [];
     estimateLists = data.lists || { section: [], group: [], investment: [] };
 
-    fillDatalist(document.getElementById("estDescList"), estimateCatalog.map(i => i.description));
-
     estimateView.catalogNote.textContent = estimateCatalog.length
-      ? `รายการตั้งต้นในระบบ ${estimateCatalog.length} รายการ · พิมพ์บางส่วนของชื่อเพื่อค้นหา แล้ว KeyCode จะเติมให้เอง`
-      : "ยังไม่มีรายการตั้งต้นในระบบ (แท็บ EstimateItems ในชีตยังว่าง) — พิมพ์ Description และ KeyCode เองได้ตามปกติ";
+      ? `รายการตั้งต้นในระบบ ${estimateCatalog.length} รายการ · เลือก Group ก่อน แล้วรายการ Description จะแคบลงตามกลุ่มนั้น`
+      : "ยังไม่มีรายการตั้งต้นในระบบ (แท็บ EstimateItems ในชีตยังว่าง) — เมื่อใส่ข้อมูลแล้ว ดรอปดาวน์ Group และ Description จะขึ้นให้เอง";
   }
 
   /**
@@ -4591,6 +4580,57 @@
   function currentJob() {
     const dept = currentDept();
     return dept && dept.jobs[estimateJobIndex];
+  }
+
+  /**
+   * Group ของแผนกที่กำลังทำใบอยู่ -- แต่ละแผนกมีกลุ่มงานคนละชุด (คอลัมน์ section
+   * ในแท็บ EstimateItems ต้องสะกดตรงกับชื่อแผนกที่เลือกไว้ในใบ)
+   *
+   * ถ้าไม่มีแถวไหนระบุ section ไว้เลย ให้ถือว่าใช้ได้กับทุกแผนก -- ตอนเริ่มใส่
+   * ข้อมูลจริงมักกรอก group/description มาก่อน แล้วค่อยไล่เติม section ทีหลัง
+   * ระหว่างนั้นดรอปดาวน์ต้องยังใช้งานได้ ไม่ใช่ว่างเปล่า
+   */
+  function catalogRowsForSection(section) {
+    const rows = estimateCatalog || [];
+    const scoped = rows.filter(item => item.section && item.section === section);
+    return scoped.length ? scoped : rows.filter(item => !item.section);
+  }
+
+  function groupsForSection(section) {
+    return Array.from(new Set(catalogRowsForSection(section).map(i => i.group).filter(Boolean)))
+      .sort((a, b) => a.localeCompare(b, "th"));
+  }
+
+  function itemsForGroup(section, group) {
+    return catalogRowsForSection(section).filter(i => (i.group || "") === (group || ""));
+  }
+
+  /**
+   * เติมตัวเลือกลง <select> พร้อมกันค่าที่บันทึกไว้แล้วหายไป
+   *
+   * ค่าที่เคยบันทึกไว้แต่ไม่มีในแค็ตตาล็อกวันนี้ (กรอกไว้ก่อนมีข้อมูล หรือรายการ
+   * ถูกถอดออกภายหลัง) จะถูกใส่กลับเป็นตัวเลือกให้เสมอ -- ใบที่เคยทำไว้ต้องไม่
+   * เปลี่ยนค่าตัวเองเงียบ ๆ เพราะแค็ตตาล็อกเปลี่ยน
+   */
+  function fillSelect(select, values, current, placeholder) {
+    select.innerHTML = "";
+
+    const blank = document.createElement("option");
+    blank.value = "";
+    blank.textContent = placeholder;
+    select.appendChild(blank);
+
+    const all = values.slice();
+    if (current && !all.includes(current)) all.push(current);
+
+    all.forEach(value => {
+      const option = document.createElement("option");
+      option.value = value;
+      option.textContent = value;
+      select.appendChild(option);
+    });
+
+    select.value = current || "";
   }
 
   function countItems(job) {
@@ -4757,8 +4797,9 @@
   /**
    * หนึ่งแถวของใบประมาณการ -- ผูกกับ job.items โดยตรง พิมพ์ปุ๊บเข้าโมเดลปั๊บ
    *
-   * ใช้ datalist ก้อนเดียวร่วมกันทั้งหน้า (#estDescList) ไม่ใช่ต่อแถว -- รายการ
-   * สองพันกว่าตัวคูณจำนวนแถว จะกลายเป็นหลายหมื่นโหนดในหน้าเดียวทันที
+   * ตัวเลือกของ Description ถูกจำกัดด้วย Group ที่เลือกไว้ในแถวนั้นก่อนเสมอ --
+   * แค็ตตาล็อกมีสองพันกว่ารายการ การเอาทั้งหมดมาใส่ทุกแถวคือรายการที่เลื่อนหา
+   * ไม่ไหว และเป็นโหนดหลายหมื่นตัวในหน้าเดียว
    */
   function addEstimateRow(values) {
     const job = currentJob();
@@ -4767,7 +4808,7 @@
 
     let item = values;
     if (!item) {
-      item = { description: "", keyCode: "", in: "", rm: "", rp: "" };
+      item = { group: "", description: "", keyCode: "", in: "", rm: "", rp: "" };
       job.items.push(item);
     }
 
@@ -4777,30 +4818,50 @@
     const no = document.createElement("span");
     no.className = "estimate-no";
 
-    const description = document.createElement("input");
-    description.type = "text";
-    description.setAttribute("list", "estDescList");
-    description.value = item.description || "";
+    const section = (currentDept() || {}).section || "";
 
+    // Group -> Description -> KeyCode: เลือกกลุ่มก่อน รายการถึงจะแคบลงเหลือเฉพาะ
+    // ของกลุ่มนั้น แล้ว KeyCode ตามมาเองจากรายการที่เลือก
+    const group = document.createElement("select");
+    fillSelect(group, groupsForSection(section), item.group || "", "-- Group --");
+
+    const description = document.createElement("select");
     const keyCode = document.createElement("input");
     keyCode.type = "text";
     keyCode.className = "estimate-keycode";
+    keyCode.readOnly = true;
     keyCode.value = item.keyCode || "";
 
-    description.addEventListener("input", () => {
-      item.description = description.value;
-      // เลือกรายการจากแค็ตตาล็อกแล้ว KeyCode ตามมาเอง -- แต่ไม่ล็อกช่อง เพราะ
-      // รายการนอกแค็ตตาล็อกยังต้องกรอกรหัสเองได้
-      const match = (estimateCatalog || []).find(i => i.description === description.value.trim());
-      if (match) {
-        keyCode.value = match.keyCode;
-        item.keyCode = match.keyCode;
-      }
+    function fillDescriptions(selected) {
+      fillSelect(
+        description,
+        itemsForGroup(section, group.value).map(i => i.description),
+        selected || "",
+        "-- Description --"
+      );
+    }
+
+    fillDescriptions(item.description || "");
+
+    group.addEventListener("change", () => {
+      item.group = group.value;
+      // เปลี่ยนกลุ่มแล้วรายการเดิมมักไม่อยู่ในกลุ่มใหม่ -- ล้างทั้งรายการและรหัส
+      // ดีกว่าปล่อยให้เหลือคู่ที่ไม่เข้ากัน
+      item.description = "";
+      item.keyCode = "";
+      keyCode.value = "";
+      fillDescriptions("");
       markEstimateDirty();
     });
 
-    keyCode.addEventListener("input", () => {
-      item.keyCode = keyCode.value;
+    description.addEventListener("change", () => {
+      item.description = description.value;
+
+      const match = itemsForGroup(section, group.value)
+        .find(i => i.description === description.value);
+      item.keyCode = match ? match.keyCode : "";
+      keyCode.value = item.keyCode;
+
       markEstimateDirty();
     });
 
@@ -4831,7 +4892,7 @@
       markEstimateDirty();
     });
 
-    row.append(no, description, keyCode, ...quantities, remove);
+    row.append(no, group, description, keyCode, ...quantities, remove);
     estimateView.rows.appendChild(row);
     renumberEstimateRows();
   }
@@ -4864,11 +4925,17 @@
     showView("estimate");
     showEstimateLevel(0);
 
-    ensureEstimateCatalog().catch(err => {
-      console.error("CS Connect estimate catalog error:", err);
-      estimateView.catalogNote.textContent =
-        "โหลดรายการตั้งต้นไม่สำเร็จ — พิมพ์ Description และ KeyCode เองได้ตามปกติ";
-    });
+    ensureEstimateCatalog()
+      .then(() => {
+        // แค็ตตาล็อกมาช้ากว่าการวาดหน้าจอได้ -- ถ้าตอนวาดยังไม่มีข้อมูล ดรอปดาวน์
+        // จะว่าง จึงวาดใบที่เปิดอยู่ใหม่เมื่อข้อมูลมาถึง
+        if (!estimateView.formPane.hidden) renderEstimateForm();
+      })
+      .catch(err => {
+        console.error("CS Connect estimate catalog error:", err);
+        estimateView.catalogNote.textContent =
+          "โหลดรายการตั้งต้นไม่สำเร็จ — ลองเปิดหน้านี้ใหม่อีกครั้ง";
+      });
   }
 
   document.getElementById("extEstimateOpenBtn").addEventListener("click", () => {
@@ -4976,7 +5043,14 @@
             // เก็บต่อไว้เฉย ๆ สำหรับใบเก่าที่เคยแยกช่อง Group ไว้ ของใหม่ไม่ได้ใช้
             group: job.group || "",
             investment: job.investment || "",
-            items: (job.items || []).filter(item => item.description)
+            items: (job.items || []).filter(item => item.description).map(item => ({
+              group: item.group || "",
+              description: item.description,
+              keyCode: item.keyCode || "",
+              in: item.in || "",
+              rm: item.rm || "",
+              rp: item.rp || ""
+            }))
           }))
         }))
       };

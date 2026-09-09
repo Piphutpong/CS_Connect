@@ -32,3 +32,5 @@ privacy.html
 # ข้อมูลตั้งต้นรายการประมาณการของ กฟภ. -- เอาไว้วางลงชีต ไม่ใช่ไฟล์ที่เว็บใช้
 estimate-items.csv
 estimate-lists.csv
+estimate-items-template.csv
+estimate-groups-reference.csv

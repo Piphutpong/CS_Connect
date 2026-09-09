@@ -1573,9 +1573,25 @@ span.estimate-crumb {
   background: var(--paper);
 }
 
-.estimate-add-row input {
+.estimate-add-row input,
+.estimate-add-row select {
   flex: 1;
   min-width: 160px;
+  padding: 11px 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  font-family: inherit;
+  font-size: 14.5px;
+  color: var(--ink);
+  background: var(--white);
+  outline: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.estimate-add-row input:focus,
+.estimate-add-row select:focus {
+  border-color: var(--volt-300);
+  box-shadow: 0 0 0 3px var(--volt-100);
 }
 
 /* ===== ใบประมาณการ ===== */
@@ -1593,7 +1609,7 @@ span.estimate-crumb {
 }
 
 .estimate-table {
-  min-width: 720px;
+  min-width: 880px;
   border: 1px solid var(--border);
   border-radius: 10px;
   overflow: hidden;
@@ -1601,7 +1617,7 @@ span.estimate-crumb {
 
 .estimate-row {
   display: grid;
-  grid-template-columns: 44px minmax(240px, 1fr) 130px 62px 62px 62px 40px;
+  grid-template-columns: 44px 150px minmax(220px, 1fr) 130px 62px 62px 62px 40px;
   align-items: center;
   gap: 8px;
   padding: 8px 10px;
@@ -1612,12 +1628,23 @@ span.estimate-crumb {
   border-top: none;
 }
 
+/* สลับสีแถวอ่อน ๆ -- ตารางกว้าง ตาต้องกวาดตามแถวให้ไม่หลุด */
+#estRows .estimate-row:nth-child(even) {
+  background: var(--paper);
+}
+
+#estRows .estimate-row:focus-within {
+  background: var(--volt-50);
+}
+
 .estimate-head-row {
   background: var(--volt-50);
   font-weight: 600;
-  font-size: 13px;
+  font-size: 12.5px;
+  letter-spacing: 0.3px;
   color: var(--volt-700);
   text-align: center;
+  border-bottom: 1px solid var(--border);
 }
 
 /* หัวคอลัมน์ Description ชิดซ้ายให้ตรงกับข้อความในช่อง */
@@ -1625,9 +1652,45 @@ span.estimate-crumb {
   text-align: left;
 }
 
-.estimate-row input {
+/* ช่องกรอกในตารางใช้หน้าตาเดียวกับช่องกรอกทั้งเว็บ แค่ย่อระยะขอบลงให้พอดีแถว
+   -- ตารางที่ใช้ช่องกรอกหน้าตาดีฟอลต์ของเบราว์เซอร์จะดูเป็นคนละหน้ากับที่เหลือ */
+.estimate-row input,
+.estimate-row select {
   width: 100%;
   min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-family: inherit;
+  font-size: 13.5px;
+  color: var(--ink);
+  background: var(--white);
+  outline: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.estimate-row input:hover:not([readonly]),
+.estimate-row select:hover {
+  border-color: var(--border-strong);
+}
+
+.estimate-row input:focus,
+.estimate-row select:focus {
+  border-color: var(--volt-300);
+  box-shadow: 0 0 0 3px var(--volt-100);
+}
+
+/* ลูกศรของ <select> วาดเอง เพื่อให้เหมือนกันทุกเบราว์เซอร์และไม่กินที่ */
+.estimate-row select {
+  appearance: none;
+  -webkit-appearance: none;
+  padding-right: 26px;
+  background-image: linear-gradient(45deg, transparent 50%, var(--volt-500) 50%),
+                    linear-gradient(135deg, var(--volt-500) 50%, transparent 50%);
+  background-position: right 12px center, right 7px center;
+  background-size: 5px 5px, 5px 5px;
+  background-repeat: no-repeat;
+  cursor: pointer;
 }
 
 .estimate-no {
@@ -1637,17 +1700,28 @@ span.estimate-crumb {
   text-align: center;
 }
 
-/* KeyCode มาจากรายการที่เลือก ไม่ได้ห้ามพิมพ์เอง (รายการนอกแค็ตตาล็อกยังต้อง
-   กรอกได้) แต่ทำให้ดูเป็นค่าที่ระบบเติมให้ ไม่ใช่ช่องที่ต้องกรอกทุกครั้ง */
+/* KeyCode ไม่ได้กรอกเอง -- มาจากรายการที่เลือกเสมอ จึงทำให้อ่านออกว่าเป็นค่าที่
+   ระบบเติมให้ ไม่ใช่ช่องว่างที่รอให้พิมพ์ */
 .estimate-keycode {
   font-family: var(--font-mono);
   font-size: 12.5px;
   background: var(--paper);
+  color: var(--ink-soft);
+  cursor: default;
 }
 
+/* ปุ่มเพิ่ม/ลดของช่องตัวเลขกินที่ในแถวแคบ และไม่มีใครใช้กับจำนวนพัสดุ */
 .estimate-qty {
   font-family: var(--font-mono);
   text-align: center;
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
+.estimate-qty::-webkit-outer-spin-button,
+.estimate-qty::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
 }
 
 .estimate-remove {
