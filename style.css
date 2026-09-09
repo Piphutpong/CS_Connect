@@ -1352,6 +1352,99 @@ button:active {
   min-width: 220px;
 }
 
+/* ===== ใบประมาณการ ===== */
+.estimate-head {
+  display: grid;
+  grid-template-columns: 2fr 1.4fr 1fr;
+  gap: 16px;
+}
+
+/* ตารางกว้างกว่าคอลัมน์ฟอร์มแน่นอน -- ให้เลื่อนแนวนอนในกรอบของตัวเอง ไม่ใช่
+   ทำให้ทั้งหน้าเลื่อนได้ (กติกาเดียวกับตารางกว้างที่อื่นในโปรเจกต์นี้) */
+.estimate-scroll {
+  overflow-x: auto;
+}
+
+.estimate-table {
+  min-width: 720px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.estimate-row {
+  display: grid;
+  grid-template-columns: 44px minmax(240px, 1fr) 130px 62px 62px 62px 40px;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-top: 1px solid var(--border);
+}
+
+.estimate-row:first-child {
+  border-top: none;
+}
+
+.estimate-head-row {
+  background: var(--volt-50);
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--volt-700);
+  text-align: center;
+}
+
+/* หัวคอลัมน์ Description ชิดซ้ายให้ตรงกับข้อความในช่อง */
+.estimate-head-row span:nth-child(2) {
+  text-align: left;
+}
+
+.estimate-row input {
+  width: 100%;
+  min-width: 0;
+}
+
+.estimate-no {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--ink-soft);
+  text-align: center;
+}
+
+/* KeyCode มาจากรายการที่เลือก ไม่ได้ห้ามพิมพ์เอง (รายการนอกแค็ตตาล็อกยังต้อง
+   กรอกได้) แต่ทำให้ดูเป็นค่าที่ระบบเติมให้ ไม่ใช่ช่องที่ต้องกรอกทุกครั้ง */
+.estimate-keycode {
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  background: var(--paper);
+}
+
+.estimate-qty {
+  font-family: var(--font-mono);
+  text-align: center;
+}
+
+.estimate-remove {
+  border: none;
+  background: transparent;
+  color: var(--ink-soft);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  border-radius: 8px;
+  padding: 4px;
+}
+
+.estimate-remove:hover {
+  background: var(--danger-tint);
+  color: var(--danger);
+}
+
+@media (max-width: 700px) {
+  .estimate-head {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* ===== คิวรอสำรวจ แยกเป็นของแต่ละคน ===== */
 .queue-group {
   border: 1px solid var(--border);

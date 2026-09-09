@@ -254,6 +254,10 @@
 
     async savePlan() {
       throw new Error("โหมดออฟไลน์ไม่รองรับการแนบแผนผัง");
+    },
+
+    async listEstimateItems() {
+      throw new Error("โหมดออฟไลน์ไม่รองรับรายการประมาณการ");
     }
 
     // track()/uploadSlip() live in track.js now -- the public tracking page
@@ -430,6 +434,11 @@
         // ครั้งถัดไปจะส่งเรกคอร์ดเหล่านี้ซ้ำโดยไม่จำเป็น
         updated.forEach(r => savedRequests.set(String(r.id), JSON.stringify(r)));
         return updated;
+      },
+
+      // แค็ตตาล็อกรายการประมาณการ -- ข้อมูลตั้งต้น ดึงครั้งเดียวต่อการเปิดเว็บ
+      async listEstimateItems() {
+        return callAsUser({ action: "listEstimateItems" });
       },
 
       // แนบไฟล์แผนผัง -- ฝั่งเซิร์ฟเวอร์อัปขึ้น Drive แล้วเดินสถานะให้เอง
@@ -2200,6 +2209,12 @@
   const extPlanFile = document.getElementById("extPlanFile");
   const extPlanError = document.getElementById("extPlanError");
   const extPlanSuccess = document.getElementById("extPlanSuccess");
+  const extEstimateSection = document.getElementById("extEstimateSection");
+  const estSection = document.getElementById("estSection");
+  const estGroup = document.getElementById("estGroup");
+  const estInvestment = document.getElementById("estInvestment");
+  const estRows = document.getElementById("estRows");
+  const estCatalogNote = document.getElementById("estCatalogNote");
   const extDistrict = document.getElementById("extDistrict");
   const extSubdistrict = document.getElementById("extSubdistrict");
   const extZipcode = document.getElementById("extZipcode");
@@ -2586,6 +2601,15 @@
     extPlanSection.hidden = !showPlan;
 
     if (showPlan) renderPlanCurrent(record);
+
+    // ประมาณการเปิดที่ขั้น "รอประมาณการ" และเปิดค้างไว้ตลอดถ้าเริ่มทำไปแล้ว --
+    // ใบที่กรอกไว้ต้องเปิดกลับมาดู/แก้ได้เสมอ ไม่ใช่หายไปเมื่อสถานะเดินต่อ
+    const showEstimate = Boolean(record)
+      && (storedStatus === "รอประมาณการ" || Boolean(record.estimate));
+    extEstimateSection.hidden = !showEstimate;
+    // ไม่วาดใบประมาณการใหม่ตรงนี้โดยตั้งใจ -- ฟังก์ชันนี้ถูกเรียกทุกครั้งที่
+    // เปลี่ยนดรอปดาวน์สถานะ ถ้าวาดใหม่ที่นี่ สิ่งที่พิมพ์ค้างไว้ในใบจะหายทันที
+    // ที่เจ้าหน้าที่แตะช่องสถานะ การเติมข้อมูลจึงทำครั้งเดียวตอนเปิดฟอร์ม
   }
 
   function renderPlanCurrent(record) {
@@ -3528,6 +3552,8 @@
     extAssigneeField.hidden = true;
     extWbsField.hidden = true;
     extPlanSection.hidden = true;
+    extEstimateSection.hidden = true;
+    estRows.innerHTML = "";
     extPlanCurrent.textContent = "";
     extPlanFile.value = "";
     hideError(extPlanError);
@@ -3586,6 +3612,7 @@
       extendFormRecord = record;
       fillExtendForm(record);
       syncExtendStageFields(record);
+      if (!extEstimateSection.hidden) renderEstimate(record);
     }
 
     // Audit strip only makes sense for a record that already exists -- and
@@ -3937,6 +3964,9 @@
       const note = document.getElementById("extNote").value.trim();
       const trackingNumber = extTrackingNumber.value;
       const wbs = extWbs.value.trim();
+      // ใบประมาณการอ่านจากหน้าจอเฉพาะตอนที่ส่วนนี้เปิดอยู่ -- ถ้าปิดอยู่แปลว่า
+      // งานยังไม่ถึงขั้นนั้น ต้องไม่ไปเขียนทับใบเดิมด้วยค่าว่างจากช่องที่ซ่อนไว้
+      const estimate = extEstimateSection.hidden ? undefined : collectEstimate();
       const lat = extLat.value.trim();
       const lng = extLng.value.trim();
 
@@ -4009,6 +4039,8 @@
         lng
       };
 
+      if (estimate !== undefined) recordData.estimate = estimate;
+
       const { byName: savedByName, byEmail: savedByEmail } = actingStaff();
       const now = Date.now();
 
@@ -4064,6 +4096,191 @@
   });
 
   /**
+   * ---------- ใบประมาณการ ----------
+   *
+   * รายการ (Description + KeyCode) เป็นข้อมูลตั้งต้นของ กฟภ. ที่ยาวเป็นพันบรรทัด
+   * และเปลี่ยนตามประกาศ จึงเก็บไว้ในแท็บ EstimateItems ของชีต ให้ผู้ดูแลระบบวาง
+   * ข้อมูลเองได้ ไม่ได้ฝังไว้ในไฟล์เว็บ (ไฟล์เว็บทุกไฟล์เป็นสาธารณะ และการแก้
+   * รายการไม่ควรต้องแก้โค้ด) โหลดครั้งเดียวต่อการเปิดเว็บแล้วกรองในเบราว์เซอร์
+   *
+   * ใช้ <input list=...> + <datalist> แทน <select> โดยตั้งใจ: รายการหลักพัน
+   * บรรทัดใน <select> เลื่อนหาไม่ไหว แต่ datalist พิมพ์คำไหนก็กรองให้ทันที และ
+   * ยังพิมพ์ค่าที่ไม่มีในรายการได้ด้วย -- ต้องได้ เพราะแค็ตตาล็อกวันแรกยังว่าง
+   * และงานจริงมีรายการนอกแค็ตตาล็อกเสมอ
+   */
+  let estimateCatalog = null;
+
+  async function ensureEstimateCatalog() {
+    if (estimateCatalog) return estimateCatalog;
+    const data = await backend.listEstimateItems();
+    estimateCatalog = data.items || [];
+    return estimateCatalog;
+  }
+
+  function fillDatalist(datalist, values) {
+    datalist.innerHTML = "";
+    values.forEach(value => {
+      const option = document.createElement("option");
+      option.value = value;
+      datalist.appendChild(option);
+    });
+  }
+
+  function uniqueSorted(values) {
+    return Array.from(new Set(values.filter(Boolean))).sort((a, b) => a.localeCompare(b, "th"));
+  }
+
+  /** รายการที่เข้าเงื่อนไข Section/Group ที่เลือกอยู่ -- ว่างไว้ = ไม่กรอง */
+  function estimateItemsInScope() {
+    const items = estimateCatalog || [];
+    const section = estSection.value.trim();
+    const group = estGroup.value.trim();
+
+    return items.filter(item =>
+      (!section || item.section === section) && (!group || item.group === group));
+  }
+
+  function refreshEstimateChoices() {
+    const items = estimateCatalog || [];
+
+    fillDatalist(document.getElementById("estSectionList"), uniqueSorted(items.map(i => i.section)));
+
+    const section = estSection.value.trim();
+    fillDatalist(
+      document.getElementById("estGroupList"),
+      uniqueSorted(items.filter(i => !section || i.section === section).map(i => i.group))
+    );
+
+    // การลงทุน/ทรัพย์สินไม่ได้อยู่ในแค็ตตาล็อก -- เสนอค่าที่เคยใช้ในใบก่อน ๆ
+    // แทน รายการจึงงอกเองจากการใช้งานจริงโดยไม่ต้องตั้งค่าอะไรเลย
+    fillDatalist(
+      document.getElementById("estInvestmentList"),
+      uniqueSorted(getRequests().map(r => r.estimate && r.estimate.investment))
+    );
+
+    const scoped = estimateItemsInScope();
+    estRows.querySelectorAll("[data-est-description]").forEach(input => {
+      fillDatalist(document.getElementById(input.getAttribute("list")), scoped.map(i => i.description));
+    });
+
+    estCatalogNote.textContent = items.length
+      ? `รายการในระบบ ${items.length} รายการ · เลือก Section และ Group เพื่อกรองรายการให้แคบลง`
+      : "ยังไม่มีรายการตั้งต้นในระบบ (แท็บ EstimateItems ในชีตยังว่าง) — พิมพ์ Description และ KeyCode เองได้ตามปกติ";
+  }
+
+  function addEstimateRow(values = {}) {
+    const seq = estRows.children.length + 1;
+    const listId = `estDescList${seq}-${Date.now()}`;
+
+    const row = document.createElement("div");
+    row.className = "estimate-row";
+
+    const no = document.createElement("span");
+    no.className = "estimate-no";
+    no.textContent = String(seq);
+
+    const description = document.createElement("input");
+    description.type = "text";
+    description.setAttribute("data-est-description", "1");
+    description.setAttribute("list", listId);
+    description.value = values.description || "";
+
+    const datalist = document.createElement("datalist");
+    datalist.id = listId;
+
+    const keyCode = document.createElement("input");
+    keyCode.type = "text";
+    keyCode.className = "estimate-keycode";
+    keyCode.setAttribute("data-est-keycode", "1");
+    keyCode.value = values.keyCode || "";
+
+    // เลือกรายการจากแค็ตตาล็อกแล้ว KeyCode ตามมาเอง -- แต่ไม่ล็อกช่อง เพราะ
+    // รายการนอกแค็ตตาล็อกยังต้องกรอกรหัสเองได้
+    description.addEventListener("input", () => {
+      const match = (estimateCatalog || []).find(i => i.description === description.value.trim());
+      if (match) keyCode.value = match.keyCode;
+    });
+
+    const quantities = ["in", "rm", "rp"].map(key => {
+      const input = document.createElement("input");
+      input.type = "number";
+      input.min = "0";
+      input.step = "1";
+      input.className = "estimate-qty";
+      input.setAttribute(`data-est-${key}`, "1");
+      input.value = values[key] || "";
+      return input;
+    });
+
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.className = "estimate-remove";
+    remove.setAttribute("aria-label", "ลบรายการนี้");
+    remove.textContent = "×";
+    remove.addEventListener("click", () => {
+      row.remove();
+      renumberEstimateRows();
+    });
+
+    row.append(no, description, datalist, keyCode, ...quantities, remove);
+    estRows.appendChild(row);
+
+    fillDatalist(datalist, estimateItemsInScope().map(i => i.description));
+    return row;
+  }
+
+  function renumberEstimateRows() {
+    Array.from(estRows.children).forEach((row, index) => {
+      row.querySelector(".estimate-no").textContent = String(index + 1);
+    });
+  }
+
+  /** อ่านใบประมาณการจากหน้าจอ -- แถวที่ไม่มี Description ถือว่าไม่ได้กรอก */
+  function collectEstimate() {
+    const items = Array.from(estRows.children).map(row => ({
+      description: row.querySelector("[data-est-description]").value.trim(),
+      keyCode: row.querySelector("[data-est-keycode]").value.trim(),
+      in: row.querySelector("[data-est-in]").value.trim(),
+      rm: row.querySelector("[data-est-rm]").value.trim(),
+      rp: row.querySelector("[data-est-rp]").value.trim()
+    })).filter(item => item.description);
+
+    const section = estSection.value.trim();
+    const group = estGroup.value.trim();
+    const investment = estInvestment.value.trim();
+
+    if (!items.length && !section && !group && !investment) return null;
+
+    return { section, group, investment, items };
+  }
+
+  function renderEstimate(record) {
+    const estimate = (record && record.estimate) || {};
+    estSection.value = estimate.section || "";
+    estGroup.value = estimate.group || "";
+    estInvestment.value = estimate.investment || "";
+
+    estRows.innerHTML = "";
+    const items = Array.isArray(estimate.items) ? estimate.items : [];
+    items.forEach(item => addEstimateRow(item));
+
+    // ใบเปล่าเริ่มด้วยแถวว่างไม่กี่แถว จะได้ไม่ต้องกดเพิ่มแถวก่อนเริ่มพิมพ์
+    while (estRows.children.length < 3) addEstimateRow();
+
+    // แค็ตตาล็อกโหลดช้ากว่าการวาดหน้าจอได้ -- วาดก่อน แล้วค่อยเติมตัวเลือกตามมา
+    ensureEstimateCatalog()
+      .then(refreshEstimateChoices)
+      .catch(err => {
+        console.error("CS Connect estimate catalog error:", err);
+        estCatalogNote.textContent = "โหลดรายการตั้งต้นไม่สำเร็จ — พิมพ์ Description และ KeyCode เองได้ตามปกติ";
+      });
+  }
+
+  document.getElementById("estAddRowBtn").addEventListener("click", () => addEstimateRow());
+  estSection.addEventListener("change", refreshEstimateChoices);
+  estGroup.addEventListener("change", refreshEstimateChoices);
+
+  /**
    * อัปโหลดไฟล์แผนผังของคำร้องที่เปิดอยู่
    *
    * แยกจากปุ่มบันทึกคำร้องโดยตั้งใจ: ไฟล์ไม่ได้ไปอยู่ในชีต แต่ขึ้น Drive ผ่าน
@@ -4113,6 +4330,9 @@
       extJobStatus.value = updated.jobStatus;
       renderStatusHistory(updated);
       syncExtendStageFields(updated);
+      // แนบผังเสร็จ สถานะเดินไป "รอประมาณการ" ส่วนประมาณการจึงเพิ่งโผล่ -- เติม
+      // ใบเปล่าให้ด้วย (เฉพาะตอนที่ยังไม่มีแถวเลย จะได้ไม่ทับสิ่งที่พิมพ์ค้างไว้)
+      if (!extEstimateSection.hidden && !estRows.children.length) renderEstimate(updated);
 
       extPlanFile.value = "";
       extPlanSuccess.textContent = `แนบแผนผังเรียบร้อย สถานะปัจจุบัน: ${updated.jobStatus}`;

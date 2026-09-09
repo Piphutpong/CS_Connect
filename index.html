@@ -25,7 +25,7 @@
 <title>CS Connect</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=Sarabun:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=20260909d">
+<link rel="stylesheet" href="style.css?v=20260909e">
 </head>
 <body>
 
@@ -824,6 +824,53 @@
             <p id="extPlanError" class="form-error" hidden></p>
             <p id="extPlanSuccess" class="form-success" hidden></p>
           </div>
+          <!-- ประมาณการ -- โผล่เมื่อสถานะที่บันทึกไว้จริงเป็น "รอประมาณการ"
+               (หรือคำร้องมีใบประมาณการอยู่แล้ว) บันทึกไปพร้อมปุ่มบันทึกคำร้อง
+               ด้านล่าง ไม่ได้มีปุ่มของตัวเอง เพราะทั้งใบเป็นข้อมูลของคำร้องนี้ -->
+          <div class="field-section" id="extEstimateSection" hidden>
+            <p class="field-section-label">ประมาณการ</p>
+
+            <div class="estimate-head">
+              <div class="field">
+                <label for="estSection">Section</label>
+                <input type="text" id="estSection" list="estSectionList" placeholder="เช่น แผนกแรงสูง 22 KV." autocomplete="off">
+                <datalist id="estSectionList"></datalist>
+              </div>
+              <div class="field">
+                <label for="estGroup">Group</label>
+                <input type="text" id="estGroup" list="estGroupList" placeholder="เช่น HT.OHGW" autocomplete="off">
+                <datalist id="estGroupList"></datalist>
+              </div>
+              <div class="field">
+                <label for="estInvestment">การลงทุน/ทรัพย์สิน</label>
+                <input type="text" id="estInvestment" list="estInvestmentList" placeholder="เช่น 01.1" autocomplete="off">
+                <datalist id="estInvestmentList"></datalist>
+              </div>
+            </div>
+
+            <p id="estCatalogNote" class="field-hint"></p>
+
+            <!-- ตารางกว้างกว่าคอลัมน์ฟอร์ม จึงให้เลื่อนในกรอบตัวเอง ไม่ใช่ดันทั้งหน้า -->
+            <div class="estimate-scroll">
+              <div class="estimate-table">
+                <div class="estimate-row estimate-head-row">
+                  <span>No.</span>
+                  <span>Description</span>
+                  <span>KeyCode</span>
+                  <span>IN.</span>
+                  <span>RM.</span>
+                  <span>RP.</span>
+                  <span></span>
+                </div>
+                <div id="estRows"></div>
+              </div>
+            </div>
+
+            <div class="batch-toolbar">
+              <button type="button" id="estAddRowBtn" class="btn btn-ghost">+ เพิ่มรายการ</button>
+            </div>
+          </div>
+
           <p id="extendFormError" class="form-error" hidden></p>
           <button type="submit" id="extendFormSubmitBtn" class="btn btn-primary btn-block">บันทึกคำร้อง</button>
         </form>
@@ -955,6 +1002,6 @@
      ที่หาสาเหตุยากมาก
      **ต้องเปลี่ยนเลขนี้ทุกครั้งที่แก้ app.js / style.css / track.js / qr.js**
      ไม่งั้นผู้ใช้บางคนจะยังได้ไฟล์เก่าไปอีกพักใหญ่ -->
-<script src="app.js?v=20260909d"></script>
+<script src="app.js?v=20260909e"></script>
 </body>
 </html>
