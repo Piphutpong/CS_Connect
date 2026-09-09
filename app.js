@@ -4352,34 +4352,38 @@
     win.document.write(`<!DOCTYPE html><html lang="th"><head><meta charset="utf-8">
 <title>ใบภาพหน้างาน ${wbs}</title>
 <style>
-  @page { size: A4 portrait; margin: 10mm; }
+  @page { size: A4 portrait; margin: 8mm; }
   * { box-sizing: border-box; }
-  body {
-    margin: 0; font-family: "Sarabun", "Segoe UI", sans-serif; color: #221530;
-    display: flex; flex-direction: column; height: 277mm;
-  }
+  body { margin: 0; font-family: "Sarabun", "Segoe UI", sans-serif; color: #221530; }
+
+  /* ความสูงทุกก้อนกำหนดเป็นมิลลิเมตรตายตัว ไม่ใช้ flex ยืดเต็มความสูงหน้า:
+     ตอนพิมพ์ เบราว์เซอร์คิดความสูงของกล่องหน้ากระดาษไม่ตรงกัน (ขอบของ @page
+     กับขอบที่ผู้ใช้ตั้งในกล่องพิมพ์ทับกันได้) พอคิดพลาดไปไม่กี่มิลลิเมตร
+     บรรทัดพิกัดก็หลุดไปหน้าที่สองทันที -- แบบนี้รวมกันแล้วราว 256 มม.
+     เหลือที่ว่างเผื่อขอบกระดาษไว้มากพอที่จะไม่มีวันล้นหน้า
+     22 (WBS) + 2 x (7 หัวข้อ + 96 กรอบรูป) + 12 ช่องไฟ + 10 ท้ายกระดาษ = ~250 มม.
+     ซึ่งยังพอดีแม้ผู้ใช้จะเลือกขอบกระดาษกว้าง 20 มม. ในกล่องพิมพ์ */
   .wbs {
-    border: 2px solid #57298c; border-radius: 6px; padding: 6mm 8mm; text-align: center;
-    flex: none;
+    border: 2px solid #57298c; border-radius: 6px; padding: 5mm 8mm; text-align: center;
   }
   .wbs span { display: block; font-size: 11pt; color: #6b5c82; letter-spacing: .5px; }
   .wbs strong {
-    display: block; margin-top: 2mm; font-size: 26pt; font-weight: 700;
+    display: block; margin-top: 1mm; font-size: 26pt; font-weight: 700;
     letter-spacing: 1px; color: #38185c;
   }
-  .shots { flex: 1; display: flex; flex-direction: column; gap: 5mm; margin: 5mm 0; min-height: 0; }
-  .shot { flex: 1; display: flex; flex-direction: column; margin: 0; min-height: 0; }
-  figcaption { flex: none; font-size: 12pt; font-weight: 600; margin-bottom: 2mm; color: #38185c; }
+  .shot { margin: 4mm 0 0; page-break-inside: avoid; break-inside: avoid; }
+  figcaption { font-size: 12pt; font-weight: 600; margin-bottom: 2mm; color: #38185c; }
   .frame {
-    flex: 1; min-height: 0; border: 1px solid #cdb9ea; border-radius: 4px;
+    height: 96mm; border: 1px solid #cdb9ea; border-radius: 4px;
     display: flex; align-items: center; justify-content: center; overflow: hidden;
   }
-  /* ภาพใหญ่เต็มกรอบที่เหลือ โดยไม่บิดสัดส่วนและไม่ดันหน้าให้ยาวเกิน 1 แผ่น */
-  .frame img { max-width: 100%; max-height: 100%; object-fit: contain; }
+  /* ภาพใหญ่เต็มกรอบ โดยไม่บิดสัดส่วน และไม่ดันความสูงของกรอบให้บานออก */
+  .frame img { max-width: 100%; max-height: 96mm; object-fit: contain; }
   .frame.empty { color: #6b5c82; font-size: 11pt; }
   .foot {
-    flex: none; border-top: 1px solid #cdb9ea; padding-top: 3mm;
+    margin-top: 4mm; border-top: 1px solid #cdb9ea; padding-top: 3mm;
     display: flex; justify-content: space-between; font-size: 11pt; gap: 8mm;
+    page-break-inside: avoid; break-inside: avoid;
   }
   .foot b { font-weight: 600; }
   .actions { text-align: center; margin-top: 6mm; }
@@ -4387,10 +4391,8 @@
   @media print { .actions { display: none; } }
 </style></head><body>
   <div class="wbs"><span>หมายเลข WBS</span><strong>${wbs}</strong></div>
-  <div class="shots">
-    ${photoBlock("ภาพสถานที่ขอขยายเขตฯ", site)}
-    ${photoBlock("ภาพเส้นทางขยายเขตฯ", route)}
-  </div>
+  ${photoBlock("ภาพสถานที่ขอขยายเขตฯ", site)}
+  ${photoBlock("ภาพเส้นทางขยายเขตฯ", route)}
   <div class="foot">
     <div><b>พิกัดหน้างาน:</b> ${escapeForPrint(coords)}</div>
     <div><b>วันที่พิมพ์:</b> ${escapeForPrint(printedAt)}</div>
