@@ -4685,6 +4685,10 @@
     if (level === 2) renderEstimateForm();
 
     renderEstimateCrumbs();
+
+    document.getElementById("estimatePrintBtn").textContent =
+      level === 0 ? "พิมพ์ทั้งหมด" : (level === 1 ? "พิมพ์แผนกนี้" : "พิมพ์ใบนี้");
+
     window.scrollTo(0, 0);
   }
 
@@ -5022,6 +5026,173 @@
     if (estimateDirty && !confirm("ยังไม่ได้บันทึกประมาณการ ออกจากหน้านี้เลยหรือไม่?")) return;
 
     openRequestForm("extend", estimateRecord, { returnTo: "extendWork" });
+  });
+
+  /**
+   * ใบประมาณการที่จะพิมพ์ ตามชั้นที่เปิดอยู่ -- ทั้งหมด / ทั้งแผนก / เฉพาะใบนี้
+   *
+   * พิมพ์จาก estimateModel ที่อยู่บนหน้าจอ ไม่ใช่จากคำร้องที่บันทึกไว้ -- สิ่งที่
+   * เห็นคือสิ่งที่ได้ (ป้าย "ยังไม่ได้บันทึก" บนแถบบนเตือนอยู่แล้วว่ายังไม่ถูกเก็บ)
+   */
+  function estimateSheetsToPrint() {
+    const sheets = [];
+
+    (estimateModel.departments || []).forEach((dept, deptIndex) => {
+      if (estimateDeptIndex >= 0 && deptIndex !== estimateDeptIndex) return;
+
+      (dept.jobs || []).forEach((job, jobIndex) => {
+        if (estimateJobIndex >= 0 && jobIndex !== estimateJobIndex) return;
+        sheets.push({ section: dept.section, job, jobIndex });
+      });
+    });
+
+    return sheets;
+  }
+
+  /**
+   * ใบประมาณการบนกระดาษ A4 -- หนึ่งงานย่อยต่อหนึ่งแผ่น ตามฟอร์มที่แผนกใช้อยู่
+   *
+   * ใช้วิธีเดียวกับใบพิมพ์อื่นในแอปนี้ (เปิดแท็บใหม่ เขียนเอกสารที่มี @page ของ
+   * ตัวเอง แล้วสั่งพิมพ์) -- "บันทึกเป็น PDF" คือปลายทางหนึ่งของกล่องพิมพ์อยู่แล้ว
+   * จึงไม่ต้องแบกไลบรารีสร้าง PDF ซึ่ง CSP ของหน้านี้บล็อกอยู่ดี
+   *
+   * เอกสารที่เปิดด้วย window.open("") สืบทอด CSP ของหน้าแม่ -- ห้ามมี <script>
+   * หรือ on* attribute ปุ่มพิมพ์จึงผูก event จากหน้าแม่
+   */
+  function printEstimateSheets() {
+    const sheets = estimateSheetsToPrint();
+
+    if (!sheets.length) {
+      showError(estimateView.error, "ยังไม่มีงานย่อยให้พิมพ์");
+      return;
+    }
+
+    const win = window.open("", "_blank");
+    if (!win) return;
+
+    const wbs = escapeForPrint((estimateRecord && estimateRecord.wbs) || "-");
+    const printedAt = new Date().toLocaleString("th-TH", {
+      day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit"
+    });
+
+    // เว้นบรรทัดว่างไว้ให้เขียนเพิ่มด้วยมือ เหมือนฟอร์มกระดาษที่ใช้กันอยู่
+    // 22 บรรทัดกินพื้นที่ราว 193 มม. บนกระดาษ A4 (สูง 277 มม. เมื่อหักขอบแล้ว)
+    // -- เต็มหน้าพอที่จะเขียนเพิ่มได้จริง โดยยังไม่ดันอะไรไปหน้าที่สอง
+    const MIN_ROWS = 22;
+
+    const sheetHtml = sheets.map(({ section, job, jobIndex }) => {
+      const items = (job.items || []).filter(i => i.description);
+      const rows = [];
+
+      items.forEach((item, i) => {
+        rows.push(`<tr>
+          <td class="c">${i + 1}</td>
+          <td>${escapeForPrint(item.description)}</td>
+          <td class="mono c">${escapeForPrint(item.keyCode || "")}</td>
+          <td class="c">${escapeForPrint(item.in || "")}</td>
+          <td class="c">${escapeForPrint(item.rm || "")}</td>
+          <td class="c">${escapeForPrint(item.rp || "")}</td>
+        </tr>`);
+      });
+
+      for (let i = items.length; i < MIN_ROWS; i++) {
+        rows.push(`<tr><td class="c">${i + 1}</td><td></td><td></td><td></td><td></td><td></td></tr>`);
+      }
+
+      const group = escapeForPrint(job.name || job.group || `งานย่อยที่ ${jobIndex + 1}`);
+
+      return `<section class="sheet">
+        <div class="head">
+          <div class="wbs"><span>WBS</span><strong>${wbs}</strong></div>
+          <table class="meta">
+            <tr>
+              <th>Section :</th><td>${escapeForPrint(section || "-")}</td>
+              <th>การลงทุน/ทรัพย์สิน :</th><td class="c">${escapeForPrint(job.investment || "-")}</td>
+            </tr>
+            <tr><th>Group :</th><td colspan="3">${group}</td></tr>
+          </table>
+        </div>
+
+        <table class="items">
+          <thead>
+            <tr>
+              <th class="w-no">No.</th>
+              <th>Description</th>
+              <th class="w-key">KeyCode</th>
+              <th class="w-qty">IN.</th>
+              <th class="w-qty">RM.</th>
+              <th class="w-qty">RP.</th>
+            </tr>
+          </thead>
+          <tbody>${rows.join("")}</tbody>
+        </table>
+
+        <div class="foot">
+          <span>รวม ${items.length} รายการ</span>
+          <span>วันที่พิมพ์: ${escapeForPrint(printedAt)}</span>
+        </div>
+      </section>`;
+    }).join("");
+
+    win.document.write(`<!DOCTYPE html><html lang="th"><head><meta charset="utf-8">
+<title>ใบประมาณการ ${wbs}</title>
+<style>
+  @page { size: A4 portrait; margin: 10mm; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: "Sarabun", "Segoe UI", sans-serif; color: #221530; font-size: 10.5pt; }
+
+  /* หนึ่งงานย่อย = หนึ่งแผ่น ใบถัดไปขึ้นหน้าใหม่เสมอ */
+  .sheet { page-break-after: always; break-after: page; }
+  .sheet:last-child { page-break-after: auto; break-after: auto; }
+
+  .head { display: flex; align-items: stretch; gap: 5mm; margin-bottom: 4mm; }
+  .wbs {
+    flex: none; min-width: 62mm; border: 2px solid #57298c; border-radius: 5px;
+    padding: 3mm 5mm; text-align: center;
+  }
+  .wbs span { display: block; font-size: 9pt; color: #6b5c82; }
+  .wbs strong {
+    display: block; margin-top: 1mm; font-size: 17pt; font-weight: 700;
+    letter-spacing: .5px; color: #38185c;
+  }
+  .meta { flex: 1; border-collapse: collapse; }
+  .meta th, .meta td { border: 1px solid #cdb9ea; padding: 2mm 3mm; font-size: 10pt; }
+  .meta th { background: #f6f1fb; text-align: left; font-weight: 600; color: #38185c; white-space: nowrap; }
+
+  .items { width: 100%; border-collapse: collapse; }
+  .items th, .items td { border: 1px solid #cdb9ea; padding: 1.8mm 2.5mm; }
+  .items th { background: #f6f1fb; font-size: 9.5pt; color: #38185c; }
+  /* หัวตารางซ้ำทุกหน้า เผื่อรายการยาวเกินหนึ่งแผ่น */
+  .items thead { display: table-header-group; }
+  .items tr { page-break-inside: avoid; break-inside: avoid; }
+  .items td { height: 7mm; }
+  .w-no { width: 10mm; }
+  .w-key { width: 26mm; }
+  .w-qty { width: 14mm; }
+  .c { text-align: center; }
+  .mono { font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 9pt; }
+
+  .foot {
+    display: flex; justify-content: space-between; gap: 8mm;
+    margin-top: 3mm; font-size: 9.5pt; color: #6b5c82;
+  }
+
+  .actions { text-align: center; margin: 6mm 0; }
+  .actions button { font: inherit; padding: 8px 18px; cursor: pointer; }
+  @media print { .actions { display: none; } }
+</style></head><body>
+${sheetHtml}
+<div class="actions"><button type="button" id="printBtn">พิมพ์ / บันทึกเป็น PDF</button></div>
+</body></html>`);
+    win.document.close();
+
+    win.document.getElementById("printBtn").addEventListener("click", () => win.print());
+    win.print();
+  }
+
+  document.getElementById("estimatePrintBtn").addEventListener("click", () => {
+    hideError(estimateView.error);
+    printEstimateSheets();
   });
 
   document.getElementById("estimateSaveBtn").addEventListener("click", async (e) => {
