@@ -2097,11 +2097,19 @@
    * อีกโมดูลหนึ่งโดยไม่ได้ตั้งใจ และต้องเดินกลับมาเองทุกครั้งที่แก้เสร็จหนึ่งใบ
    */
   function leaveRequestForm() {
+    // ฟอร์มขอขยายเขตฯ ถูกย้ายไปอยู่ในโมดูลของมัน -- ต้องปิดหน้ารายละเอียดก่อน
+    extendDetailMode.hidden = true;
+    extendWorkListMode.hidden = false;
+
     if (formReturnTo === "extendWork") {
       // keepView: กลับมาที่ชิปและคำค้นเดิม ไม่ใช่รีเซ็ตเป็น "ทั้งหมด" ทุกครั้ง
       openExtendWorkView({ keepView: true });
       return;
     }
+
+    // มาจากหน้างานรับคำร้อง -- ต้องพากลับไปที่หน้านั้นด้วย ไม่ใช่แค่วาดรายการใหม่
+    // (ฟอร์มขอขยายเขตฯ ถูกย้ายไปแสดงในอีกโมดูลหนึ่ง หน้าจอจึงไม่ได้อยู่ที่เดิมแล้ว)
+    showView("requests");
     renderRequestsList();
   }
 
@@ -2602,7 +2610,7 @@
 
     const storedStatus = record ? record.jobStatus : "";
     const showPlan = Boolean(record) && (storedStatus === "รอเขียนผัง" || Boolean(record.planFile));
-    extPlanSection.hidden = !showPlan;
+    extendStage.plan = showPlan;
 
     if (showPlan) renderPlanCurrent(record);
 
@@ -2610,7 +2618,7 @@
     // ใบที่กรอกไว้ต้องเปิดกลับมาดู/แก้ได้เสมอ ไม่ใช่หายไปเมื่อสถานะเดินต่อ
     const showEstimate = Boolean(record)
       && (storedStatus === "รอประมาณการ" || Boolean(record.estimate));
-    extEstimateSection.hidden = !showEstimate;
+    extendStage.estimate = showEstimate;
     if (showEstimate) extEstimateSummary.textContent = estimateSummaryText(record);
 
     // ภาพหน้างานผูกกับ "มีเลข WBS แล้ว" ไม่ใช่สถานะใดสถานะหนึ่ง -- การแนบแผนผัง
@@ -2618,7 +2626,7 @@
     // ผังเสร็จ ทั้งที่ยังไม่ได้ถ่ายรูปหน้างานเลย
     const showPhotos = Boolean(record)
       && (Boolean(record.wbs) || Boolean(record.sitePhoto) || Boolean(record.routePhoto));
-    extPhotoSection.hidden = !showPhotos;
+    extendStage.photo = showPhotos;
     if (showPhotos) renderExtendPhotos(record);
 
     extApprovalField.hidden = !(status === "อนุมัติและแจ้งค่าใช้จ่ายแล้ว"
@@ -3666,6 +3674,22 @@
       extendFormRecord = record;
       fillExtendForm(record);
       syncExtendStageFields(record);
+    }
+
+    // คำร้องขอขยายเขตฯ ทำงานจบในโมดูลของตัวเอง ไม่ใช่ในหน้างานรับคำร้อง --
+    // ย้ายฟอร์มไปไว้ในหน้ารายละเอียดของโมดูลนั้น แล้วสลับหน้าไปที่นั่น
+    if (isSupported && isExtend) {
+      mountExtendDetail();
+      extendDetailTitle.textContent = record ? "รายละเอียดคำร้อง" : "เพิ่มคำร้องขอขยายเขตฯ";
+      extendDetailSubtitle.textContent = record
+        ? [record.requestNumber, record.customerName, record.wbs].filter(Boolean).join(" · ")
+        : "กรอกรายละเอียดคำร้องใหม่";
+      extendWorkListMode.hidden = true;
+      extendDetailMode.hidden = false;
+      showView("extendWork");
+      showExtendPane("form");
+    } else {
+      unmountExtendDetail();
     }
 
     // Audit strip only makes sense for a record that already exists -- and
@@ -4813,9 +4837,7 @@
 
     if (estimateDirty && !confirm("ยังไม่ได้บันทึกประมาณการ ออกจากหน้านี้เลยหรือไม่?")) return;
 
-    const record = estimateRecord;
-    showView("requests");
-    openRequestForm("extend", record, { returnTo: "extendWork" });
+    openRequestForm("extend", estimateRecord, { returnTo: "extendWork" });
   });
 
   document.getElementById("estimateSaveBtn").addEventListener("click", async (e) => {
@@ -4878,6 +4900,14 @@
   // "งานรับคำร้อง" แล้วกรองเอาเฉพาะ type === "extend" คำร้องที่บันทึกจากหน้าโน้น
   // จึงมาโผล่ที่นี่ทันทีโดยไม่ต้องมีขั้นตอน "ส่งต่อ" ใด ๆ ให้พลาดได้
   const extendWorkList = document.getElementById("extendWorkList");
+  const extendWorkListMode = document.getElementById("extendWorkListMode");
+  const extendDetailMode = document.getElementById("extendDetailMode");
+  const extendPaneForm = document.getElementById("extendPaneForm");
+  const extendPaneMeta = document.getElementById("extendPaneMeta");
+  const extendDetailTitle = document.getElementById("extendDetailTitle");
+  const extendDetailSubtitle = document.getElementById("extendDetailSubtitle");
+  const extendPaneItems = document.querySelectorAll("[data-extend-pane]");
+  const extendPaneNotice = document.getElementById("extendPaneNotice");
   const extendWorkChips = document.getElementById("extendWorkChips");
   const extendWorkTitle = document.getElementById("extendWorkTitle");
   const extendWorkCount = document.getElementById("extendWorkCount");
@@ -4893,11 +4923,17 @@
   const EXTEND_FILTER_MINE = "mine";
   // มุมมองพิเศษ: ไม่ได้กรองเฉย ๆ แต่จัดเรียงใหม่เป็นคิวของแต่ละคน
   const EXTEND_FILTER_QUEUE = "queue";
+  // มุมมองของหัวหน้า: งานในมือของแต่ละคน กดชื่อเดียวเห็นทั้งกอง
+  const EXTEND_FILTER_PEOPLE = "people";
   const EXTEND_SURVEY_STATUS = "รอสำรวจ";
 
   let extendFilter = EXTEND_FILTER_ALL;
   let extendSearchQuery = "";
   let extendSelection = new Set();
+  // สถานะที่ถูกย่อไว้ในมุมมองแบบจัดกลุ่ม -- จำระหว่างเปิดเว็บ ไม่ได้เก็บถาวร
+  let extendCollapsed = new Set();
+  // หน้ารายคนของหัวหน้า: กำลังดูงานของใครอยู่ (ว่าง = ยังอยู่หน้ารายชื่อ)
+  let extendPersonEmail = "";
 
   // รายชื่อเจ้าหน้าที่ -- ดึงมาเฉพาะตอนที่หัวหน้างานเปิดหน้านี้ (หรือผู้ดูแลระบบ
   // เปิดหน้าตั้งสิทธิ์) พนักงานทั่วไปไม่เคยได้รับรายชื่อนี้เลย เพราะไม่มีอะไรใน
@@ -4915,6 +4951,61 @@
     return Array.from(extJobStatus.options).map(o => o.value).filter(Boolean);
   }
 
+  /**
+   * ย้ายฟอร์มคำร้องขอขยายเขตฯ กับแผงประวัติเข้า/ออกจากหน้ารายละเอียดของโมดูลนี้
+   *
+   * ย้ายโหนดจริงด้วย appendChild ไม่ได้ก๊อบมาร์กอัปมาไว้สองที่ -- ฟอร์มยาวร่วม
+   * สองร้อยบรรทัดและมี event ผูกไว้เต็มไปหมด สองชุดคือสองชุดที่ต้องแก้ให้ตรงกัน
+   * ตลอดไป ส่วนการย้ายโหนดพา event กับค่าที่กรอกไว้ไปด้วยทั้งหมด
+   *
+   * บ้านเดิมของทั้งสองอันอยู่ในหน้างานรับคำร้อง (ฟอร์มขอใช้ไฟฟ้าใช้แผงประวัติ
+   * ตัวเดียวกัน) จึงต้องย้ายกลับทุกครั้งที่เปิดฟอร์มประเภทอื่น
+   */
+  const extendFormHome = extendForm.parentElement;
+  const requestFormMetaHome = requestFormMeta.parentElement;
+
+  function mountExtendDetail() {
+    if (extendForm.parentElement !== extendPaneForm) extendPaneForm.appendChild(extendForm);
+    if (requestFormMeta.parentElement !== extendPaneMeta) extendPaneMeta.appendChild(requestFormMeta);
+  }
+
+  function unmountExtendDetail() {
+    if (extendForm.parentElement !== extendFormHome) extendFormHome.appendChild(extendForm);
+    if (requestFormMeta.parentElement !== requestFormMetaHome) {
+      requestFormMetaHome.appendChild(requestFormMeta);
+    }
+  }
+
+  /** แถบซ้ายของหน้ารายละเอียด -- แต่ละปุ่มคือขั้นตอนหนึ่งของงาน */
+  function showExtendPane(name) {
+    extendPaneItems.forEach(item => {
+      item.classList.toggle("active", item.dataset.extendPane === name);
+    });
+
+    extendPaneForm.hidden = name !== "form";
+    extendPaneMeta.hidden = name !== "form";
+    extPlanSection.hidden = name !== "plan" || !extendStage.plan;
+    extPhotoSection.hidden = name !== "photo" || !extendStage.photo;
+    extEstimateSection.hidden = name !== "estimate" || !extendStage.estimate;
+
+    // ขั้นที่ยังไม่ถึง ให้บอกตรง ๆ ว่าทำไมยังว่าง แทนที่จะโชว์หน้าเปล่า
+    extendPaneNotice.hidden = name === "form" || extendStage[name];
+    if (!extendPaneNotice.hidden) {
+      extendPaneNotice.textContent = EXTEND_PANE_NOTICE[name] || "";
+    }
+
+    window.scrollTo(0, 0);
+  }
+
+  /** ขั้นไหนพร้อมใช้แล้วบ้าง -- คำนวณจากคำร้องที่บันทึกไว้จริง ที่เดียว */
+  const extendStage = { plan: false, photo: false, estimate: false };
+
+  const EXTEND_PANE_NOTICE = {
+    plan: "แนบแผนผังได้เมื่อสถานะเป็น “รอเขียนผัง” (กรอกเลข WBS แล้วบันทึก สถานะจะเปลี่ยนให้เอง)",
+    photo: "แนบภาพหน้างานได้เมื่อคำร้องมีเลข WBS แล้ว",
+    estimate: "ทำประมาณการได้เมื่อสถานะเป็น “รอประมาณการ” (แนบแผนผังแล้ว สถานะจะเปลี่ยนให้เอง)"
+  };
+
   function extendJobs() {
     return getRequests().filter(r => r.type === "extend");
   }
@@ -4928,6 +5019,11 @@
   function extendFilterMatches(record) {
     if (extendFilter === EXTEND_FILTER_ALL) return true;
     if (extendFilter === EXTEND_FILTER_QUEUE) return record.jobStatus === EXTEND_SURVEY_STATUS;
+    if (extendFilter === EXTEND_FILTER_PEOPLE) {
+      // ยังไม่ได้เลือกคน = ยังอยู่หน้ารายชื่อ ให้ผ่านทั้งหมดไปนับยอดรายคน
+      if (!extendPersonEmail) return true;
+      return String(record.assigneeEmail || "").toLowerCase() === extendPersonEmail;
+    }
     if (extendFilter === EXTEND_FILTER_MINE) {
       const email = String(getSession()?.email || "").toLowerCase();
       return Boolean(email) && String(record.assigneeEmail || "").toLowerCase() === email;
@@ -4939,6 +5035,12 @@
     if (extendFilter === EXTEND_FILTER_ALL) return "งานทั้งหมด";
     if (extendFilter === EXTEND_FILTER_MINE) return "งานของฉัน";
     if (extendFilter === EXTEND_FILTER_QUEUE) return "คิวรอสำรวจ";
+    if (extendFilter === EXTEND_FILTER_PEOPLE) {
+      if (!extendPersonEmail) return "งานในมือของแต่ละคน";
+      const owner = extendJobs().find(r =>
+        String(r.assigneeEmail || "").toLowerCase() === extendPersonEmail);
+      return `งานของ ${owner && owner.assignee ? owner.assignee : extendPersonEmail}`;
+    }
     return extendFilter;
   }
 
@@ -5035,10 +5137,8 @@
           body.append(title, meta);
           item.append(pos, body);
 
-          item.addEventListener("click", () => {
-            showView("requests");
-            openRequestForm("extend", record, { returnTo: "extendWork" });
-          });
+          item.addEventListener("click", () =>
+            openRequestForm("extend", record, { returnTo: "extendWork" }));
 
           section.appendChild(item);
         });
@@ -5068,7 +5168,10 @@
         label: "คิวรอสำรวจ",
         count: jobs.filter(r => r.jobStatus === EXTEND_SURVEY_STATUS).length
       }
-    ].concat(extendStatuses().map(status => ({
+    ].concat(canAssignWork()
+      ? [{ key: EXTEND_FILTER_PEOPLE, label: "งานในมือแต่ละคน", count: jobs.length }]
+      : []
+    ).concat(extendStatuses().map(status => ({
       key: status,
       label: status,
       count: jobs.filter(r => r.jobStatus === status).length
@@ -5093,6 +5196,8 @@
       btn.append(label, count);
       btn.addEventListener("click", () => {
         extendFilter = chip.key;
+        // กดชิปใหม่ = ออกจากหน้างานของคนใดคนหนึ่ง กลับไปตั้งต้นของมุมมองนั้น
+        extendPersonEmail = "";
         // เลือกไว้ในมุมมองก่อนหน้าแล้วเปลี่ยนมุมมอง = ไม่รู้แล้วว่ากำลังจะจ่าย
         // งานใบไหนบ้าง ล้างทิ้งดีกว่าปล่อยให้เลือกค้างข้ามหน้าจอ
         extendSelection.clear();
@@ -5100,6 +5205,155 @@
       });
 
       extendWorkChips.appendChild(btn);
+    });
+  }
+
+  /**
+   * จัดกลุ่มงานตามสถานะ ย่อ/ขยายได้ พร้อมจำนวนในแต่ละกลุ่ม
+   *
+   * เรียงกลุ่มตามลำดับขั้นตอนงาน (ลำดับเดียวกับดรอปดาวน์สถานะ) ไม่ใช่ตามจำนวน --
+   * คนอ่านกำลังไล่ว่างานอยู่ขั้นไหนแล้ว ลำดับที่สลับไปมาตามจำนวนทำให้หาไม่เจอ
+   * กลุ่มที่ไม่มีงานเลยไม่ต้องวาด (ต่างจากชิปด้านบนที่ต้องอยู่ครบเพื่อให้กดได้)
+   */
+  function renderJobsByStatus(jobs) {
+    extendWorkList.innerHTML = "";
+
+    if (!jobs.length) {
+      const empty = document.createElement("div");
+      empty.className = "request-empty";
+      empty.textContent = extendSearchQuery ? "ไม่พบงานที่ค้นหา" : "ยังไม่มีงานในมุมมองนี้";
+      extendWorkList.appendChild(empty);
+      return;
+    }
+
+    const order = extendStatuses();
+    // สถานะแปลก ๆ ที่ไม่ได้อยู่ในดรอปดาวน์ (ข้อมูลเก่า/พิมพ์มาเอง) ต่อท้ายไว้
+    // ดีกว่าปล่อยให้หายไปจากหน้าจอเงียบ ๆ
+    const extras = jobs.map(j => j.jobStatus).filter(st => st && order.indexOf(st) === -1);
+    const statuses = order.concat(Array.from(new Set(extras)));
+
+    statuses.forEach(status => {
+      const group = jobs.filter(j => j.jobStatus === status);
+      if (!group.length) return;
+
+      const section = document.createElement("section");
+      section.className = "status-group";
+
+      const head = document.createElement("button");
+      head.type = "button";
+      head.className = "status-group-head";
+
+      const caret = document.createElement("span");
+      caret.className = "status-group-caret";
+
+      const badge = document.createElement("span");
+      badge.className = `request-badge request-badge-status tone-${JOB_STATUS_TONE[status] || "info"}`;
+      badge.textContent = status;
+
+      const count = document.createElement("span");
+      count.className = "status-group-count";
+      count.textContent = `${group.length} งาน`;
+
+      head.append(caret, badge, count);
+
+      const body = document.createElement("div");
+      body.className = "status-group-body";
+      group
+        .sort((a, b) => b.createdAt - a.createdAt)
+        .forEach(record => body.appendChild(renderExtendCard(record)));
+
+      const collapsed = extendCollapsed.has(status);
+      section.classList.toggle("is-collapsed", collapsed);
+      body.hidden = collapsed;
+
+      head.addEventListener("click", () => {
+        const nowCollapsed = !extendCollapsed.has(status);
+        if (nowCollapsed) extendCollapsed.add(status);
+        else extendCollapsed.delete(status);
+        section.classList.toggle("is-collapsed", nowCollapsed);
+        body.hidden = nowCollapsed;
+      });
+
+      section.append(head, body);
+      extendWorkList.appendChild(section);
+    });
+  }
+
+  /**
+   * หน้ารายชื่อของหัวหน้า -- กดชื่อเดียวเห็นงานทั้งกองของคนนั้น
+   *
+   * นับจากงานที่มีอยู่จริง ไม่ได้ไล่จากรายชื่อเจ้าหน้าที่ทั้งหมด: หน้านี้ตอบคำถาม
+   * "ตอนนี้งานอยู่ในมือใครบ้าง" คนที่ไม่มีงานค้างจึงไม่ต้องมีอยู่ในรายการ
+   */
+  function renderPeopleList(jobs) {
+    extendWorkList.innerHTML = "";
+
+    const byPerson = new Map();
+    jobs.forEach(record => {
+      const key = String(record.assigneeEmail || "").toLowerCase();
+      if (!byPerson.has(key)) {
+        byPerson.set(key, { key, name: record.assignee || "", jobs: [] });
+      }
+      byPerson.get(key).jobs.push(record);
+    });
+
+    const myEmail = String(getSession()?.email || "").toLowerCase();
+    const people = Array.from(byPerson.values()).sort((a, b) => {
+      if (!a.key) return 1;
+      if (!b.key) return -1;
+      return b.jobs.length - a.jobs.length;
+    });
+
+    if (!people.length) {
+      const empty = document.createElement("div");
+      empty.className = "request-empty";
+      empty.textContent = "ยังไม่มีงานในระบบ";
+      extendWorkList.appendChild(empty);
+      return;
+    }
+
+    people.forEach(person => {
+      const card = document.createElement("button");
+      card.type = "button";
+      card.className = "person-card";
+      if (person.key && person.key === myEmail) card.classList.add("is-mine");
+
+      const top = document.createElement("span");
+      top.className = "person-card-top";
+
+      const name = document.createElement("span");
+      name.className = "person-card-name";
+      name.textContent = person.key
+        ? (person.name || person.key) + (person.key === myEmail ? " (ฉัน)" : "")
+        : "ยังไม่ได้จ่ายงาน";
+
+      const total = document.createElement("span");
+      total.className = "person-card-total";
+      total.textContent = `${person.jobs.length} งาน`;
+
+      top.append(name, total);
+
+      // แถบสถานะย่อ ๆ ให้เห็นว่ากองงานของคนนี้ค้างอยู่ขั้นไหนบ้าง โดยไม่ต้องกดเข้าไป
+      const chips = document.createElement("span");
+      chips.className = "person-card-chips";
+      const counts = new Map();
+      person.jobs.forEach(j => counts.set(j.jobStatus, (counts.get(j.jobStatus) || 0) + 1));
+      extendStatuses().forEach(status => {
+        if (!counts.has(status)) return;
+        const chip = document.createElement("span");
+        chip.className = `request-badge request-badge-status tone-${JOB_STATUS_TONE[status] || "info"}`;
+        chip.textContent = `${status} ${counts.get(status)}`;
+        chips.appendChild(chip);
+      });
+
+      card.append(top, chips);
+      card.addEventListener("click", () => {
+        extendPersonEmail = person.key;
+        extendSelection.clear();
+        renderExtendWork();
+      });
+
+      extendWorkList.appendChild(card);
     });
   }
 
@@ -5163,10 +5417,7 @@
 
     // เปิดคำร้องใบนั้นในฟอร์มเดิม (ฟอร์มเดียวกับหน้ารับคำร้อง) เพื่ออัปเดตสถานะ
     // และคอมเมนต์ -- จำไว้ด้วยว่ามาจากหน้านี้ ปุ่มย้อนกลับจะได้พากลับมาถูกที่
-    card.addEventListener("click", () => {
-      showView("requests");
-      openRequestForm("extend", record, { returnTo: "extendWork" });
-    });
+    card.addEventListener("click", () => openRequestForm("extend", record, { returnTo: "extendWork" }));
 
     const actions = [];
 
@@ -5253,6 +5504,19 @@
       return;
     }
 
+    if (extendFilter === EXTEND_FILTER_PEOPLE && !extendPersonEmail) {
+      renderPeopleList(filtered);
+      renderAssignBar();
+      return;
+    }
+
+    // งานของฉัน และงานรายคนของหัวหน้า -- จัดกลุ่มตามสถานะ ย่อ/ขยายได้
+    if (extendFilter === EXTEND_FILTER_MINE || extendFilter === EXTEND_FILTER_PEOPLE) {
+      renderJobsByStatus(filtered);
+      renderAssignBar();
+      return;
+    }
+
     extendWorkList.innerHTML = "";
 
     if (!filtered.length) {
@@ -5299,9 +5563,12 @@
       extendWorkSearch.value = "";
     }
     extendSelection.clear();
+    extendPersonEmail = "";
     hideError(extendAssignError);
     extendAssignSuccess.hidden = true;
 
+    extendDetailMode.hidden = true;
+    extendWorkListMode.hidden = false;
     showView("extendWork");
     renderExtendWork();
 
@@ -5321,7 +5588,20 @@
     renderExtendWork();
   });
 
-  document.getElementById("extendWorkBackBtn").addEventListener("click", enterApp);
+  document.getElementById("extendWorkBackBtn").addEventListener("click", () => {
+    // ถอยทีละขั้น: จากหน้ารายละเอียดกลับไปที่รายการงานก่อน แล้วค่อยออกหน้าแรก
+    if (!extendDetailMode.hidden) {
+      leaveRequestForm();
+      return;
+    }
+    enterApp();
+  });
+
+  document.getElementById("extendDetailBackBtn").addEventListener("click", leaveRequestForm);
+
+  extendPaneItems.forEach(item => {
+    item.addEventListener("click", () => showExtendPane(item.dataset.extendPane));
+  });
 
   document.getElementById("extendAssignClearBtn").addEventListener("click", () => {
     extendSelection.clear();

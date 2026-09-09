@@ -25,7 +25,7 @@
 <title>CS Connect</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=Sarabun:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=20260909g">
+<link rel="stylesheet" href="style.css?v=20260909h">
 </head>
 <body>
 
@@ -798,65 +798,6 @@
             <p class="field-hint">บันทึกพร้อมเลข WBS แล้ว สถานะจะเปลี่ยนเป็น “รอเขียนผัง” ให้อัตโนมัติ</p>
           </div>
 
-          <div class="field">
-            <label for="extNote">หมายเหตุ</label>
-            <textarea id="extNote" rows="2" placeholder="หมายเหตุเพิ่มเติม (ถ้ามี)"></textarea>
-          </div>
-
-          <!-- แนบแผนผัง -- อยู่ในฟอร์มแต่ไม่ได้ถูกส่งไปพร้อม submit ของฟอร์ม:
-               ไฟล์ขึ้น Drive ผ่านคำสั่งของตัวเอง (savePlan) แล้วเดินสถานะให้เอง
-               จึงมีปุ่มของตัวเองแยกจากปุ่มบันทึกคำร้อง -->
-          <div class="field-section" id="extPlanSection" hidden>
-            <p class="field-section-label">แผนผัง</p>
-
-            <p id="extPlanCurrent" class="field-hint"></p>
-
-            <div class="field">
-              <label for="extPlanFile">ไฟล์แผนผัง (PDF หรือรูปภาพ ไม่เกิน 10 MB)</label>
-              <input type="file" id="extPlanFile" accept="application/pdf,image/*">
-              <p class="field-hint">แนบแล้ว สถานะจะเปลี่ยนเป็น “รอประมาณการ” ให้อัตโนมัติ</p>
-            </div>
-
-            <div class="batch-toolbar">
-              <button type="button" id="extPlanUploadBtn" class="btn btn-primary">อัปโหลดแผนผัง</button>
-            </div>
-
-            <p id="extPlanError" class="form-error" hidden></p>
-            <p id="extPlanSuccess" class="form-success" hidden></p>
-          </div>
-
-          <!-- ภาพหน้างาน -- เปิดตั้งแต่มีเลข WBS แล้วเป็นต้นไป ไม่ผูกกับสถานะใด
-               สถานะหนึ่ง เพราะการแนบผังจะเดินสถานะต่อทันที ถ้าผูกไว้กับ
-               "รอเขียนผัง" ช่องนี้จะหายไปทันทีที่แนบผังเสร็จ -->
-          <div class="field-section" id="extPhotoSection" hidden>
-            <p class="field-section-label">ภาพหน้างาน</p>
-
-            <div class="photo-grid">
-              <div class="photo-slot">
-                <p class="photo-slot-label">1. ภาพสถานที่ขอขยายเขตฯ</p>
-                <img id="extSitePhotoPreview" alt="ภาพสถานที่ขอขยายเขตฯ" hidden>
-                <p id="extSitePhotoEmpty" class="field-hint">ยังไม่ได้แนบภาพ</p>
-                <input type="file" id="extSitePhotoFile" accept="image/*">
-                <button type="button" id="extSitePhotoBtn" class="btn btn-ghost">อัปโหลดภาพสถานที่</button>
-              </div>
-
-              <div class="photo-slot">
-                <p class="photo-slot-label">2. ภาพเส้นทางขยายเขตฯ</p>
-                <img id="extRoutePhotoPreview" alt="ภาพเส้นทางขยายเขตฯ" hidden>
-                <p id="extRoutePhotoEmpty" class="field-hint">ยังไม่ได้แนบภาพ</p>
-                <input type="file" id="extRoutePhotoFile" accept="image/*">
-                <button type="button" id="extRoutePhotoBtn" class="btn btn-ghost">อัปโหลดภาพเส้นทาง</button>
-              </div>
-            </div>
-
-            <div class="batch-toolbar">
-              <button type="button" id="extPhotoPrintBtn" class="btn btn-primary">พิมพ์ใบภาพหน้างาน (A4)</button>
-            </div>
-
-            <p id="extPhotoError" class="form-error" hidden></p>
-            <p id="extPhotoSuccess" class="form-success" hidden></p>
-          </div>
-
           <!-- ขึ้นเมื่อสถานะเป็น "อนุมัติและแจ้งค่าใช้จ่ายแล้ว" หรือเคยกรอกไว้แล้ว -->
           <div class="field-row" id="extApprovalField" hidden>
             <div class="field">
@@ -868,16 +809,18 @@
               <input type="date" id="extApprovalDate">
             </div>
           </div>
-          <!-- ประมาณการเป็นหน้าของตัวเอง ไม่ได้ยัดไว้ในฟอร์มนี้ -- ใบจริงมีหลายชุด
-               (แยกตามแผนก และแต่ละแผนกมีงานย่อยอีกหลายงาน) ซึ่งกว้างเกินกว่าจะ
-               อยู่ในคอลัมน์ฟอร์มได้ ที่นี่เหลือแค่ทางเข้ากับสรุปย่อ -->
-          <div class="field-section" id="extEstimateSection" hidden>
-            <p class="field-section-label">ประมาณการ</p>
-            <p id="extEstimateSummary" class="field-hint"></p>
-            <div class="batch-toolbar">
-              <button type="button" id="extEstimateOpenBtn" class="btn btn-primary">เปิดหน้าประมาณการ</button>
-            </div>
+
+          <div class="field">
+            <label for="extNote">หมายเหตุ</label>
+            <textarea id="extNote" rows="2" placeholder="หมายเหตุเพิ่มเติม (ถ้ามี)"></textarea>
           </div>
+
+
+
+
+
+
+
 
           <p id="extendFormError" class="form-error" hidden></p>
           <button type="submit" id="extendFormSubmitBtn" class="btn btn-primary btn-block">บันทึกคำร้อง</button>
@@ -938,6 +881,7 @@
     </div>
   </header>
 
+  <div id="extendWorkListMode">
   <main class="work-main">
     <div class="requests-content-heading">
       <div class="requests-content-heading-row">
@@ -975,6 +919,121 @@
 
     <div id="extendWorkList" class="request-list"></div>
   </main>
+  </div>
+
+  <!-- หน้ารายละเอียดของงานหนึ่งใบ -- อยู่ในโมดูลนี้ ไม่กระโดดไปหน้างานรับคำร้อง
+       แถบซ้ายคือขั้นตอนของงาน: รายละเอียด / แผนผัง / ภาพหน้างาน / ประมาณการ
+       #extendPaneForm กับ #extendPaneMeta เป็น "ที่ว่าง" ที่ app.js ย้ายฟอร์ม
+       คำร้องกับแผงประวัติเข้ามาวางตอนเปิดงาน (ย้ายโหนดจริง ไม่ได้ก๊อบมาร์กอัป
+       ซ้ำ ฟอร์มจึงมีชุดเดียวในทั้งเว็บ) -->
+  <div id="extendDetailMode" hidden>
+    <div class="requests-layout">
+      <nav class="requests-sidebar">
+        <button type="button" class="requests-nav-item active" data-extend-pane="form">
+          <svg viewBox="0 0 24 24" fill="none"><path d="M7 3h8l4 4v14H7V3Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M15 3v4h4M9 12h6M9 16h6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+          รายละเอียดคำร้อง
+        </button>
+        <button type="button" class="requests-nav-item" data-extend-pane="plan">
+          <svg viewBox="0 0 24 24" fill="none"><path d="M4 5h16v14H4z" stroke="currentColor" stroke-width="1.6"/><path d="M4 10h16M9 5v14" stroke="currentColor" stroke-width="1.6"/></svg>
+          แนบแผนผัง
+        </button>
+        <button type="button" class="requests-nav-item" data-extend-pane="photo">
+          <svg viewBox="0 0 24 24" fill="none"><path d="M3 7h4l2-2h6l2 2h4v12H3z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><circle cx="12" cy="13" r="3.4" stroke="currentColor" stroke-width="1.6"/></svg>
+          ภาพหน้างาน
+        </button>
+        <button type="button" class="requests-nav-item" data-extend-pane="estimate">
+          <svg viewBox="0 0 24 24" fill="none"><path d="M5 3h14v18H5z" stroke="currentColor" stroke-width="1.6"/><path d="M8 7h8M8 11h8M8 15h5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+          ประมาณการ
+        </button>
+      </nav>
+
+      <main class="requests-content">
+        <div class="requests-content-heading">
+          <button type="button" id="extendDetailBackBtn" class="btn btn-ghost form-back-btn">
+            ← กลับไปรายการงาน
+          </button>
+          <h2 id="extendDetailTitle">รายละเอียดคำร้อง</h2>
+          <p id="extendDetailSubtitle" class="requests-count"></p>
+        </div>
+
+        <div class="form-layout">
+          <div class="form-main">
+            <div id="extendPaneForm"></div>
+
+            <!-- ขั้นที่ยังไม่ถึง -- บอกเหตุผลแทนที่จะโชว์หน้าเปล่า -->
+            <p id="extendPaneNotice" class="placeholder-note" hidden></p>
+
+        <!-- แนบแผนผัง -- อยู่ในฟอร์มแต่ไม่ได้ถูกส่งไปพร้อม submit ของฟอร์ม:
+             ไฟล์ขึ้น Drive ผ่านคำสั่งของตัวเอง (savePlan) แล้วเดินสถานะให้เอง
+             จึงมีปุ่มของตัวเองแยกจากปุ่มบันทึกคำร้อง -->
+        <div class="field-section" id="extPlanSection" hidden>
+          <p class="field-section-label">แผนผัง</p>
+
+          <p id="extPlanCurrent" class="field-hint"></p>
+
+          <div class="field">
+            <label for="extPlanFile">ไฟล์แผนผัง (PDF หรือรูปภาพ ไม่เกิน 10 MB)</label>
+            <input type="file" id="extPlanFile" accept="application/pdf,image/*">
+            <p class="field-hint">แนบแล้ว สถานะจะเปลี่ยนเป็น “รอประมาณการ” ให้อัตโนมัติ</p>
+          </div>
+
+          <div class="batch-toolbar">
+            <button type="button" id="extPlanUploadBtn" class="btn btn-primary">อัปโหลดแผนผัง</button>
+          </div>
+
+          <p id="extPlanError" class="form-error" hidden></p>
+          <p id="extPlanSuccess" class="form-success" hidden></p>
+        </div>
+
+        <!-- ภาพหน้างาน -- เปิดตั้งแต่มีเลข WBS แล้วเป็นต้นไป ไม่ผูกกับสถานะใด
+             สถานะหนึ่ง เพราะการแนบผังจะเดินสถานะต่อทันที ถ้าผูกไว้กับ
+             "รอเขียนผัง" ช่องนี้จะหายไปทันทีที่แนบผังเสร็จ -->
+        <div class="field-section" id="extPhotoSection" hidden>
+          <p class="field-section-label">ภาพหน้างาน</p>
+
+          <div class="photo-grid">
+            <div class="photo-slot">
+              <p class="photo-slot-label">1. ภาพสถานที่ขอขยายเขตฯ</p>
+              <img id="extSitePhotoPreview" alt="ภาพสถานที่ขอขยายเขตฯ" hidden>
+              <p id="extSitePhotoEmpty" class="field-hint">ยังไม่ได้แนบภาพ</p>
+              <input type="file" id="extSitePhotoFile" accept="image/*">
+              <button type="button" id="extSitePhotoBtn" class="btn btn-ghost">อัปโหลดภาพสถานที่</button>
+            </div>
+
+            <div class="photo-slot">
+              <p class="photo-slot-label">2. ภาพเส้นทางขยายเขตฯ</p>
+              <img id="extRoutePhotoPreview" alt="ภาพเส้นทางขยายเขตฯ" hidden>
+              <p id="extRoutePhotoEmpty" class="field-hint">ยังไม่ได้แนบภาพ</p>
+              <input type="file" id="extRoutePhotoFile" accept="image/*">
+              <button type="button" id="extRoutePhotoBtn" class="btn btn-ghost">อัปโหลดภาพเส้นทาง</button>
+            </div>
+          </div>
+
+          <div class="batch-toolbar">
+            <button type="button" id="extPhotoPrintBtn" class="btn btn-primary">พิมพ์ใบภาพหน้างาน (A4)</button>
+          </div>
+
+          <p id="extPhotoError" class="form-error" hidden></p>
+          <p id="extPhotoSuccess" class="form-success" hidden></p>
+        </div>
+
+        <!-- ประมาณการเป็นหน้าของตัวเอง ไม่ได้ยัดไว้ในฟอร์มนี้ -- ใบจริงมีหลายชุด
+             (แยกตามแผนก และแต่ละแผนกมีงานย่อยอีกหลายงาน) ซึ่งกว้างเกินกว่าจะ
+             อยู่ในคอลัมน์ฟอร์มได้ ที่นี่เหลือแค่ทางเข้ากับสรุปย่อ -->
+        <div class="field-section" id="extEstimateSection" hidden>
+          <p class="field-section-label">ประมาณการ</p>
+          <p id="extEstimateSummary" class="field-hint"></p>
+          <div class="batch-toolbar">
+            <button type="button" id="extEstimateOpenBtn" class="btn btn-primary">เปิดหน้าประมาณการ</button>
+          </div>
+        </div>
+          </div>
+
+          <div id="extendPaneMeta"></div>
+        </div>
+      </main>
+    </div>
+  </div>
 </section>
 
 <!-- ===== ประมาณการ =====
@@ -1119,6 +1178,6 @@
      ที่หาสาเหตุยากมาก
      **ต้องเปลี่ยนเลขนี้ทุกครั้งที่แก้ app.js / style.css / track.js / qr.js**
      ไม่งั้นผู้ใช้บางคนจะยังได้ไฟล์เก่าไปอีกพักใหญ่ -->
-<script src="app.js?v=20260909g"></script>
+<script src="app.js?v=20260909h"></script>
 </body>
 </html>
