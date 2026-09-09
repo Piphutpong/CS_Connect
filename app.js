@@ -4489,7 +4489,6 @@
     estimateCatalog = data.items || [];
     estimateLists = data.lists || { section: [], group: [], investment: [] };
 
-    fillDatalist(document.getElementById("estSectionList"), estimateLists.section || []);
     fillDatalist(document.getElementById("estGroupList"), estimateLists.group || []);
     fillDatalist(document.getElementById("estInvestmentList"), estimateLists.investment || []);
     fillDatalist(document.getElementById("estDescList"), estimateCatalog.map(i => i.description));
@@ -4793,9 +4792,21 @@
     const input = document.getElementById("estNewDept");
     const section = input.value.trim();
     if (!section) {
-      showError(estimateView.error, "กรุณากรอกชื่อแผนกก่อน");
+      showError(estimateView.error, "กรุณาเลือกแผนกก่อน");
       return;
     }
+
+    // แผนกเดียวกันสองใบ = งานย่อยกระจายอยู่สองที่โดยไม่มีใครตั้งใจ ให้เปิดใบเดิม
+    // แทนที่จะสร้างซ้ำ
+    const existing = estimateModel.departments.findIndex(d => d.section === section);
+    if (existing !== -1) {
+      hideError(estimateView.error);
+      input.value = "";
+      estimateDeptIndex = existing;
+      showEstimateLevel(1);
+      return;
+    }
+
     hideError(estimateView.error);
     estimateModel.departments.push({ section, jobs: [] });
     input.value = "";
