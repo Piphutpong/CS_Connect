@@ -25,7 +25,7 @@
 <title>CS Connect</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=Sarabun:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=20260908o">
+<link rel="stylesheet" href="style.css?v=20260909a">
 </head>
 <body>
 
@@ -163,6 +163,32 @@
 
     <!-- ผู้ดูแลระบบเท่านั้น -- app.js เปิดให้เห็นตาม isAdmin
          การกันสิทธิ์จริงอยู่ที่ requireAdmin_ ฝั่ง Apps Script ไม่ใช่ที่ hidden นี้ -->
+    <div id="adminRolesSection" class="admin-panel" hidden>
+      <h2 class="admin-panel-title">สิทธิ์หัวหน้างาน</h2>
+      <p class="admin-panel-hint">
+        หัวหน้างานคือคนที่ <strong>จ่ายงานขอขยายเขตฯ ให้พนักงานในแผนกได้</strong>
+        ผู้ดูแลระบบเป็นหัวหน้างานอยู่แล้วเสมอ จึงไม่ต้องตั้งซ้ำ
+        คนที่เพิ่งได้รับสิทธิ์ต้อง<strong>ออกจากระบบแล้วเข้าใหม่</strong> ปุ่มจ่ายงานจึงจะขึ้น
+      </p>
+
+      <p id="adminRolesCurrent" class="invite-status"></p>
+
+      <div class="field">
+        <label for="adminRoleUser">เลือกบัญชี</label>
+        <select id="adminRoleUser">
+          <option value="">-- เลือกบัญชี --</option>
+        </select>
+      </div>
+
+      <div class="batch-toolbar">
+        <button type="button" id="adminRoleGrantBtn" class="btn btn-primary">ตั้งเป็นหัวหน้างาน</button>
+        <button type="button" id="adminRoleRevokeBtn" class="btn btn-ghost btn-danger-ghost">ยกเลิกสิทธิ์หัวหน้างาน</button>
+      </div>
+
+      <p id="adminRolesError" class="form-error" hidden></p>
+      <p id="adminRolesResult" class="form-success" hidden></p>
+    </div>
+
     <div id="adminInviteSection" class="admin-panel" hidden>
       <h2 class="admin-panel-title">รหัสเชิญสำหรับสมัครสมาชิก</h2>
       <p class="admin-panel-hint">
@@ -596,6 +622,13 @@
              ที่อยู่แบบโครงสร้าง) ไม่มีโหมดเพิ่มหลายคำร้องด้วย -- ดูตัวจัดการปุ่ม
              requestsAddBatchBtn ใน app.js -->
         <form id="extendForm" class="auth-form request-form" novalidate hidden>
+          <!-- เลขที่ระบบออกให้ ใช้คู่กับ QR ให้ลูกค้าติดตามสถานะเองได้ เหมือน
+               ขอใช้ไฟฟ้า -- หลักที่ 3 คือเลขบอกประเภท (2 = ขอขยายเขตฯ) ดู
+               TRACKING_TYPE_CODES ใน app.js -->
+          <div class="field">
+            <label for="extTrackingNumber">เลขที่คำร้อง (ระบบ)</label>
+            <input type="text" id="extTrackingNumber" readonly>
+          </div>
           <div class="field-row">
             <div class="field">
               <label for="extNumber">เลขที่คำร้อง</label>
@@ -691,10 +724,14 @@
             </select>
           </div>
           <!-- ปรากฏก็ต่อเมื่อสถานะพ้น "รอจ่ายงาน" แล้ว -- ดูตัวจัดการ change
-               ของ #extJobStatus ใน app.js -->
+               ของ #extJobStatus ใน app.js
+               อ่านอย่างเดียวโดยตั้งใจ: ผู้รับผิดชอบถูกกำหนดจากหน้า "งานขอขยายเขตฯ"
+               โดยหัวหน้างานเท่านั้น และฝั่งเซิร์ฟเวอร์เขียนค่าเดิมทับทุกครั้งที่
+               บันทึกผ่านฟอร์มนี้ (preserveAssignmentFields_) -->
           <div class="field" id="extAssigneeField" hidden>
             <label for="extAssignee">ผู้รับผิดชอบ</label>
-            <input type="text" id="extAssignee" placeholder="ชื่อผู้รับผิดชอบสำรวจ/ดำเนินเรื่อง" autocomplete="off">
+            <input type="text" id="extAssignee" placeholder="ยังไม่ได้จ่ายงาน" readonly>
+            <p class="field-hint">หัวหน้างานเป็นผู้จ่ายงานจากหน้า “ขอขยายเขตระบบจำหน่ายไฟฟ้า” ที่หน้าแรก</p>
           </div>
           <div class="field">
             <label for="extNote">หมายเหตุ</label>
@@ -741,6 +778,63 @@
   </div>
 </section>
 
+<!-- ===== งานขอขยายเขตระบบจำหน่ายไฟฟ้า (โมดูลปฏิบัติงาน) =====
+     คนละหน้ากับ "งานรับคำร้อง": ที่นั่นคือการรับเรื่องเข้าระบบ ที่นี่คือคิวงาน
+     ของแผนก คำร้องประเภท extend ที่บันทึกไว้ที่โน่นจะโผล่มาที่นี่เอง เพราะทั้ง
+     สองหน้าอ่านจากชุดข้อมูลเดียวกัน (requestsCache) ไม่มีการ "ส่งต่อ" ที่ไหน -->
+<section id="extendWorkView" class="app-view" hidden>
+  <header class="topbar">
+    <div class="topbar-brand">
+      <button id="extendWorkBackBtn" class="btn btn-ghost btn-icon" aria-label="ย้อนกลับ">
+        <svg viewBox="0 0 24 24" fill="none"><path d="M15 18l-6-6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+      <span class="topbar-title">งานขอขยายเขตระบบจำหน่ายไฟฟ้า</span>
+    </div>
+    <div class="topbar-user">
+      <span id="userGreeting4" class="user-greeting"></span>
+      <button id="logoutBtn4" class="btn btn-ghost">ออกจากระบบ</button>
+    </div>
+  </header>
+
+  <main class="work-main">
+    <div class="requests-content-heading">
+      <div class="requests-content-heading-row">
+        <div>
+          <h2 id="extendWorkTitle">งานทั้งหมด</h2>
+          <p id="extendWorkCount" class="requests-count"></p>
+        </div>
+      </div>
+
+      <div class="requests-search">
+        <input type="search" id="extendWorkSearch" placeholder="ค้นหาด้วยเลขที่คำร้อง, ชื่อลูกค้า, เบอร์โทร, สถานที่, ผู้รับผิดชอบ...">
+      </div>
+
+      <!-- ชิปกรองสถานะ -- คลิกเดียวเปลี่ยนมุมมอง วาดจาก app.js เพราะจำนวนและ
+           ตัวเลขบนชิปมาจากข้อมูลจริง ไม่ใช่รายการตายตัวใน HTML -->
+      <div id="extendWorkChips" class="status-chips"></div>
+    </div>
+
+    <!-- หัวหน้างานเท่านั้นที่เห็น -- ด่านจริงคือ requireSupervisor_ ฝั่ง Apps
+         Script การซ่อนตรงนี้เป็นแค่เรื่องหน้าจอ -->
+    <div id="extendAssignBar" class="assign-bar" hidden>
+      <span id="extendAssignCount" class="assign-bar-count"></span>
+      <label class="assign-bar-field">
+        <span>จ่ายงานให้</span>
+        <select id="extendAssignSelect">
+          <option value="">-- เลือกผู้รับผิดชอบ --</option>
+        </select>
+      </label>
+      <button type="button" id="extendAssignBtn" class="btn btn-primary">จ่ายงาน</button>
+      <button type="button" id="extendAssignClearBtn" class="btn btn-ghost">ล้างการเลือก</button>
+    </div>
+
+    <p id="extendAssignError" class="form-error" hidden></p>
+    <p id="extendAssignSuccess" class="form-success" hidden></p>
+
+    <div id="extendWorkList" class="request-list"></div>
+  </main>
+</section>
+
 <!-- ===== SERVICE PLACEHOLDER ===== -->
 <section id="serviceView" class="app-view" hidden>
   <header class="topbar">
@@ -774,6 +868,6 @@
      ที่หาสาเหตุยากมาก
      **ต้องเปลี่ยนเลขนี้ทุกครั้งที่แก้ app.js / style.css / track.js / qr.js**
      ไม่งั้นผู้ใช้บางคนจะยังได้ไฟล์เก่าไปอีกพักใหญ่ -->
-<script src="app.js?v=20260908o"></script>
+<script src="app.js?v=20260909a"></script>
 </body>
 </html>

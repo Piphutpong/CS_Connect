@@ -238,6 +238,18 @@
 
     async revokeInviteCode() {
       throw new Error("โหมดออฟไลน์ไม่รองรับรหัสเชิญ");
+    },
+
+    async listStaff() {
+      throw new Error("โหมดออฟไลน์ไม่รองรับรายชื่อเจ้าหน้าที่");
+    },
+
+    async assignRequests() {
+      throw new Error("โหมดออฟไลน์ไม่รองรับการจ่ายงาน");
+    },
+
+    async setUserRole() {
+      throw new Error("โหมดออฟไลน์ไม่รองรับการตั้งสิทธิ์หัวหน้างาน");
     }
 
     // track()/uploadSlip() live in track.js now -- the public tracking page
@@ -399,6 +411,28 @@
         return callAsUser({ action: "revokeInviteCode" });
       },
 
+      // รายชื่อเจ้าหน้าที่สำหรับหน้าจ่ายงาน -- ฝั่งเซิร์ฟเวอร์ส่งกลับแค่ชื่อ/อีเมล/
+      // ตำแหน่ง/สิทธิ์ (ดู listStaff_) ไม่ใช่ทั้งแถวผู้ใช้ซึ่งมีแฮชรหัสผ่านอยู่ด้วย
+      async listStaff() {
+        return callAsUser({ action: "listStaff" });
+      },
+
+      // หัวหน้างานเท่านั้น -- ฝั่งเซิร์ฟเวอร์เป็นคนเขียนฟิลด์การจ่ายงานเอง แล้วส่ง
+      // เรกคอร์ดที่อัปเดตแล้วกลับมาให้ทับใน cache (ไม่ต้องโหลดใหม่ทั้งชุด)
+      async assignRequests(ids, assigneeEmail) {
+        const data = await callAsUser({ action: "assignRequests", ids, assigneeEmail });
+        const updated = data.requests || [];
+        // สำเนาที่ใช้เทียบว่า "อะไรเปลี่ยน" ต้องรู้ค่าใหม่ด้วย ไม่งั้นการบันทึก
+        // ครั้งถัดไปจะส่งเรกคอร์ดเหล่านี้ซ้ำโดยไม่จำเป็น
+        updated.forEach(r => savedRequests.set(String(r.id), JSON.stringify(r)));
+        return updated;
+      },
+
+      // ผู้ดูแลระบบเท่านั้น -- ตั้ง/ถอดสิทธิ์หัวหน้างาน
+      async setUserRole(email, role) {
+        return callAsUser({ action: "setUserRole", email, role });
+      },
+
       // loadRequests() (above) only returns still-open requests plus recently
       // closed ones -- see loadRequestsForStaff_ in Code.gs. This is the
       // escape hatch for the rare "find that old closed request" lookup: it
@@ -485,6 +519,9 @@
       name: user.name,
       token: user.token,
       isAdmin: Boolean(user.isAdmin),
+      // ใช้ตัดสินแค่ว่าจะโชว์แผงจ่ายงานไหม -- ด่านจริงอยู่ฝั่งเซิร์ฟเวอร์ และ
+      // ตรวจสิทธิ์ใหม่ทุกครั้งที่สั่งจ่ายงาน แก้ค่านี้ในเบราว์เซอร์ก็ไม่ผ่าน
+      isSupervisor: Boolean(user.isSupervisor),
       mustChangePassword: Boolean(user.mustChangePassword)
     };
     if (!storageAvailable) {
@@ -555,7 +592,8 @@
     account: document.getElementById("accountView"),
     home: document.getElementById("homeView"),
     service: document.getElementById("serviceView"),
-    requests: document.getElementById("requestsView")
+    requests: document.getElementById("requestsView"),
+    extendWork: document.getElementById("extendWorkView")
   };
 
   function showView(name) {
@@ -999,18 +1037,42 @@
     return statusHistory;
   }
 
-  // System-issued tracking number: last 2 digits of the Buddhist Era year
-  // plus a 4-digit sequence starting at 0001, e.g. 690001. The sequence is
-  // derived from existing records each time (not a stored counter), so it
-  // resets naturally once no record carries the new year's prefix yet.
-  function generateTrackingNumbers(count) {
+  /**
+   * เลขบอกประเภทคำร้อง 1 หลัก ที่คั่นระหว่างปีกับลำดับ
+   *
+   * ตั้งใจใช้ "ตัวเลข" ไม่ใช่ตัวอักษร (P/E) เพราะเลขนี้คือสิ่งที่ลูกค้าต้องพิมพ์
+   * เองในหน้าติดตามสถานะ -- ตัวเลขล้วนพิมพ์บนแป้นตัวเลขได้รวดเดียว ไม่ต้องสลับ
+   * แป้นไทย/อังกฤษกลางคัน ส่วนเจ้าหน้าที่จำกติกาเดียวนี้ได้ไม่ยาก และหน้าฟอร์ม
+   * ก็เขียนกำกับไว้ให้แล้ว
+   *
+   * ประเภทใหม่ในอนาคตต่อเลขถัดไป และห้ามเปลี่ยนเลขเดิม -- เลขที่ออกไปแล้วอยู่บน
+   * กระดาษที่ลูกค้าถืออยู่
+   */
+  const TRACKING_TYPE_CODES = {
+    power: "1",
+    extend: "2"
+  };
+
+  // System-issued tracking number: last 2 digits of the Buddhist Era year, one
+  // type digit, then a 4-digit sequence starting at 0001 -- e.g. 6910001 for a
+  // ขอใช้ไฟฟ้า request and 6920001 for a ขอขยายเขตฯ one. The sequence is derived
+  // from existing records each time (not a stored counter), so it resets
+  // naturally once no record carries that year+type prefix yet, and each type
+  // gets its own run.
+  //
+  // Records issued before the type digit existed are 6 digits (`69xxxx`, all
+  // ขอใช้ไฟฟ้า). They stay valid exactly as they are -- the number is printed on
+  // paper the customer already holds, and every lookup is a plain string match.
+  // The two shapes can never collide, since they differ in length.
+  function generateTrackingNumbers(count, type) {
     const beYear = new Date().getFullYear() + 543;
     const yearPrefix = String(beYear % 100).padStart(2, "0");
+    const prefix = `${yearPrefix}${TRACKING_TYPE_CODES[type] || TRACKING_TYPE_CODES.power}`;
 
     const maxSeq = getRequests()
       .map(r => r.trackingNumber)
-      .filter(tn => typeof tn === "string" && tn.startsWith(yearPrefix) && tn.length === 6)
-      .map(tn => parseInt(tn.slice(2), 10))
+      .filter(tn => typeof tn === "string" && tn.startsWith(prefix) && tn.length === 7)
+      .map(tn => parseInt(tn.slice(3), 10))
       .filter(n => Number.isInteger(n))
       .reduce((max, n) => Math.max(max, n), 0);
 
@@ -1018,12 +1080,12 @@
     // version in a loop would hand out the same number every time, since the
     // cache only learns about the new records after they are saved.
     return Array.from({ length: count }, (_, i) =>
-      `${yearPrefix}${String(maxSeq + 1 + i).padStart(4, "0")}`
+      `${prefix}${String(maxSeq + 1 + i).padStart(4, "0")}`
     );
   }
 
-  function generateTrackingNumber() {
-    return generateTrackingNumbers(1)[0];
+  function generateTrackingNumber(type) {
+    return generateTrackingNumbers(1, type)[0];
   }
 
   /**
@@ -1321,6 +1383,7 @@
     document.getElementById("userGreeting").textContent = greeting;
     document.getElementById("userGreeting2").textContent = greeting;
     document.getElementById("userGreeting3").textContent = greeting;
+    document.getElementById("userGreeting4").textContent = greeting;
     showView("home");
   }
 
@@ -1348,11 +1411,13 @@
     document.getElementById("adminResetForm").reset();
 
     resetInvitePanel();
+    resetRolesPanel();
 
     document.getElementById("revokeAllBtn").hidden = true;
     document.getElementById("userGreeting").textContent = "";
     document.getElementById("userGreeting2").textContent = "";
     document.getElementById("userGreeting3").textContent = "";
+    document.getElementById("userGreeting4").textContent = "";
 
     clearWorkspaceScreens();
   }
@@ -1386,10 +1451,23 @@
     document.getElementById("batchRows").innerHTML = "";
     document.getElementById("batchResult").hidden = true;
 
+    document.getElementById("extendWorkList").innerHTML = "";
+    document.getElementById("extendWorkChips").innerHTML = "";
+    document.getElementById("extendWorkSearch").value = "";
+    document.getElementById("extendAssignBar").hidden = true;
+    document.getElementById("extendAssignSuccess").hidden = true;
+
     editingId = null;
     batchMode = false;
+    formReturnTo = "requests";
     currentSearchQuery = "";
     meterSelection.clear();
+    extendSelection.clear();
+    extendSearchQuery = "";
+    extendFilter = EXTEND_FILTER_ALL;
+    // รายชื่อเจ้าหน้าที่เป็นข้อมูลส่วนบุคคลของคนอื่น ไม่ควรค้างอยู่ในหน้าที่
+    // ตอนนี้อ่านว่าออกจากระบบไปแล้ว
+    staffRoster = [];
 
     // เคลียร์สำเนาที่ backend เก็บไว้เทียบว่าอะไรเปลี่ยนบ้าง -- เป็น JSON ของ
     // คำร้องทุกใบ ไม่ควรค้างอยู่หลังผู้ใช้ออกจากระบบไปแล้ว
@@ -1431,7 +1509,12 @@
     inviteValue: document.getElementById("inviteCodeValue"),
     inviteCountdown: document.getElementById("inviteCountdown"),
     inviteRevokeBtn: document.getElementById("inviteRevokeBtn"),
-    inviteError: document.getElementById("inviteError")
+    inviteError: document.getElementById("inviteError"),
+    rolesSection: document.getElementById("adminRolesSection"),
+    rolesCurrent: document.getElementById("adminRolesCurrent"),
+    roleUser: document.getElementById("adminRoleUser"),
+    rolesError: document.getElementById("adminRolesError"),
+    rolesResult: document.getElementById("adminRolesResult")
   };
 
   /**
@@ -1463,6 +1546,10 @@
     accountView.inviteSection.hidden = !session?.isAdmin || mustChange;
     resetInvitePanel();
     if (session?.isAdmin && !mustChange) refreshInviteStatus();
+
+    accountView.rolesSection.hidden = !session?.isAdmin || mustChange;
+    resetRolesPanel();
+    if (session?.isAdmin && !mustChange) refreshRolesPanel();
     accountView.forceNotice.hidden = !mustChange;
     accountView.backRow.hidden = mustChange;
     // ปุ่มมุมซ้ายบนต้องหายไปพร้อมกัน ไม่งั้นด่านบังคับตั้งรหัสใหม่มีทางออก
@@ -1542,7 +1629,11 @@
         accountView.adminSection.hidden = !session.isAdmin;
         accountView.backupSection.hidden = !session.isAdmin;
         accountView.inviteSection.hidden = !session.isAdmin;
-        if (session.isAdmin) refreshInviteStatus();
+        accountView.rolesSection.hidden = !session.isAdmin;
+        if (session.isAdmin) {
+          refreshInviteStatus();
+          refreshRolesPanel();
+        }
 
         // ตอนล็อกอิน บัญชีนี้ถูกพามาที่นี่โดยไม่ได้โหลดข้อมูลเลย (loadRequests
         // จะถูกปฏิเสธอยู่แล้ว) ตอนนี้ผ่านด่านแล้วจึงต้องโหลด ไม่งั้นกดกลับหน้าแรก
@@ -1682,6 +1773,89 @@
   });
 
   /**
+   * สิทธิ์หัวหน้างาน -- คนที่จ่ายงานขอขยายเขตฯ ให้พนักงานในแผนกได้
+   *
+   * แผงนี้เป็นแค่หน้าจอ การตัดสินสิทธิ์จริงอยู่ฝั่งเซิร์ฟเวอร์ทั้งหมด และตรวจใหม่
+   * ทุกครั้งที่มีการสั่งจ่ายงาน
+   */
+  function resetRolesPanel() {
+    accountView.rolesCurrent.textContent = "";
+    accountView.roleUser.innerHTML = '<option value="">-- เลือกบัญชี --</option>';
+    accountView.rolesResult.hidden = true;
+    hideError(accountView.rolesError);
+  }
+
+  function renderRolesPanel() {
+    const supervisors = staffRoster.filter(p => p.isSupervisor);
+    accountView.rolesCurrent.textContent = supervisors.length
+      ? `หัวหน้างานปัจจุบัน: ${supervisors.map(p => p.name || p.email).join(", ")}`
+      : "ยังไม่มีหัวหน้างาน";
+
+    const previous = accountView.roleUser.value;
+    accountView.roleUser.innerHTML = '<option value="">-- เลือกบัญชี --</option>';
+
+    staffRoster.forEach(person => {
+      const option = document.createElement("option");
+      option.value = person.email;
+      // ต่อท้ายว่าเป็นอะไรอยู่ตอนนี้ ไม่งั้นต้องเดาว่ากดปุ่มไหนถึงจะถูก
+      const tag = person.isAdmin ? " — ผู้ดูแลระบบ" : (person.isSupervisor ? " — หัวหน้างาน" : "");
+      option.textContent = `${person.name || person.email}${tag}`;
+      accountView.roleUser.appendChild(option);
+    });
+
+    if (previous && staffRoster.some(p => p.email === previous)) {
+      accountView.roleUser.value = previous;
+    }
+  }
+
+  async function refreshRolesPanel() {
+    try {
+      await refreshStaffRoster();
+      renderRolesPanel();
+    } catch (err) {
+      console.error("CS Connect roles panel error:", err);
+      showError(accountView.rolesError, friendlyError(err, "โหลดรายชื่อเจ้าหน้าที่ไม่สำเร็จ"));
+    }
+  }
+
+  async function changeUserRole(button, role) {
+    hideError(accountView.rolesError);
+    accountView.rolesResult.hidden = true;
+
+    const email = accountView.roleUser.value;
+    if (!email) {
+      showError(accountView.rolesError, "กรุณาเลือกบัญชีก่อน");
+      return;
+    }
+
+    setBusy(button, true, "กำลังบันทึก...");
+
+    try {
+      await backend.setUserRole(email, role);
+      await refreshStaffRoster();
+      renderRolesPanel();
+
+      const person = staffRoster.find(p => p.email === email);
+      const who = person ? (person.name || person.email) : email;
+      accountView.rolesResult.textContent = role === "supervisor"
+        ? `ตั้ง ${who} เป็นหัวหน้างานแล้ว`
+        : `ยกเลิกสิทธิ์หัวหน้างานของ ${who} แล้ว`;
+      accountView.rolesResult.hidden = false;
+    } catch (err) {
+      console.error("CS Connect set role error:", err);
+      showError(accountView.rolesError, friendlyError(err, "เปลี่ยนสิทธิ์ไม่สำเร็จ"));
+    } finally {
+      setBusy(button, false);
+    }
+  }
+
+  document.getElementById("adminRoleGrantBtn")
+    .addEventListener("click", (e) => changeUserRole(e.currentTarget, "supervisor"));
+
+  document.getElementById("adminRoleRevokeBtn")
+    .addEventListener("click", (e) => changeUserRole(e.currentTarget, ""));
+
+  /**
    * ดึงข้อมูลทั้งระบบออกมาเป็นไฟล์ให้ผู้ดูแลระบบเก็บไว้เอง
    *
    * มีไว้เพราะเดิมการสำรองข้อมูลทำได้ทางเดียวคือเปิด Apps Script แล้วสั่ง
@@ -1811,6 +1985,7 @@
   document.getElementById("logoutBtn").addEventListener("click", logout);
   document.getElementById("logoutBtn2").addEventListener("click", logout);
   document.getElementById("logoutBtn3").addEventListener("click", logout);
+  document.getElementById("logoutBtn4").addEventListener("click", logout);
 
   // ---------- service cards ----------
   document.querySelectorAll(".service-card").forEach(card => {
@@ -1819,6 +1994,12 @@
 
       if (key === "requests") {
         openRequestsView();
+        return;
+      }
+
+      // การ์ดนี้เคยเป็นหน้าว่างรอพัฒนา ตอนนี้เป็นคิวงานจริงของแผนก
+      if (key === "extend") {
+        openExtendWorkView();
         return;
       }
 
@@ -1843,13 +2024,29 @@
   // ซึ่งทิ้งสิ่งที่กำลังกรอกโดยไม่ได้พาไปที่ที่ผู้ใช้คาดว่าจะกลับไป
   document.getElementById("requestsBackBtn").addEventListener("click", () => {
     if (!requestsFormMode.hidden) {
-      renderRequestsList();
+      leaveRequestForm();
       return;
     }
     enterApp();
   });
 
-  document.getElementById("requestFormBackBtn").addEventListener("click", renderRequestsList);
+  document.getElementById("requestFormBackBtn").addEventListener("click", leaveRequestForm);
+
+  /**
+   * ออกจากฟอร์มคำร้องกลับไปที่ "ที่ที่เปิดฟอร์มมา"
+   *
+   * ฟอร์มขอขยายเขตฯ ถูกเปิดได้จากสองที่ -- รายการในหน้ารับคำร้อง และคิวงานใน
+   * หน้างานขอขยายเขตฯ การพากลับไปที่รายการเสมอทำให้คนที่มาจากคิวงานหลุดไปอยู่
+   * อีกโมดูลหนึ่งโดยไม่ได้ตั้งใจ และต้องเดินกลับมาเองทุกครั้งที่แก้เสร็จหนึ่งใบ
+   */
+  function leaveRequestForm() {
+    if (formReturnTo === "extendWork") {
+      // keepView: กลับมาที่ชิปและคำค้นเดิม ไม่ใช่รีเซ็ตเป็น "ทั้งหมด" ทุกครั้ง
+      openExtendWorkView({ keepView: true });
+      return;
+    }
+    renderRequestsList();
+  }
 
   // ---------- requests workspace ----------
   const requestsListMode = document.getElementById("requestsListMode");
@@ -1948,6 +2145,7 @@
   const extendFormSubmitBtn = document.getElementById("extendFormSubmitBtn");
   const extDate = document.getElementById("extDate");
   const extJobStatus = document.getElementById("extJobStatus");
+  const extTrackingNumber = document.getElementById("extTrackingNumber");
   const extAssigneeField = document.getElementById("extAssigneeField");
   const extLat = document.getElementById("extLat");
   const extLng = document.getElementById("extLng");
@@ -1967,6 +2165,9 @@
   let currentRequestFilter = "power";
   let currentAddType = "power";
   let editingId = null;
+  // "requests" (หน้ารับคำร้อง) หรือ "extendWork" (คิวงานขอขยายเขตฯ) -- ดู
+  // leaveRequestForm ว่าใช้ทำอะไร
+  let formReturnTo = "requests";
   let currentSearchQuery = "";
 
   // Which half of the คุมคำร้องส่งแผนกมิเตอร์ tab is showing: "pending" (the
@@ -2715,6 +2916,7 @@
     extJobStatus.value = r.jobStatus || "รอจ่ายงาน";
     // ต้องยิง change เอง -- ตัวจัดการที่ซ่อน/แสดง #extAssigneeField ฟังอีเวนต์นี้
     extJobStatus.dispatchEvent(new Event("change"));
+    // อ่านอย่างเดียว -- ตั้งค่าได้จากหน้าจ่ายงานเท่านั้น (ดู assignRequests_)
     document.getElementById("extAssignee").value = r.assignee || "";
     document.getElementById("extNote").value = r.note || "";
 
@@ -3080,6 +3282,7 @@
   function openRequestForm(type, record, options = {}) {
     currentAddType = type;
     editingId = record ? record.id : null;
+    formReturnTo = options.returnTo || "requests";
     // เพิ่มหลายคำร้องมีเฉพาะขอใช้ไฟฟ้า -- ปุ่มที่ส่ง { batch: true } มา ก็ถูก
     // ซ่อนไว้แล้วสำหรับแท็บอื่น (ดู renderRequestsList) การ์ดนี้กันไว้อีกชั้น
     batchMode = Boolean(options.batch) && type === "power";
@@ -3137,7 +3340,15 @@
       const trackingField = document.getElementById("reqTrackingNumber");
       trackingField.value = batchMode
         ? "ระบบจะออกเลขให้ทีละใบตอนบันทึก"
-        : (record ? (record.trackingNumber || "-") : generateTrackingNumber());
+        : (record ? (record.trackingNumber || "-") : generateTrackingNumber("power"));
+    }
+
+    if (isSupported && isExtend) {
+      // คำร้องเก่าที่บันทึกไว้ก่อนมี QR ยังไม่มีเลขระบบ -- ออกให้ตรงนี้เลย
+      // (จะถูกบันทึกจริงเมื่อกดบันทึกคำร้อง) ลูกค้ารายนั้นจึงติดตามสถานะได้ด้วย
+      extTrackingNumber.value = record
+        ? (record.trackingNumber || generateTrackingNumber("extend"))
+        : generateTrackingNumber("extend");
     }
 
     if (isSupported && isPower && record) {
@@ -3352,7 +3563,7 @@
 
         // One read of the cache produces the whole run, so the numbers come
         // out consecutive exactly as if the forms had been entered one by one.
-        const trackingNumbers = generateTrackingNumbers(rows.length);
+        const trackingNumbers = generateTrackingNumbers(rows.length, "power");
         const ids = newRequestIds(rows.length);
         const batchId = newRequestId();
 
@@ -3486,8 +3697,8 @@
       const location = document.getElementById("extLocation").value.trim();
       const purpose = document.getElementById("extPurpose").value;
       const jobStatus = extJobStatus.value;
-      const assignee = document.getElementById("extAssignee").value.trim();
       const note = document.getElementById("extNote").value.trim();
+      const trackingNumber = extTrackingNumber.value;
       const lat = extLat.value.trim();
       const lng = extLng.value.trim();
 
@@ -3525,8 +3736,12 @@
         return;
       }
 
+      // ไม่มีฟิลด์การจ่ายงาน (assignee/assigneeEmail/assigned*) อยู่ในนี้โดย
+      // ตั้งใจ -- จ่ายงานได้ทางเดียวคือผ่าน assignRequests ของหัวหน้างาน และ
+      // ฝั่งเซิร์ฟเวอร์เขียนค่าเดิมทับให้อยู่แล้วถ้ามีใครส่งมา
       const recordData = {
         type: "extend",
+        trackingNumber,
         requestNumber,
         receivedDate,
         customerName,
@@ -3535,7 +3750,6 @@
         location,
         purpose,
         jobStatus,
-        assignee,
         note,
         lat,
         lng
@@ -3582,7 +3796,7 @@
       updateExtPhonePrimaryCall();
       updateExtPhoneSecondaryCall();
       extAssigneeField.hidden = true;
-      renderRequestsList();
+      leaveRequestForm();
     } catch (err) {
       console.error("CS Connect extend form error:", err);
       showError(
@@ -3591,6 +3805,382 @@
       );
     } finally {
       setBusy(extendFormSubmitBtn, false);
+    }
+  });
+
+  // ---------- งานขอขยายเขตระบบจำหน่ายไฟฟ้า (โมดูลปฏิบัติงาน) ----------
+  //
+  // หน้านี้ไม่ได้ถือข้อมูลของตัวเองเลย -- อ่านจาก requestsCache ชุดเดียวกับหน้า
+  // "งานรับคำร้อง" แล้วกรองเอาเฉพาะ type === "extend" คำร้องที่บันทึกจากหน้าโน้น
+  // จึงมาโผล่ที่นี่ทันทีโดยไม่ต้องมีขั้นตอน "ส่งต่อ" ใด ๆ ให้พลาดได้
+  const extendWorkList = document.getElementById("extendWorkList");
+  const extendWorkChips = document.getElementById("extendWorkChips");
+  const extendWorkTitle = document.getElementById("extendWorkTitle");
+  const extendWorkCount = document.getElementById("extendWorkCount");
+  const extendWorkSearch = document.getElementById("extendWorkSearch");
+  const extendAssignBar = document.getElementById("extendAssignBar");
+  const extendAssignCount = document.getElementById("extendAssignCount");
+  const extendAssignSelect = document.getElementById("extendAssignSelect");
+  const extendAssignBtn = document.getElementById("extendAssignBtn");
+  const extendAssignError = document.getElementById("extendAssignError");
+  const extendAssignSuccess = document.getElementById("extendAssignSuccess");
+
+  const EXTEND_FILTER_ALL = "all";
+  const EXTEND_FILTER_MINE = "mine";
+
+  let extendFilter = EXTEND_FILTER_ALL;
+  let extendSearchQuery = "";
+  let extendSelection = new Set();
+
+  // รายชื่อเจ้าหน้าที่ -- ดึงมาเฉพาะตอนที่หัวหน้างานเปิดหน้านี้ (หรือผู้ดูแลระบบ
+  // เปิดหน้าตั้งสิทธิ์) พนักงานทั่วไปไม่เคยได้รับรายชื่อนี้เลย เพราะไม่มีอะไรใน
+  // หน้าจอของเขาที่ต้องใช้ -- ข้อมูลที่ไม่ได้ส่งออกไปคือข้อมูลที่รั่วไม่ได้
+  let staffRoster = [];
+
+  /**
+   * ตัวเลือกสถานะทั้งหมด อ่านจาก <select> ของฟอร์มโดยตรง ไม่ประกาศซ้ำ
+   *
+   * เหตุผลเดียวกับที่แถวในกลุ่มคำร้องถูก "โคลน" มาจากฟอร์มหลัก: ถ้าเพิ่มสถานะใหม่
+   * ในฟอร์มแล้วต้องมาเพิ่มในลิสต์ที่นี่อีกที วันหนึ่งมันจะไม่ตรงกัน แล้วจะมีงาน
+   * ที่ไม่โผล่ในชิปไหนเลย
+   */
+  function extendStatuses() {
+    return Array.from(extJobStatus.options).map(o => o.value).filter(Boolean);
+  }
+
+  function extendJobs() {
+    return getRequests().filter(r => r.type === "extend");
+  }
+
+  /** หัวหน้างานหรือผู้ดูแลระบบ -- แค่เรื่องการแสดงผล ด่านจริงอยู่ฝั่งเซิร์ฟเวอร์ */
+  function canAssignWork() {
+    const session = getSession();
+    return Boolean(session && (session.isSupervisor || session.isAdmin));
+  }
+
+  function extendFilterMatches(record) {
+    if (extendFilter === EXTEND_FILTER_ALL) return true;
+    if (extendFilter === EXTEND_FILTER_MINE) {
+      const email = String(getSession()?.email || "").toLowerCase();
+      return Boolean(email) && String(record.assigneeEmail || "").toLowerCase() === email;
+    }
+    return record.jobStatus === extendFilter;
+  }
+
+  function extendFilterLabel() {
+    if (extendFilter === EXTEND_FILTER_ALL) return "งานทั้งหมด";
+    if (extendFilter === EXTEND_FILTER_MINE) return "งานของฉัน";
+    return extendFilter;
+  }
+
+  /**
+   * ชิปกรองสถานะ -- คลิกเดียวเปลี่ยนมุมมอง ตามที่หัวหน้างานขอมา
+   *
+   * วาดใหม่ทุกครั้งที่ข้อมูลเปลี่ยน เพราะตัวเลขบนชิปคือจำนวนจริง ณ ตอนนั้น
+   * ชิปที่ไม่มีงานเลยยังอยู่ที่เดิมแต่จางลง ไม่ได้ถูกซ่อน -- ชิปที่หายไปเวลาเป็น
+   * ศูนย์จะทำให้ชิปตัวอื่นขยับตำแหน่ง แล้วคนที่จำตำแหน่งไว้จะกดผิดใบ
+   */
+  function renderExtendChips(jobs) {
+    const email = String(getSession()?.email || "").toLowerCase();
+    const mine = email
+      ? jobs.filter(r => String(r.assigneeEmail || "").toLowerCase() === email).length
+      : 0;
+
+    const chips = [
+      { key: EXTEND_FILTER_ALL, label: "ทั้งหมด", count: jobs.length },
+      { key: EXTEND_FILTER_MINE, label: "งานของฉัน", count: mine }
+    ].concat(extendStatuses().map(status => ({
+      key: status,
+      label: status,
+      count: jobs.filter(r => r.jobStatus === status).length
+    })));
+
+    extendWorkChips.innerHTML = "";
+
+    chips.forEach(chip => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "status-chip";
+      if (chip.key === extendFilter) btn.classList.add("active");
+      if (!chip.count) btn.classList.add("is-empty");
+
+      const label = document.createElement("span");
+      label.textContent = chip.label;
+
+      const count = document.createElement("span");
+      count.className = "status-chip-count";
+      count.textContent = String(chip.count);
+
+      btn.append(label, count);
+      btn.addEventListener("click", () => {
+        extendFilter = chip.key;
+        // เลือกไว้ในมุมมองก่อนหน้าแล้วเปลี่ยนมุมมอง = ไม่รู้แล้วว่ากำลังจะจ่าย
+        // งานใบไหนบ้าง ล้างทิ้งดีกว่าปล่อยให้เลือกค้างข้ามหน้าจอ
+        extendSelection.clear();
+        renderExtendWork();
+      });
+
+      extendWorkChips.appendChild(btn);
+    });
+  }
+
+  function renderExtendCard(record) {
+    const card = document.createElement("div");
+    card.className = "request-card request-card-clickable";
+    card.dataset.type = "extend";
+
+    card.innerHTML = `
+      <div class="request-card-top">
+        <div class="request-badges">
+          <span class="request-badge request-badge-id"></span>
+          <span class="request-badge request-badge-purpose"></span>
+          <span class="request-badge request-badge-status"></span>
+        </div>
+        <span class="request-date"></span>
+      </div>
+      <div class="request-name"></div>
+      <div class="request-meta request-meta-phone"></div>
+      <div class="request-meta request-meta-location"></div>
+      <div class="work-assignee"></div>
+    `;
+
+    card.querySelector(".request-date").textContent = formatThaiDate(record.receivedDate);
+
+    const idEl = card.querySelector(".request-badge-id");
+    if (record.requestNumber) idEl.textContent = record.requestNumber;
+    else idEl.remove();
+
+    const purposeEl = card.querySelector(".request-badge-purpose");
+    if (record.purpose) purposeEl.textContent = record.purpose;
+    else purposeEl.remove();
+
+    const statusEl = card.querySelector(".request-badge-status");
+    statusEl.textContent = record.jobStatus || "-";
+    statusEl.classList.add(`tone-${JOB_STATUS_TONE[record.jobStatus] || "info"}`);
+
+    card.querySelector(".request-name").textContent = record.customerName || "";
+
+    const phoneEl = card.querySelector(".request-meta-phone");
+    if (record.phonePrimary) {
+      phoneEl.textContent = "โทร: ";
+      const link = document.createElement("a");
+      link.href = `tel:${record.phonePrimary.replace(/[^0-9+]/g, "")}`;
+      link.textContent = record.phonePrimary;
+      link.addEventListener("click", (e) => e.stopPropagation());
+      phoneEl.appendChild(link);
+    } else {
+      phoneEl.remove();
+    }
+
+    card.querySelector(".request-meta-location").textContent = `สถานที่: ${buildLocationText(record)}`;
+
+    const assigneeEl = card.querySelector(".work-assignee");
+    if (record.assignee) {
+      assigneeEl.textContent = `ผู้รับผิดชอบ: ${record.assignee}`;
+    } else {
+      assigneeEl.textContent = "ยังไม่ได้จ่ายงาน";
+      assigneeEl.classList.add("is-unassigned");
+    }
+
+    // เปิดคำร้องใบนั้นในฟอร์มเดิม (ฟอร์มเดียวกับหน้ารับคำร้อง) เพื่ออัปเดตสถานะ
+    // และคอมเมนต์ -- จำไว้ด้วยว่ามาจากหน้านี้ ปุ่มย้อนกลับจะได้พากลับมาถูกที่
+    card.addEventListener("click", () => {
+      showView("requests");
+      openRequestForm("extend", record, { returnTo: "extendWork" });
+    });
+
+    const actions = [];
+
+    const lat = parseFloat(record.lat);
+    const lng = parseFloat(record.lng);
+    if (isFinite(lat) && isFinite(lng)) {
+      const navLink = document.createElement("a");
+      navLink.className = "btn btn-ghost request-card-action-btn";
+      navLink.textContent = "นำทาง";
+      navLink.target = "_blank";
+      navLink.rel = "noopener";
+      navLink.href = `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`;
+      navLink.addEventListener("click", (e) => e.stopPropagation());
+      actions.push(navLink);
+    }
+
+    if (record.trackingNumber) {
+      const qrBtn = document.createElement("button");
+      qrBtn.type = "button";
+      qrBtn.className = "btn btn-ghost request-card-action-btn";
+      qrBtn.textContent = "พิมพ์ QR";
+      qrBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        window.open(`qr.html?tn=${encodeURIComponent(record.trackingNumber)}`, "_blank");
+      });
+      actions.push(qrBtn);
+    }
+
+    if (actions.length) {
+      card.classList.add("has-card-actions");
+      const wrap = document.createElement("div");
+      wrap.className = "request-card-actions";
+      actions.forEach(el => wrap.appendChild(el));
+      card.appendChild(wrap);
+    }
+
+    if (canAssignWork()) {
+      card.classList.add("has-card-select");
+      const selectWrap = document.createElement("label");
+      selectWrap.className = "request-card-select";
+      const checkbox = document.createElement("input");
+      checkbox.type = "checkbox";
+      checkbox.checked = extendSelection.has(record.id);
+      checkbox.setAttribute("aria-label", `เลือกคำร้อง ${record.requestNumber || record.trackingNumber || ""} เพื่อจ่ายงาน`);
+      checkbox.addEventListener("click", (e) => e.stopPropagation());
+      checkbox.addEventListener("change", () => {
+        if (checkbox.checked) extendSelection.add(record.id);
+        else extendSelection.delete(record.id);
+        renderAssignBar();
+      });
+      selectWrap.appendChild(checkbox);
+      card.appendChild(selectWrap);
+    }
+
+    return card;
+  }
+
+  function renderAssignBar() {
+    const count = extendSelection.size;
+    extendAssignBar.hidden = !canAssignWork() || count === 0;
+    extendAssignCount.textContent = `เลือกไว้ ${count} รายการ`;
+  }
+
+  function renderExtendWork() {
+    const jobs = extendJobs();
+    renderExtendChips(jobs);
+
+    const filtered = jobs
+      .filter(extendFilterMatches)
+      .filter(r => matchesSearch(r, extendSearchQuery))
+      .sort((a, b) => b.createdAt - a.createdAt);
+
+    // งานที่เลือกไว้แล้วหลุดออกจากมุมมองปัจจุบัน (เช่นมีคนอื่นเปลี่ยนสถานะไป)
+    // ต้องหลุดจากการเลือกด้วย ไม่งั้นจะจ่ายงานใบที่มองไม่เห็นบนจอไปโดยไม่รู้ตัว
+    const visible = new Set(filtered.map(r => r.id));
+    extendSelection.forEach(id => { if (!visible.has(id)) extendSelection.delete(id); });
+
+    extendWorkTitle.textContent = extendFilterLabel();
+    extendWorkCount.textContent = `ทั้งหมด ${filtered.length} รายการ`;
+
+    extendWorkList.innerHTML = "";
+
+    if (!filtered.length) {
+      const empty = document.createElement("div");
+      empty.className = "request-empty";
+      empty.textContent = extendSearchQuery
+        ? "ไม่พบงานที่ค้นหา"
+        : "ยังไม่มีงานในมุมมองนี้";
+      extendWorkList.appendChild(empty);
+    } else {
+      filtered.forEach(record => extendWorkList.appendChild(renderExtendCard(record)));
+    }
+
+    renderAssignBar();
+  }
+
+  /** เติมรายชื่อเจ้าหน้าที่ลงช่องเลือก โดยพยายามคงคนที่เลือกค้างไว้ */
+  function fillAssigneeSelect() {
+    const previous = extendAssignSelect.value;
+    extendAssignSelect.innerHTML = '<option value="">-- เลือกผู้รับผิดชอบ --</option>';
+
+    staffRoster.forEach(person => {
+      const option = document.createElement("option");
+      option.value = person.email;
+      option.textContent = person.position ? `${person.name} (${person.position})` : person.name;
+      extendAssignSelect.appendChild(option);
+    });
+
+    if (previous && staffRoster.some(p => p.email === previous)) {
+      extendAssignSelect.value = previous;
+    }
+  }
+
+  async function refreshStaffRoster() {
+    const data = await backend.listStaff();
+    staffRoster = data.staff || [];
+    return staffRoster;
+  }
+
+  function openExtendWorkView(options = {}) {
+    if (!options.keepView) {
+      extendFilter = EXTEND_FILTER_ALL;
+      extendSearchQuery = "";
+      extendWorkSearch.value = "";
+    }
+    extendSelection.clear();
+    hideError(extendAssignError);
+    extendAssignSuccess.hidden = true;
+
+    showView("extendWork");
+    renderExtendWork();
+
+    // เฉพาะหัวหน้างาน -- คนอื่นไม่มีอะไรในหน้าจอที่ต้องใช้รายชื่อนี้
+    if (canAssignWork()) {
+      refreshStaffRoster()
+        .then(fillAssigneeSelect)
+        .catch(err => {
+          console.error("CS Connect staff list error:", err);
+          showError(extendAssignError, friendlyError(err, "โหลดรายชื่อเจ้าหน้าที่ไม่สำเร็จ"));
+        });
+    }
+  }
+
+  extendWorkSearch.addEventListener("input", (e) => {
+    extendSearchQuery = e.target.value.trim();
+    renderExtendWork();
+  });
+
+  document.getElementById("extendWorkBackBtn").addEventListener("click", enterApp);
+
+  document.getElementById("extendAssignClearBtn").addEventListener("click", () => {
+    extendSelection.clear();
+    renderExtendWork();
+  });
+
+  extendAssignBtn.addEventListener("click", async (e) => {
+    const btn = e.currentTarget;
+    hideError(extendAssignError);
+    extendAssignSuccess.hidden = true;
+
+    const assigneeEmail = extendAssignSelect.value;
+    if (!assigneeEmail) {
+      showError(extendAssignError, "กรุณาเลือกผู้รับผิดชอบก่อน");
+      return;
+    }
+
+    const ids = Array.from(extendSelection);
+    if (!ids.length) {
+      showError(extendAssignError, "กรุณาเลือกงานที่จะจ่ายก่อน");
+      return;
+    }
+
+    setBusy(btn, true, "กำลังจ่ายงาน...");
+
+    try {
+      // ฝั่งเซิร์ฟเวอร์เป็นคนเขียนฟิลด์การจ่ายงาน ประวัติสถานะ และคอมเมนต์เอง
+      // ทั้งหมด แล้วส่งเรกคอร์ดที่อัปเดตแล้วกลับมา -- ที่นี่แค่เอาไปทับใน cache
+      const updated = await backend.assignRequests(ids, assigneeEmail);
+      const byId = new Map(updated.map(r => [String(r.id), r]));
+      requestsCache = requestsCache.map(r => byId.get(String(r.id)) || r);
+
+      const person = staffRoster.find(p => p.email === assigneeEmail);
+      extendAssignSuccess.textContent =
+        `จ่ายงาน ${updated.length} รายการให้ ${person ? person.name : assigneeEmail} เรียบร้อย`;
+      extendAssignSuccess.hidden = false;
+
+      extendSelection.clear();
+      renderExtendWork();
+    } catch (err) {
+      console.error("CS Connect assign error:", err);
+      showError(extendAssignError, friendlyError(err, "จ่ายงานไม่สำเร็จ กรุณาลองใหม่อีกครั้ง"));
+    } finally {
+      setBusy(btn, false);
     }
   });
 

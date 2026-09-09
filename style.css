@@ -1243,6 +1243,119 @@ button:active {
   color: var(--info);
 }
 
+/* ===== งานขอขยายเขตระบบจำหน่ายไฟฟ้า (โมดูลปฏิบัติงาน) ===== */
+.work-main {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 28px 28px 64px;
+}
+
+/* ชิปกรองสถานะ -- ทุกสถานะอยู่ครบเสมอและอยู่ตำแหน่งเดิมเสมอ ถึงจะเป็นศูนย์
+   (ชิปที่หายไปเวลาเป็นศูนย์ทำให้ชิปอื่นขยับ ปุ่มที่จำตำแหน่งไว้เลยกดผิด) */
+.status-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.status-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--white);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: 14px;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.status-chip:hover {
+  border-color: var(--volt-300);
+  background: var(--volt-50);
+}
+
+.status-chip.active {
+  background: var(--volt-500);
+  border-color: var(--volt-500);
+  color: var(--white);
+}
+
+/* สถานะที่ยังไม่มีงานอยู่เลย -- จางลงแต่ยังกดได้ เพื่อยืนยันด้วยตาว่าว่างจริง */
+.status-chip.is-empty {
+  opacity: 0.5;
+}
+
+.status-chip-count {
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--volt-50);
+  color: var(--volt-700);
+}
+
+.status-chip.active .status-chip-count {
+  background: rgba(255, 255, 255, 0.22);
+  color: var(--white);
+}
+
+/* แถบจ่ายงาน -- ติดขอบล่างจอไว้ เพราะเลือกงานเสร็จแล้วมักอยู่ท้ายรายการยาว ๆ
+   พอดี ไม่ควรต้องเลื่อนกลับขึ้นไปกดปุ่ม */
+.assign-bar {
+  position: sticky;
+  bottom: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 16px;
+  padding: 14px 18px;
+  border: 1px solid var(--volt-300);
+  border-radius: 12px;
+  background: var(--white);
+  box-shadow: var(--shadow);
+}
+
+/* .assign-bar ตั้ง display: flex ไว้ตายตัว จึงต้องมีบรรทัดนี้ ไม่งั้น hidden
+   ไม่มีผลเลย (ดู Gotcha ใน CLAUDE.md) */
+.assign-bar[hidden] {
+  display: none;
+}
+
+.assign-bar-count {
+  font-weight: 600;
+  color: var(--volt-700);
+}
+
+.assign-bar-field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  color: var(--ink-soft);
+}
+
+.assign-bar-field select {
+  min-width: 220px;
+}
+
+/* บรรทัดผู้รับผิดชอบบนการ์ดงาน */
+.work-assignee {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--volt-700);
+}
+
+.work-assignee.is-unassigned {
+  color: var(--warning);
+}
+
 .request-date {
   font-family: var(--font-mono);
   font-size: 12.5px;
