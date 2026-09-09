@@ -25,7 +25,7 @@
 <title>CS Connect</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=Sarabun:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=20260909e">
+<link rel="stylesheet" href="style.css?v=20260909g">
 </head>
 <body>
 
@@ -824,50 +824,58 @@
             <p id="extPlanError" class="form-error" hidden></p>
             <p id="extPlanSuccess" class="form-success" hidden></p>
           </div>
-          <!-- ประมาณการ -- โผล่เมื่อสถานะที่บันทึกไว้จริงเป็น "รอประมาณการ"
-               (หรือคำร้องมีใบประมาณการอยู่แล้ว) บันทึกไปพร้อมปุ่มบันทึกคำร้อง
-               ด้านล่าง ไม่ได้มีปุ่มของตัวเอง เพราะทั้งใบเป็นข้อมูลของคำร้องนี้ -->
-          <div class="field-section" id="extEstimateSection" hidden>
-            <p class="field-section-label">ประมาณการ</p>
 
-            <div class="estimate-head">
-              <div class="field">
-                <label for="estSection">Section</label>
-                <input type="text" id="estSection" list="estSectionList" placeholder="เช่น แผนกแรงสูง 22 KV." autocomplete="off">
-                <datalist id="estSectionList"></datalist>
-              </div>
-              <div class="field">
-                <label for="estGroup">Group</label>
-                <input type="text" id="estGroup" list="estGroupList" placeholder="เช่น HT.OHGW" autocomplete="off">
-                <datalist id="estGroupList"></datalist>
-              </div>
-              <div class="field">
-                <label for="estInvestment">การลงทุน/ทรัพย์สิน</label>
-                <input type="text" id="estInvestment" list="estInvestmentList" placeholder="เช่น 01.1" autocomplete="off">
-                <datalist id="estInvestmentList"></datalist>
-              </div>
-            </div>
+          <!-- ภาพหน้างาน -- เปิดตั้งแต่มีเลข WBS แล้วเป็นต้นไป ไม่ผูกกับสถานะใด
+               สถานะหนึ่ง เพราะการแนบผังจะเดินสถานะต่อทันที ถ้าผูกไว้กับ
+               "รอเขียนผัง" ช่องนี้จะหายไปทันทีที่แนบผังเสร็จ -->
+          <div class="field-section" id="extPhotoSection" hidden>
+            <p class="field-section-label">ภาพหน้างาน</p>
 
-            <p id="estCatalogNote" class="field-hint"></p>
+            <div class="photo-grid">
+              <div class="photo-slot">
+                <p class="photo-slot-label">1. ภาพสถานที่ขอขยายเขตฯ</p>
+                <img id="extSitePhotoPreview" alt="ภาพสถานที่ขอขยายเขตฯ" hidden>
+                <p id="extSitePhotoEmpty" class="field-hint">ยังไม่ได้แนบภาพ</p>
+                <input type="file" id="extSitePhotoFile" accept="image/*">
+                <button type="button" id="extSitePhotoBtn" class="btn btn-ghost">อัปโหลดภาพสถานที่</button>
+              </div>
 
-            <!-- ตารางกว้างกว่าคอลัมน์ฟอร์ม จึงให้เลื่อนในกรอบตัวเอง ไม่ใช่ดันทั้งหน้า -->
-            <div class="estimate-scroll">
-              <div class="estimate-table">
-                <div class="estimate-row estimate-head-row">
-                  <span>No.</span>
-                  <span>Description</span>
-                  <span>KeyCode</span>
-                  <span>IN.</span>
-                  <span>RM.</span>
-                  <span>RP.</span>
-                  <span></span>
-                </div>
-                <div id="estRows"></div>
+              <div class="photo-slot">
+                <p class="photo-slot-label">2. ภาพเส้นทางขยายเขตฯ</p>
+                <img id="extRoutePhotoPreview" alt="ภาพเส้นทางขยายเขตฯ" hidden>
+                <p id="extRoutePhotoEmpty" class="field-hint">ยังไม่ได้แนบภาพ</p>
+                <input type="file" id="extRoutePhotoFile" accept="image/*">
+                <button type="button" id="extRoutePhotoBtn" class="btn btn-ghost">อัปโหลดภาพเส้นทาง</button>
               </div>
             </div>
 
             <div class="batch-toolbar">
-              <button type="button" id="estAddRowBtn" class="btn btn-ghost">+ เพิ่มรายการ</button>
+              <button type="button" id="extPhotoPrintBtn" class="btn btn-primary">พิมพ์ใบภาพหน้างาน (A4)</button>
+            </div>
+
+            <p id="extPhotoError" class="form-error" hidden></p>
+            <p id="extPhotoSuccess" class="form-success" hidden></p>
+          </div>
+
+          <!-- ขึ้นเมื่อสถานะเป็น "อนุมัติและแจ้งค่าใช้จ่ายแล้ว" หรือเคยกรอกไว้แล้ว -->
+          <div class="field-row" id="extApprovalField" hidden>
+            <div class="field">
+              <label for="extApprovalNo">เลขที่อนุมัติ</label>
+              <input type="text" id="extApprovalNo" placeholder="เลขที่หนังสืออนุมัติ" autocomplete="off">
+            </div>
+            <div class="field">
+              <label for="extApprovalDate">วันที่อนุมัติ</label>
+              <input type="date" id="extApprovalDate">
+            </div>
+          </div>
+          <!-- ประมาณการเป็นหน้าของตัวเอง ไม่ได้ยัดไว้ในฟอร์มนี้ -- ใบจริงมีหลายชุด
+               (แยกตามแผนก และแต่ละแผนกมีงานย่อยอีกหลายงาน) ซึ่งกว้างเกินกว่าจะ
+               อยู่ในคอลัมน์ฟอร์มได้ ที่นี่เหลือแค่ทางเข้ากับสรุปย่อ -->
+          <div class="field-section" id="extEstimateSection" hidden>
+            <p class="field-section-label">ประมาณการ</p>
+            <p id="extEstimateSummary" class="field-hint"></p>
+            <div class="batch-toolbar">
+              <button type="button" id="extEstimateOpenBtn" class="btn btn-primary">เปิดหน้าประมาณการ</button>
             </div>
           </div>
 
@@ -969,6 +977,115 @@
   </main>
 </section>
 
+<!-- ===== ประมาณการ =====
+     ไล่ลงสามชั้น: แผนก -> งานย่อย -> ฟอร์มประมาณการของงานย่อยนั้น ตรงกับของจริง
+     ที่หนึ่ง WBS มีใบประมาณการหลายชุด แยกตามแผนก และแต่ละแผนกมีงานย่อยหลายงาน
+     ทั้งหน้าอ่าน/เขียนอยู่กับ estimate ก้อนเดียวของคำร้องใบนั้น -->
+<section id="estimateView" class="app-view" hidden>
+  <header class="topbar">
+    <div class="topbar-brand">
+      <button id="estimateBackBtn" class="btn btn-ghost btn-icon" aria-label="ย้อนกลับ">
+        <svg viewBox="0 0 24 24" fill="none"><path d="M15 18l-6-6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+      <span class="topbar-title">ประมาณการ</span>
+    </div>
+    <div class="topbar-user">
+      <span id="estimateDirty" class="estimate-dirty" hidden>ยังไม่ได้บันทึก</span>
+      <button type="button" id="estimateSaveBtn" class="btn btn-primary">บันทึกประมาณการ</button>
+    </div>
+  </header>
+
+  <main class="work-main">
+    <div class="estimate-context">
+      <p id="estimateContextWbs" class="estimate-context-wbs"></p>
+      <p id="estimateContextCustomer" class="estimate-context-sub"></p>
+    </div>
+
+    <nav id="estCrumbs" class="estimate-crumbs"></nav>
+
+    <p id="estimateError" class="form-error" hidden></p>
+    <p id="estimateSuccess" class="form-success" hidden></p>
+
+    <!-- ชั้น 1: แผนก -->
+    <div id="estDeptPane">
+      <div class="estimate-pane-head">
+        <h2>แผนก</h2>
+        <p class="requests-count">สร้างแผนกก่อน แล้วจึงเพิ่มงานย่อยในแผนกนั้น</p>
+      </div>
+      <div id="estDeptList" class="estimate-cards"></div>
+      <div class="estimate-add-row">
+        <input type="text" id="estNewDept" list="estSectionList" placeholder="ชื่อแผนก เช่น แผนกแรงสูง 22 KV." autocomplete="off">
+        <button type="button" id="estAddDeptBtn" class="btn btn-primary">+ เพิ่มแผนก</button>
+      </div>
+    </div>
+
+    <!-- ชั้น 2: งานย่อยในแผนกที่เลือก -->
+    <div id="estJobPane" hidden>
+      <div class="estimate-pane-head">
+        <h2 id="estJobPaneTitle">งานย่อย</h2>
+        <p class="requests-count">งานย่อยหนึ่งงาน = ใบประมาณการหนึ่งใบ</p>
+      </div>
+      <div id="estJobList" class="estimate-cards"></div>
+      <div class="estimate-add-row">
+        <input type="text" id="estNewJob" placeholder="ชื่องานย่อย (ถ้ามี)" autocomplete="off">
+        <input type="text" id="estNewJobGroup" list="estGroupList" placeholder="Group เช่น HT.OHGW" autocomplete="off">
+        <input type="text" id="estNewJobInvestment" list="estInvestmentList" placeholder="การลงทุน เช่น 01.1" autocomplete="off">
+        <button type="button" id="estAddJobBtn" class="btn btn-primary">+ เพิ่มงานย่อย</button>
+      </div>
+    </div>
+
+    <!-- ชั้น 3: ฟอร์มประมาณการของงานย่อย -->
+    <div id="estFormPane" hidden>
+      <div class="estimate-pane-head">
+        <h2 id="estFormPaneTitle">ใบประมาณการ</h2>
+      </div>
+
+      <div class="estimate-head">
+        <div class="field">
+          <label for="estJobName">ชื่องานย่อย</label>
+          <input type="text" id="estJobName" placeholder="เช่น ปักเสาช่วงที่ 1" autocomplete="off">
+        </div>
+        <div class="field">
+          <label for="estGroup">Group</label>
+          <input type="text" id="estGroup" list="estGroupList" placeholder="เช่น HT.OHGW" autocomplete="off">
+        </div>
+        <div class="field">
+          <label for="estInvestment">การลงทุน/ทรัพย์สิน</label>
+          <input type="text" id="estInvestment" list="estInvestmentList" placeholder="เช่น 01.1" autocomplete="off">
+        </div>
+      </div>
+
+      <p id="estCatalogNote" class="field-hint"></p>
+
+      <div class="estimate-scroll">
+        <div class="estimate-table">
+          <div class="estimate-row estimate-head-row">
+            <span>No.</span>
+            <span>Description</span>
+            <span>KeyCode</span>
+            <span>IN.</span>
+            <span>RM.</span>
+            <span>RP.</span>
+            <span></span>
+          </div>
+          <div id="estRows"></div>
+        </div>
+      </div>
+
+      <div class="batch-toolbar">
+        <button type="button" id="estAddRowBtn" class="btn btn-ghost">+ เพิ่มรายการ</button>
+      </div>
+    </div>
+
+    <!-- รายการตัวเลือกใช้ร่วมกันทั้งหน้า -- รายการคำอธิบายมีสองพันกว่ารายการ
+         ถ้าทำ datalist ต่อแถวจะกลายเป็นหลายหมื่นโหนดในหน้าเดียว -->
+    <datalist id="estSectionList"></datalist>
+    <datalist id="estGroupList"></datalist>
+    <datalist id="estInvestmentList"></datalist>
+    <datalist id="estDescList"></datalist>
+  </main>
+</section>
+
 <!-- ===== SERVICE PLACEHOLDER ===== -->
 <section id="serviceView" class="app-view" hidden>
   <header class="topbar">
@@ -1002,6 +1119,6 @@
      ที่หาสาเหตุยากมาก
      **ต้องเปลี่ยนเลขนี้ทุกครั้งที่แก้ app.js / style.css / track.js / qr.js**
      ไม่งั้นผู้ใช้บางคนจะยังได้ไฟล์เก่าไปอีกพักใหญ่ -->
-<script src="app.js?v=20260909e"></script>
+<script src="app.js?v=20260909g"></script>
 </body>
 </html>

@@ -331,6 +331,13 @@ button:active {
   gap: 16px;
 }
 
+/* ตั้ง display ไว้ตายตัวด้านบน จึงต้องมีบรรทัดนี้ ไม่งั้น hidden ไม่มีผล --
+   #extApprovalField (เลขที่/วันที่อนุมัติ) ใช้คลาสนี้และถูกซ่อน/แสดงตามสถานะ
+   ดู Gotcha ใน CLAUDE.md */
+.field-row[hidden] {
+  display: none;
+}
+
 /* ช่องเบอร์โทร + ปุ่มโทรออก (tel: link ธรรมดา ใช้ได้จริงเฉพาะเปิดผ่านมือถือ) */
 .field-input-row {
   display: flex;
@@ -1352,11 +1359,184 @@ button:active {
   min-width: 220px;
 }
 
+/* ===== ภาพหน้างาน ===== */
+.photo-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.photo-slot {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--paper);
+}
+
+.photo-slot-label {
+  margin: 0;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--volt-700);
+}
+
+.photo-slot img {
+  width: 100%;
+  max-height: 220px;
+  object-fit: contain;
+  border-radius: 8px;
+  background: var(--white);
+}
+
+/* ตั้ง display ไว้ตายตัวด้านบน จึงต้องมีบรรทัดนี้ (ดู Gotcha ใน CLAUDE.md) */
+.photo-slot img[hidden] {
+  display: none;
+}
+
+@media (max-width: 700px) {
+  .photo-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ===== หน้าประมาณการ ===== */
+.estimate-context {
+  margin-bottom: 6px;
+}
+
+.estimate-context-wbs {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--volt-700);
+}
+
+.estimate-context-sub {
+  margin: 2px 0 0;
+  font-size: 13.5px;
+  color: var(--ink-soft);
+}
+
+/* เตือนว่ายังไม่ได้บันทึก -- อยู่ข้างปุ่มบันทึกบนแถบบน จะได้เห็นตลอดทุกชั้น */
+.estimate-dirty {
+  font-size: 13px;
+  color: var(--warning);
+  font-weight: 600;
+}
+
+.estimate-crumbs {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 14px 0 18px;
+  font-size: 13.5px;
+}
+
+.estimate-crumb {
+  border: none;
+  background: transparent;
+  padding: 2px 4px;
+  font-family: var(--font-body);
+  font-size: 13.5px;
+  color: var(--volt-500);
+  cursor: pointer;
+  border-radius: 6px;
+}
+
+.estimate-crumb:hover {
+  background: var(--volt-50);
+}
+
+/* ชั้นสุดท้ายเป็น <span> ไม่ใช่ปุ่ม -- กดกลับไปที่ตัวเองไม่ได้ */
+span.estimate-crumb {
+  color: var(--ink);
+  font-weight: 600;
+  cursor: default;
+}
+
+.estimate-crumb-sep {
+  color: var(--ink-soft);
+}
+
+.estimate-pane-head h2 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 20px;
+  color: var(--volt-700);
+}
+
+.estimate-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 14px 0 18px;
+}
+
+.estimate-card {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--volt-500);
+  border-radius: 0 12px 12px 0;
+  background: var(--white);
+}
+
+.estimate-card-open {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 14px 16px;
+  border: none;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  border-radius: 0 12px 12px 0;
+}
+
+.estimate-card-open:hover {
+  background: var(--volt-50);
+}
+
+.estimate-card-title {
+  font-size: 15.5px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.estimate-card-meta {
+  font-size: 13px;
+  color: var(--ink-soft);
+}
+
+/* แถวเพิ่มแผนก/งานย่อย -- ช่องกรอกกับปุ่มอยู่บรรทัดเดียวกัน */
+.estimate-add-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 14px;
+  border: 1px dashed var(--border-strong);
+  border-radius: 12px;
+  background: var(--paper);
+}
+
+.estimate-add-row input {
+  flex: 1;
+  min-width: 160px;
+}
+
 /* ===== ใบประมาณการ ===== */
 .estimate-head {
   display: grid;
   grid-template-columns: 2fr 1.4fr 1fr;
   gap: 16px;
+  margin-bottom: 14px;
 }
 
 /* ตารางกว้างกว่าคอลัมน์ฟอร์มแน่นอน -- ให้เลื่อนแนวนอนในกรอบของตัวเอง ไม่ใช่

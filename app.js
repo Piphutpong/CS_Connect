@@ -252,8 +252,8 @@
       throw new Error("โหมดออฟไลน์ไม่รองรับการตั้งสิทธิ์หัวหน้างาน");
     },
 
-    async savePlan() {
-      throw new Error("โหมดออฟไลน์ไม่รองรับการแนบแผนผัง");
+    async saveExtendFile() {
+      throw new Error("โหมดออฟไลน์ไม่รองรับการแนบไฟล์");
     },
 
     async listEstimateItems() {
@@ -441,10 +441,11 @@
         return callAsUser({ action: "listEstimateItems" });
       },
 
-      // แนบไฟล์แผนผัง -- ฝั่งเซิร์ฟเวอร์อัปขึ้น Drive แล้วเดินสถานะให้เอง
+      // แนบไฟล์ของงานขอขยายเขตฯ (แผนผัง / ภาพสถานที่ / ภาพเส้นทาง) -- ฝั่ง
+      // เซิร์ฟเวอร์อัปขึ้น Drive เอง และเดินสถานะให้เฉพาะกรณีแผนผัง
       // คืนคำร้องที่อัปเดตแล้วกลับมาเพื่อเอาไปทับใน cache
-      async savePlan(id, file) {
-        const data = await callAsUser({ action: "savePlan", id, file });
+      async saveExtendFile(id, kind, file) {
+        const data = await callAsUser({ action: "saveExtendFile", id, kind, file });
         const updated = data.request;
         if (updated) savedRequests.set(String(updated.id), JSON.stringify(updated));
         return updated;
@@ -615,7 +616,8 @@
     home: document.getElementById("homeView"),
     service: document.getElementById("serviceView"),
     requests: document.getElementById("requestsView"),
-    extendWork: document.getElementById("extendWorkView")
+    extendWork: document.getElementById("extendWorkView"),
+    estimate: document.getElementById("estimateView")
   };
 
   function showView(name) {
@@ -2209,12 +2211,14 @@
   const extPlanFile = document.getElementById("extPlanFile");
   const extPlanError = document.getElementById("extPlanError");
   const extPlanSuccess = document.getElementById("extPlanSuccess");
+  const extPhotoSection = document.getElementById("extPhotoSection");
+  const extPhotoError = document.getElementById("extPhotoError");
+  const extPhotoSuccess = document.getElementById("extPhotoSuccess");
+  const extApprovalField = document.getElementById("extApprovalField");
+  const extApprovalNo = document.getElementById("extApprovalNo");
+  const extApprovalDate = document.getElementById("extApprovalDate");
   const extEstimateSection = document.getElementById("extEstimateSection");
-  const estSection = document.getElementById("estSection");
-  const estGroup = document.getElementById("estGroup");
-  const estInvestment = document.getElementById("estInvestment");
-  const estRows = document.getElementById("estRows");
-  const estCatalogNote = document.getElementById("estCatalogNote");
+  const extEstimateSummary = document.getElementById("extEstimateSummary");
   const extDistrict = document.getElementById("extDistrict");
   const extSubdistrict = document.getElementById("extSubdistrict");
   const extZipcode = document.getElementById("extZipcode");
@@ -2607,9 +2611,52 @@
     const showEstimate = Boolean(record)
       && (storedStatus === "รอประมาณการ" || Boolean(record.estimate));
     extEstimateSection.hidden = !showEstimate;
-    // ไม่วาดใบประมาณการใหม่ตรงนี้โดยตั้งใจ -- ฟังก์ชันนี้ถูกเรียกทุกครั้งที่
-    // เปลี่ยนดรอปดาวน์สถานะ ถ้าวาดใหม่ที่นี่ สิ่งที่พิมพ์ค้างไว้ในใบจะหายทันที
-    // ที่เจ้าหน้าที่แตะช่องสถานะ การเติมข้อมูลจึงทำครั้งเดียวตอนเปิดฟอร์ม
+    if (showEstimate) extEstimateSummary.textContent = estimateSummaryText(record);
+
+    // ภาพหน้างานผูกกับ "มีเลข WBS แล้ว" ไม่ใช่สถานะใดสถานะหนึ่ง -- การแนบแผนผัง
+    // เดินสถานะต่อทันที ถ้าผูกไว้กับ "รอเขียนผัง" ช่องนี้จะหายไปในวินาทีที่แนบ
+    // ผังเสร็จ ทั้งที่ยังไม่ได้ถ่ายรูปหน้างานเลย
+    const showPhotos = Boolean(record)
+      && (Boolean(record.wbs) || Boolean(record.sitePhoto) || Boolean(record.routePhoto));
+    extPhotoSection.hidden = !showPhotos;
+    if (showPhotos) renderExtendPhotos(record);
+
+    extApprovalField.hidden = !(status === "อนุมัติและแจ้งค่าใช้จ่ายแล้ว"
+      || Boolean(record && (record.approvalNo || record.approvalDate)));
+  }
+
+  function renderExtendPhotos(record) {
+    [
+      ["sitePhoto", "extSitePhotoPreview", "extSitePhotoEmpty"],
+      ["routePhoto", "extRoutePhotoPreview", "extRoutePhotoEmpty"]
+    ].forEach(([field, previewId, emptyId]) => {
+      const preview = document.getElementById(previewId);
+      const empty = document.getElementById(emptyId);
+      const url = record[field];
+
+      preview.hidden = !url;
+      empty.hidden = Boolean(url);
+
+      if (url) {
+        preview.src = driveThumbnailUrl(url);
+      } else {
+        // ล้าง src ทิ้งด้วย ไม่ใช่แค่ซ่อน -- ไม่งั้นภาพของคำร้องใบก่อนยังค้าง
+        // อยู่ใน DOM (เคยเป็นบั๊กจริงมาแล้วกับสลิปในหน้าติดตามสถานะ)
+        preview.removeAttribute("src");
+      }
+    });
+  }
+
+  /** สรุปย่อบนฟอร์มคำร้อง -- รายละเอียดทั้งหมดอยู่ในหน้าประมาณการ */
+  function estimateSummaryText(record) {
+    const departments = (record.estimate && record.estimate.departments) || [];
+    if (!departments.length) return "ยังไม่ได้เริ่มทำประมาณการ";
+
+    const jobs = departments.reduce((sum, d) => sum + ((d.jobs || []).length), 0);
+    const items = departments.reduce((sum, d) =>
+      sum + (d.jobs || []).reduce((n, j) => n + ((j.items || []).length), 0), 0);
+
+    return `${departments.length} แผนก · ${jobs} งานย่อย · ${items} รายการ`;
   }
 
   function renderPlanCurrent(record) {
@@ -3153,6 +3200,8 @@
     document.getElementById("extAssignee").value = r.assignee || "";
     // มีเลขแล้วใช้เลขเดิม ยังไม่มีก็เดาเลขถัดไปของปีนี้ให้ (แก้ทับได้)
     extWbs.value = r.wbs || nextWbs();
+    extApprovalNo.value = r.approvalNo || "";
+    extApprovalDate.value = r.approvalDate || "";
     document.getElementById("extNote").value = r.note || "";
 
     extLat.value = r.lat || "";
@@ -3552,8 +3601,13 @@
     extAssigneeField.hidden = true;
     extWbsField.hidden = true;
     extPlanSection.hidden = true;
+    extPhotoSection.hidden = true;
+    extApprovalField.hidden = true;
+    hideError(extPhotoError);
+    extPhotoSuccess.hidden = true;
+    document.getElementById("extSitePhotoFile").value = "";
+    document.getElementById("extRoutePhotoFile").value = "";
     extEstimateSection.hidden = true;
-    estRows.innerHTML = "";
     extPlanCurrent.textContent = "";
     extPlanFile.value = "";
     hideError(extPlanError);
@@ -3612,7 +3666,6 @@
       extendFormRecord = record;
       fillExtendForm(record);
       syncExtendStageFields(record);
-      if (!extEstimateSection.hidden) renderEstimate(record);
     }
 
     // Audit strip only makes sense for a record that already exists -- and
@@ -3964,9 +4017,8 @@
       const note = document.getElementById("extNote").value.trim();
       const trackingNumber = extTrackingNumber.value;
       const wbs = extWbs.value.trim();
-      // ใบประมาณการอ่านจากหน้าจอเฉพาะตอนที่ส่วนนี้เปิดอยู่ -- ถ้าปิดอยู่แปลว่า
-      // งานยังไม่ถึงขั้นนั้น ต้องไม่ไปเขียนทับใบเดิมด้วยค่าว่างจากช่องที่ซ่อนไว้
-      const estimate = extEstimateSection.hidden ? undefined : collectEstimate();
+      const approvalNo = extApprovalNo.value.trim();
+      const approvalDate = extApprovalDate.value;
       const lat = extLat.value.trim();
       const lng = extLng.value.trim();
 
@@ -4034,12 +4086,13 @@
         purpose,
         jobStatus: nextStatus,
         wbs,
+        approvalNo,
+        approvalDate,
         note,
         lat,
         lng
       };
 
-      if (estimate !== undefined) recordData.estimate = estimate;
 
       const { byName: savedByName, byEmail: savedByEmail } = actingStaff();
       const now = Date.now();
@@ -4096,191 +4149,6 @@
   });
 
   /**
-   * ---------- ใบประมาณการ ----------
-   *
-   * รายการ (Description + KeyCode) เป็นข้อมูลตั้งต้นของ กฟภ. ที่ยาวเป็นพันบรรทัด
-   * และเปลี่ยนตามประกาศ จึงเก็บไว้ในแท็บ EstimateItems ของชีต ให้ผู้ดูแลระบบวาง
-   * ข้อมูลเองได้ ไม่ได้ฝังไว้ในไฟล์เว็บ (ไฟล์เว็บทุกไฟล์เป็นสาธารณะ และการแก้
-   * รายการไม่ควรต้องแก้โค้ด) โหลดครั้งเดียวต่อการเปิดเว็บแล้วกรองในเบราว์เซอร์
-   *
-   * ใช้ <input list=...> + <datalist> แทน <select> โดยตั้งใจ: รายการหลักพัน
-   * บรรทัดใน <select> เลื่อนหาไม่ไหว แต่ datalist พิมพ์คำไหนก็กรองให้ทันที และ
-   * ยังพิมพ์ค่าที่ไม่มีในรายการได้ด้วย -- ต้องได้ เพราะแค็ตตาล็อกวันแรกยังว่าง
-   * และงานจริงมีรายการนอกแค็ตตาล็อกเสมอ
-   */
-  let estimateCatalog = null;
-
-  async function ensureEstimateCatalog() {
-    if (estimateCatalog) return estimateCatalog;
-    const data = await backend.listEstimateItems();
-    estimateCatalog = data.items || [];
-    return estimateCatalog;
-  }
-
-  function fillDatalist(datalist, values) {
-    datalist.innerHTML = "";
-    values.forEach(value => {
-      const option = document.createElement("option");
-      option.value = value;
-      datalist.appendChild(option);
-    });
-  }
-
-  function uniqueSorted(values) {
-    return Array.from(new Set(values.filter(Boolean))).sort((a, b) => a.localeCompare(b, "th"));
-  }
-
-  /** รายการที่เข้าเงื่อนไข Section/Group ที่เลือกอยู่ -- ว่างไว้ = ไม่กรอง */
-  function estimateItemsInScope() {
-    const items = estimateCatalog || [];
-    const section = estSection.value.trim();
-    const group = estGroup.value.trim();
-
-    return items.filter(item =>
-      (!section || item.section === section) && (!group || item.group === group));
-  }
-
-  function refreshEstimateChoices() {
-    const items = estimateCatalog || [];
-
-    fillDatalist(document.getElementById("estSectionList"), uniqueSorted(items.map(i => i.section)));
-
-    const section = estSection.value.trim();
-    fillDatalist(
-      document.getElementById("estGroupList"),
-      uniqueSorted(items.filter(i => !section || i.section === section).map(i => i.group))
-    );
-
-    // การลงทุน/ทรัพย์สินไม่ได้อยู่ในแค็ตตาล็อก -- เสนอค่าที่เคยใช้ในใบก่อน ๆ
-    // แทน รายการจึงงอกเองจากการใช้งานจริงโดยไม่ต้องตั้งค่าอะไรเลย
-    fillDatalist(
-      document.getElementById("estInvestmentList"),
-      uniqueSorted(getRequests().map(r => r.estimate && r.estimate.investment))
-    );
-
-    const scoped = estimateItemsInScope();
-    estRows.querySelectorAll("[data-est-description]").forEach(input => {
-      fillDatalist(document.getElementById(input.getAttribute("list")), scoped.map(i => i.description));
-    });
-
-    estCatalogNote.textContent = items.length
-      ? `รายการในระบบ ${items.length} รายการ · เลือก Section และ Group เพื่อกรองรายการให้แคบลง`
-      : "ยังไม่มีรายการตั้งต้นในระบบ (แท็บ EstimateItems ในชีตยังว่าง) — พิมพ์ Description และ KeyCode เองได้ตามปกติ";
-  }
-
-  function addEstimateRow(values = {}) {
-    const seq = estRows.children.length + 1;
-    const listId = `estDescList${seq}-${Date.now()}`;
-
-    const row = document.createElement("div");
-    row.className = "estimate-row";
-
-    const no = document.createElement("span");
-    no.className = "estimate-no";
-    no.textContent = String(seq);
-
-    const description = document.createElement("input");
-    description.type = "text";
-    description.setAttribute("data-est-description", "1");
-    description.setAttribute("list", listId);
-    description.value = values.description || "";
-
-    const datalist = document.createElement("datalist");
-    datalist.id = listId;
-
-    const keyCode = document.createElement("input");
-    keyCode.type = "text";
-    keyCode.className = "estimate-keycode";
-    keyCode.setAttribute("data-est-keycode", "1");
-    keyCode.value = values.keyCode || "";
-
-    // เลือกรายการจากแค็ตตาล็อกแล้ว KeyCode ตามมาเอง -- แต่ไม่ล็อกช่อง เพราะ
-    // รายการนอกแค็ตตาล็อกยังต้องกรอกรหัสเองได้
-    description.addEventListener("input", () => {
-      const match = (estimateCatalog || []).find(i => i.description === description.value.trim());
-      if (match) keyCode.value = match.keyCode;
-    });
-
-    const quantities = ["in", "rm", "rp"].map(key => {
-      const input = document.createElement("input");
-      input.type = "number";
-      input.min = "0";
-      input.step = "1";
-      input.className = "estimate-qty";
-      input.setAttribute(`data-est-${key}`, "1");
-      input.value = values[key] || "";
-      return input;
-    });
-
-    const remove = document.createElement("button");
-    remove.type = "button";
-    remove.className = "estimate-remove";
-    remove.setAttribute("aria-label", "ลบรายการนี้");
-    remove.textContent = "×";
-    remove.addEventListener("click", () => {
-      row.remove();
-      renumberEstimateRows();
-    });
-
-    row.append(no, description, datalist, keyCode, ...quantities, remove);
-    estRows.appendChild(row);
-
-    fillDatalist(datalist, estimateItemsInScope().map(i => i.description));
-    return row;
-  }
-
-  function renumberEstimateRows() {
-    Array.from(estRows.children).forEach((row, index) => {
-      row.querySelector(".estimate-no").textContent = String(index + 1);
-    });
-  }
-
-  /** อ่านใบประมาณการจากหน้าจอ -- แถวที่ไม่มี Description ถือว่าไม่ได้กรอก */
-  function collectEstimate() {
-    const items = Array.from(estRows.children).map(row => ({
-      description: row.querySelector("[data-est-description]").value.trim(),
-      keyCode: row.querySelector("[data-est-keycode]").value.trim(),
-      in: row.querySelector("[data-est-in]").value.trim(),
-      rm: row.querySelector("[data-est-rm]").value.trim(),
-      rp: row.querySelector("[data-est-rp]").value.trim()
-    })).filter(item => item.description);
-
-    const section = estSection.value.trim();
-    const group = estGroup.value.trim();
-    const investment = estInvestment.value.trim();
-
-    if (!items.length && !section && !group && !investment) return null;
-
-    return { section, group, investment, items };
-  }
-
-  function renderEstimate(record) {
-    const estimate = (record && record.estimate) || {};
-    estSection.value = estimate.section || "";
-    estGroup.value = estimate.group || "";
-    estInvestment.value = estimate.investment || "";
-
-    estRows.innerHTML = "";
-    const items = Array.isArray(estimate.items) ? estimate.items : [];
-    items.forEach(item => addEstimateRow(item));
-
-    // ใบเปล่าเริ่มด้วยแถวว่างไม่กี่แถว จะได้ไม่ต้องกดเพิ่มแถวก่อนเริ่มพิมพ์
-    while (estRows.children.length < 3) addEstimateRow();
-
-    // แค็ตตาล็อกโหลดช้ากว่าการวาดหน้าจอได้ -- วาดก่อน แล้วค่อยเติมตัวเลือกตามมา
-    ensureEstimateCatalog()
-      .then(refreshEstimateChoices)
-      .catch(err => {
-        console.error("CS Connect estimate catalog error:", err);
-        estCatalogNote.textContent = "โหลดรายการตั้งต้นไม่สำเร็จ — พิมพ์ Description และ KeyCode เองได้ตามปกติ";
-      });
-  }
-
-  document.getElementById("estAddRowBtn").addEventListener("click", () => addEstimateRow());
-  estSection.addEventListener("change", refreshEstimateChoices);
-  estGroup.addEventListener("change", refreshEstimateChoices);
-
-  /**
    * อัปโหลดไฟล์แผนผังของคำร้องที่เปิดอยู่
    *
    * แยกจากปุ่มบันทึกคำร้องโดยตั้งใจ: ไฟล์ไม่ได้ไปอยู่ในชีต แต่ขึ้น Drive ผ่าน
@@ -4321,7 +4189,7 @@
         reader.readAsDataURL(file);
       });
 
-      const updated = await backend.savePlan(extendFormRecord.id, dataUrl);
+      const updated = await backend.saveExtendFile(extendFormRecord.id, "plan", dataUrl);
 
       requestsCache = requestsCache.map(r => (String(r.id) === String(updated.id) ? updated : r));
       extendFormRecord = updated;
@@ -4330,9 +4198,6 @@
       extJobStatus.value = updated.jobStatus;
       renderStatusHistory(updated);
       syncExtendStageFields(updated);
-      // แนบผังเสร็จ สถานะเดินไป "รอประมาณการ" ส่วนประมาณการจึงเพิ่งโผล่ -- เติม
-      // ใบเปล่าให้ด้วย (เฉพาะตอนที่ยังไม่มีแถวเลย จะได้ไม่ทับสิ่งที่พิมพ์ค้างไว้)
-      if (!extEstimateSection.hidden && !estRows.children.length) renderEstimate(updated);
 
       extPlanFile.value = "";
       extPlanSuccess.textContent = `แนบแผนผังเรียบร้อย สถานะปัจจุบัน: ${updated.jobStatus}`;
@@ -4340,6 +4205,668 @@
     } catch (err) {
       console.error("CS Connect plan upload error:", err);
       showError(extPlanError, friendlyError(err, "แนบแผนผังไม่สำเร็จ กรุณาลองใหม่อีกครั้ง"));
+    } finally {
+      setBusy(btn, false);
+    }
+  });
+
+  /**
+   * แนบภาพหน้างาน -- ใช้ทางเดียวกับแผนผัง ต่างแค่ kind
+   *
+   * ไม่เดินสถานะ ต่างจากแผนผังโดยตั้งใจ: ภาพหน้างานเป็นเอกสารประกอบที่แนบเมื่อไร
+   * ก็ได้ ไม่ใช่หมุดหมายของขั้นตอนงาน
+   */
+  async function uploadExtendPhoto(button, kind, input) {
+    hideError(extPhotoError);
+    extPhotoSuccess.hidden = true;
+
+    const file = input.files && input.files[0];
+    if (!file) {
+      showError(extPhotoError, "กรุณาเลือกไฟล์ภาพก่อน");
+      return;
+    }
+    if (!extendFormRecord) {
+      showError(extPhotoError, "ต้องบันทึกคำร้องก่อนจึงจะแนบภาพได้");
+      return;
+    }
+    // กันแต่เนิ่น ๆ จะได้ไม่รออ่านไฟล์ใหญ่จนจบแล้วค่อยโดนปฏิเสธ (ด่านจริงอยู่
+    // ฝั่งเซิร์ฟเวอร์เหมือนเดิม)
+    if (file.size > 5 * 1024 * 1024) {
+      showError(extPhotoError, "ไฟล์ภาพใหญ่เกินไป (จำกัดไม่เกิน 5 MB)");
+      return;
+    }
+
+    setBusy(button, true, "กำลังอัปโหลด...");
+
+    try {
+      const dataUrl = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = () => reject(new Error("อ่านไฟล์ไม่สำเร็จ"));
+        reader.readAsDataURL(file);
+      });
+
+      const updated = await backend.saveExtendFile(extendFormRecord.id, kind, dataUrl);
+
+      requestsCache = requestsCache.map(r => (String(r.id) === String(updated.id) ? updated : r));
+      extendFormRecord = updated;
+      renderExtendPhotos(updated);
+
+      input.value = "";
+      extPhotoSuccess.textContent = "แนบภาพเรียบร้อย";
+      extPhotoSuccess.hidden = false;
+    } catch (err) {
+      console.error("CS Connect photo upload error:", err);
+      showError(extPhotoError, friendlyError(err, "แนบภาพไม่สำเร็จ กรุณาลองใหม่อีกครั้ง"));
+    } finally {
+      setBusy(button, false);
+    }
+  }
+
+  document.getElementById("extSitePhotoBtn").addEventListener("click", (e) =>
+    uploadExtendPhoto(e.currentTarget, "sitePhoto", document.getElementById("extSitePhotoFile")));
+
+  document.getElementById("extRoutePhotoBtn").addEventListener("click", (e) =>
+    uploadExtendPhoto(e.currentTarget, "routePhoto", document.getElementById("extRoutePhotoFile")));
+
+  /**
+   * ใบภาพหน้างาน A4 หน้าเดียว -- WBS, ภาพสถานที่, ภาพเส้นทาง, พิกัด, วันที่พิมพ์
+   *
+   * ใช้วิธีเดียวกับใบพิมพ์อื่นในแอปนี้: เปิดแท็บใหม่แล้วเขียนเอกสารที่มี @page
+   * ของตัวเอง แล้วสั่งพิมพ์ -- การ "บันทึกเป็น PDF" คือปลายทางหนึ่งของกล่องพิมพ์
+   * ที่เบราว์เซอร์มีให้อยู่แล้ว จึงไม่ต้องแบกไลบรารีสร้าง PDF เข้ามา (ซึ่ง CSP
+   * ของหน้านี้บล็อกสคริปต์นอกไฟล์เราอยู่แล้วด้วย)
+   *
+   * ความสูงถูกล็อกเป็น A4 หนึ่งหน้าพอดี แล้วให้กรอบภาพสองกรอบแบ่งพื้นที่ที่เหลือ
+   * กันเอง (flex: 1) ภาพจึงใหญ่ที่สุดเท่าที่จะใหญ่ได้โดยไม่ล้นไปหน้าที่สอง
+   * ไม่ว่าภาพจะเป็นแนวตั้งหรือแนวนอน (object-fit: contain ไม่บิดสัดส่วน)
+   *
+   * เอกสารที่เปิดด้วย window.open("") สืบทอด CSP ของหน้าแม่ -- ห้ามมี <script>
+   * หรือ on* attribute เด็ดขาด ปุ่มพิมพ์จึงถูกผูก event จากหน้าแม่แทน
+   */
+  function printSitePhotoSheet(record) {
+    const win = window.open("", "_blank");
+    if (!win) return;
+
+    const wbs = escapeForPrint(record.wbs || "-");
+    const site = record.sitePhoto ? driveThumbnailUrl(record.sitePhoto) : "";
+    const route = record.routePhoto ? driveThumbnailUrl(record.routePhoto) : "";
+
+    const lat = parseFloat(record.lat);
+    const lng = parseFloat(record.lng);
+    const coords = (isFinite(lat) && isFinite(lng))
+      ? `${lat}, ${lng}`
+      : "ยังไม่ได้ระบุพิกัด";
+
+    const printedAt = new Date().toLocaleString("th-TH", {
+      day: "numeric", month: "long", year: "numeric",
+      hour: "2-digit", minute: "2-digit"
+    });
+
+    const photoBlock = (label, url) => url
+      ? `<figure class="shot"><figcaption>${escapeForPrint(label)}</figcaption>
+           <div class="frame"><img src="${escapeForPrint(url)}" alt="${escapeForPrint(label)}"></div>
+         </figure>`
+      : `<figure class="shot"><figcaption>${escapeForPrint(label)}</figcaption>
+           <div class="frame empty">ยังไม่ได้แนบภาพ</div>
+         </figure>`;
+
+    win.document.write(`<!DOCTYPE html><html lang="th"><head><meta charset="utf-8">
+<title>ใบภาพหน้างาน ${wbs}</title>
+<style>
+  @page { size: A4 portrait; margin: 10mm; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; font-family: "Sarabun", "Segoe UI", sans-serif; color: #221530;
+    display: flex; flex-direction: column; height: 277mm;
+  }
+  .wbs {
+    border: 2px solid #57298c; border-radius: 6px; padding: 6mm 8mm; text-align: center;
+    flex: none;
+  }
+  .wbs span { display: block; font-size: 11pt; color: #6b5c82; letter-spacing: .5px; }
+  .wbs strong {
+    display: block; margin-top: 2mm; font-size: 26pt; font-weight: 700;
+    letter-spacing: 1px; color: #38185c;
+  }
+  .shots { flex: 1; display: flex; flex-direction: column; gap: 5mm; margin: 5mm 0; min-height: 0; }
+  .shot { flex: 1; display: flex; flex-direction: column; margin: 0; min-height: 0; }
+  figcaption { flex: none; font-size: 12pt; font-weight: 600; margin-bottom: 2mm; color: #38185c; }
+  .frame {
+    flex: 1; min-height: 0; border: 1px solid #cdb9ea; border-radius: 4px;
+    display: flex; align-items: center; justify-content: center; overflow: hidden;
+  }
+  /* ภาพใหญ่เต็มกรอบที่เหลือ โดยไม่บิดสัดส่วนและไม่ดันหน้าให้ยาวเกิน 1 แผ่น */
+  .frame img { max-width: 100%; max-height: 100%; object-fit: contain; }
+  .frame.empty { color: #6b5c82; font-size: 11pt; }
+  .foot {
+    flex: none; border-top: 1px solid #cdb9ea; padding-top: 3mm;
+    display: flex; justify-content: space-between; font-size: 11pt; gap: 8mm;
+  }
+  .foot b { font-weight: 600; }
+  .actions { text-align: center; margin-top: 6mm; }
+  .actions button { font: inherit; padding: 8px 18px; cursor: pointer; }
+  @media print { .actions { display: none; } }
+</style></head><body>
+  <div class="wbs"><span>หมายเลข WBS</span><strong>${wbs}</strong></div>
+  <div class="shots">
+    ${photoBlock("ภาพสถานที่ขอขยายเขตฯ", site)}
+    ${photoBlock("ภาพเส้นทางขยายเขตฯ", route)}
+  </div>
+  <div class="foot">
+    <div><b>พิกัดหน้างาน:</b> ${escapeForPrint(coords)}</div>
+    <div><b>วันที่พิมพ์:</b> ${escapeForPrint(printedAt)}</div>
+  </div>
+  <div class="actions"><button type="button" id="printBtn">พิมพ์ / บันทึกเป็น PDF</button></div>
+</body></html>`);
+    win.document.close();
+
+    win.document.getElementById("printBtn").addEventListener("click", () => win.print());
+
+    // รอให้ภาพโหลดเสร็จก่อนสั่งพิมพ์ ไม่งั้นกล่องพิมพ์เปิดมาพร้อมกรอบว่าง
+    // นับทั้งภาพที่โหลดไม่ขึ้นด้วย (error) ไม่งั้นภาพเสียหนึ่งใบจะทำให้ไม่มีวันพิมพ์
+    const images = Array.from(win.document.images);
+    let pending = images.filter(img => !img.complete).length;
+    if (!pending) {
+      win.print();
+      return;
+    }
+    images.forEach(img => {
+      if (img.complete) return;
+      const done = () => { if (--pending === 0) win.print(); };
+      img.addEventListener("load", done);
+      img.addEventListener("error", done);
+    });
+  }
+
+  document.getElementById("extPhotoPrintBtn").addEventListener("click", () => {
+    if (extendFormRecord) printSitePhotoSheet(extendFormRecord);
+  });
+
+  // ---------- หน้าประมาณการ ----------
+  //
+  // โครงตามของจริง: หนึ่ง WBS มีใบประมาณการหลายชุด แยกตาม "แผนก" และแต่ละแผนกมี
+  // "งานย่อย" อีกหลายงาน โดยงานย่อยหนึ่งงาน = ใบประมาณการหนึ่งใบ (Group +
+  // รหัสการลงทุน + รายการพัสดุ) หน้านี้จึงไล่ลงสามชั้น และแยกออกมาเป็นหน้าของ
+  // ตัวเองเพราะตารางกว้างเกินกว่าจะอยู่ในคอลัมน์ของฟอร์มคำร้องได้
+  //
+  // ทั้งหน้าทำงานกับ estimateModel ในหน่วยความจำแบบผูกสด (พิมพ์ปุ๊บเข้าโมเดลปั๊บ)
+  // แล้วค่อยเขียนลงคำร้องตอนกดบันทึก -- ไม่มีขั้นตอน "เก็บค่าจากหน้าจอ" ตอน
+  // เปลี่ยนชั้น ซึ่งเป็นจุดที่ข้อมูลหายง่ายที่สุดเวลาลืมเรียก
+  const estimateView = {
+    deptPane: document.getElementById("estDeptPane"),
+    jobPane: document.getElementById("estJobPane"),
+    formPane: document.getElementById("estFormPane"),
+    deptList: document.getElementById("estDeptList"),
+    jobList: document.getElementById("estJobList"),
+    jobPaneTitle: document.getElementById("estJobPaneTitle"),
+    formPaneTitle: document.getElementById("estFormPaneTitle"),
+    crumbs: document.getElementById("estCrumbs"),
+    rows: document.getElementById("estRows"),
+    jobName: document.getElementById("estJobName"),
+    group: document.getElementById("estGroup"),
+    investment: document.getElementById("estInvestment"),
+    catalogNote: document.getElementById("estCatalogNote"),
+    error: document.getElementById("estimateError"),
+    success: document.getElementById("estimateSuccess"),
+    dirty: document.getElementById("estimateDirty"),
+    contextWbs: document.getElementById("estimateContextWbs"),
+    contextCustomer: document.getElementById("estimateContextCustomer")
+  };
+
+  let estimateRecord = null;    // คำร้องที่กำลังทำประมาณการอยู่
+  let estimateModel = null;     // { departments: [{ section, jobs: [...] }] }
+  let estimateDeptIndex = -1;
+  let estimateJobIndex = -1;
+  let estimateDirty = false;
+  let estimateCatalog = null;   // [{ keyCode, description }]
+  let estimateLists = null;     // { section: [], group: [], investment: [] }
+
+  function markEstimateDirty() {
+    estimateDirty = true;
+    estimateView.dirty.hidden = false;
+    estimateView.success.hidden = true;
+  }
+
+  function fillDatalist(datalist, values) {
+    datalist.innerHTML = "";
+    values.forEach(value => {
+      const option = document.createElement("option");
+      option.value = value;
+      datalist.appendChild(option);
+    });
+  }
+
+  /**
+   * แค็ตตาล็อกรายการและลิสต์ตัวเลือก -- อยู่ในชีต ไม่ได้ฝังในไฟล์เว็บ เพราะยาว
+   * สองพันกว่ารายการ เปลี่ยนตามประกาศของ กฟภ. และไฟล์เว็บทุกไฟล์เป็นสาธารณะ
+   * โหลดครั้งเดียวต่อการเปิดเว็บ แล้วกรองในเบราว์เซอร์
+   */
+  async function ensureEstimateCatalog() {
+    if (estimateCatalog) return;
+
+    const data = await backend.listEstimateItems();
+    estimateCatalog = data.items || [];
+    estimateLists = data.lists || { section: [], group: [], investment: [] };
+
+    fillDatalist(document.getElementById("estSectionList"), estimateLists.section || []);
+    fillDatalist(document.getElementById("estGroupList"), estimateLists.group || []);
+    fillDatalist(document.getElementById("estInvestmentList"), estimateLists.investment || []);
+    fillDatalist(document.getElementById("estDescList"), estimateCatalog.map(i => i.description));
+
+    estimateView.catalogNote.textContent = estimateCatalog.length
+      ? `รายการตั้งต้นในระบบ ${estimateCatalog.length} รายการ · พิมพ์บางส่วนของชื่อเพื่อค้นหา แล้ว KeyCode จะเติมให้เอง`
+      : "ยังไม่มีรายการตั้งต้นในระบบ (แท็บ EstimateItems ในชีตยังว่าง) — พิมพ์ Description และ KeyCode เองได้ตามปกติ";
+  }
+
+  function currentDept() {
+    return estimateModel && estimateModel.departments[estimateDeptIndex];
+  }
+
+  function currentJob() {
+    const dept = currentDept();
+    return dept && dept.jobs[estimateJobIndex];
+  }
+
+  function countItems(job) {
+    return (job.items || []).filter(i => i.description).length;
+  }
+
+  function jobLabel(job, index) {
+    return job.name || job.group || `งานย่อยที่ ${index + 1}`;
+  }
+
+  function renderEstimateCrumbs() {
+    estimateView.crumbs.innerHTML = "";
+
+    const steps = [{ label: "แผนกทั้งหมด", level: 0 }];
+    if (estimateDeptIndex >= 0 && currentDept()) {
+      steps.push({ label: currentDept().section || "แผนกไม่มีชื่อ", level: 1 });
+    }
+    if (estimateJobIndex >= 0 && currentJob()) {
+      steps.push({ label: jobLabel(currentJob(), estimateJobIndex), level: 2 });
+    }
+
+    steps.forEach((step, index) => {
+      if (index) {
+        const sep = document.createElement("span");
+        sep.className = "estimate-crumb-sep";
+        sep.textContent = "/";
+        estimateView.crumbs.appendChild(sep);
+      }
+
+      const isLast = index === steps.length - 1;
+      const node = document.createElement(isLast ? "span" : "button");
+      node.className = "estimate-crumb";
+      node.textContent = step.label;
+      if (!isLast) {
+        node.type = "button";
+        node.addEventListener("click", () => showEstimateLevel(step.level));
+      }
+      estimateView.crumbs.appendChild(node);
+    });
+  }
+
+  function showEstimateLevel(level) {
+    if (level < 2) estimateJobIndex = -1;
+    if (level < 1) estimateDeptIndex = -1;
+
+    estimateView.deptPane.hidden = level !== 0;
+    estimateView.jobPane.hidden = level !== 1;
+    estimateView.formPane.hidden = level !== 2;
+
+    if (level === 0) renderEstimateDepts();
+    if (level === 1) renderEstimateJobs();
+    if (level === 2) renderEstimateForm();
+
+    renderEstimateCrumbs();
+    window.scrollTo(0, 0);
+  }
+
+  /** การ์ดหนึ่งใบ ใช้ทั้งชั้นแผนกและชั้นงานย่อย -- โครงเดียวกัน ต่างแค่ข้อความ */
+  function estimateCard(title, meta, onOpen, onRemove) {
+    const card = document.createElement("div");
+    card.className = "estimate-card";
+
+    const open = document.createElement("button");
+    open.type = "button";
+    open.className = "estimate-card-open";
+
+    const name = document.createElement("span");
+    name.className = "estimate-card-title";
+    name.textContent = title;
+
+    const sub = document.createElement("span");
+    sub.className = "estimate-card-meta";
+    sub.textContent = meta;
+
+    open.append(name, sub);
+    open.addEventListener("click", onOpen);
+
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.className = "estimate-remove";
+    remove.setAttribute("aria-label", "ลบ");
+    remove.textContent = "×";
+    remove.addEventListener("click", onRemove);
+
+    card.append(open, remove);
+    return card;
+  }
+
+  function renderEstimateDepts() {
+    estimateView.deptList.innerHTML = "";
+    const departments = estimateModel.departments;
+
+    if (!departments.length) {
+      const empty = document.createElement("div");
+      empty.className = "request-empty";
+      empty.textContent = "ยังไม่มีแผนก — เพิ่มแผนกแรกด้านล่างเพื่อเริ่มทำประมาณการ";
+      estimateView.deptList.appendChild(empty);
+      return;
+    }
+
+    departments.forEach((dept, index) => {
+      const items = (dept.jobs || []).reduce((n, j) => n + countItems(j), 0);
+      estimateView.deptList.appendChild(estimateCard(
+        dept.section || "แผนกไม่มีชื่อ",
+        `${(dept.jobs || []).length} งานย่อย · ${items} รายการ`,
+        () => { estimateDeptIndex = index; showEstimateLevel(1); },
+        () => {
+          // ลบทั้งแผนก = ลบใบประมาณการของทุกงานย่อยในนั้น ต้องถามก่อนเสมอ
+          if (!confirm(`ลบแผนก "${dept.section}" พร้อมงานย่อยทั้งหมดในแผนกนี้?`)) return;
+          departments.splice(index, 1);
+          markEstimateDirty();
+          renderEstimateDepts();
+        }
+      ));
+    });
+  }
+
+  function renderEstimateJobs() {
+    const dept = currentDept();
+    if (!dept) return showEstimateLevel(0);
+
+    estimateView.jobPaneTitle.textContent = `งานย่อยใน ${dept.section || "แผนกไม่มีชื่อ"}`;
+    estimateView.jobList.innerHTML = "";
+
+    if (!dept.jobs.length) {
+      const empty = document.createElement("div");
+      empty.className = "request-empty";
+      empty.textContent = "ยังไม่มีงานย่อยในแผนกนี้ — เพิ่มงานย่อยด้านล่าง";
+      estimateView.jobList.appendChild(empty);
+      return;
+    }
+
+    dept.jobs.forEach((job, index) => {
+      const bits = [job.group, job.investment].filter(Boolean).join(" · ");
+      estimateView.jobList.appendChild(estimateCard(
+        jobLabel(job, index),
+        `${bits ? bits + " · " : ""}${countItems(job)} รายการ`,
+        () => { estimateJobIndex = index; showEstimateLevel(2); },
+        () => {
+          if (!confirm(`ลบงานย่อย "${jobLabel(job, index)}" พร้อมรายการทั้งหมด?`)) return;
+          dept.jobs.splice(index, 1);
+          markEstimateDirty();
+          renderEstimateJobs();
+        }
+      ));
+    });
+  }
+
+  function renderEstimateForm() {
+    const job = currentJob();
+    if (!job) return showEstimateLevel(1);
+
+    estimateView.formPaneTitle.textContent = jobLabel(job, estimateJobIndex);
+    estimateView.jobName.value = job.name || "";
+    estimateView.group.value = job.group || "";
+    estimateView.investment.value = job.investment || "";
+
+    estimateView.rows.innerHTML = "";
+    (job.items || []).forEach(item => addEstimateRow(item));
+    while (estimateView.rows.children.length < 3) addEstimateRow();
+  }
+
+  /**
+   * หนึ่งแถวของใบประมาณการ -- ผูกกับ job.items โดยตรง พิมพ์ปุ๊บเข้าโมเดลปั๊บ
+   *
+   * ใช้ datalist ก้อนเดียวร่วมกันทั้งหน้า (#estDescList) ไม่ใช่ต่อแถว -- รายการ
+   * สองพันกว่าตัวคูณจำนวนแถว จะกลายเป็นหลายหมื่นโหนดในหน้าเดียวทันที
+   */
+  function addEstimateRow(values) {
+    const job = currentJob();
+    if (!job) return;
+    if (!Array.isArray(job.items)) job.items = [];
+
+    let item = values;
+    if (!item) {
+      item = { description: "", keyCode: "", in: "", rm: "", rp: "" };
+      job.items.push(item);
+    }
+
+    const row = document.createElement("div");
+    row.className = "estimate-row";
+
+    const no = document.createElement("span");
+    no.className = "estimate-no";
+
+    const description = document.createElement("input");
+    description.type = "text";
+    description.setAttribute("list", "estDescList");
+    description.value = item.description || "";
+
+    const keyCode = document.createElement("input");
+    keyCode.type = "text";
+    keyCode.className = "estimate-keycode";
+    keyCode.value = item.keyCode || "";
+
+    description.addEventListener("input", () => {
+      item.description = description.value;
+      // เลือกรายการจากแค็ตตาล็อกแล้ว KeyCode ตามมาเอง -- แต่ไม่ล็อกช่อง เพราะ
+      // รายการนอกแค็ตตาล็อกยังต้องกรอกรหัสเองได้
+      const match = (estimateCatalog || []).find(i => i.description === description.value.trim());
+      if (match) {
+        keyCode.value = match.keyCode;
+        item.keyCode = match.keyCode;
+      }
+      markEstimateDirty();
+    });
+
+    keyCode.addEventListener("input", () => {
+      item.keyCode = keyCode.value;
+      markEstimateDirty();
+    });
+
+    const quantities = ["in", "rm", "rp"].map(key => {
+      const input = document.createElement("input");
+      input.type = "number";
+      input.min = "0";
+      input.step = "1";
+      input.className = "estimate-qty";
+      input.value = item[key] || "";
+      input.addEventListener("input", () => {
+        item[key] = input.value;
+        markEstimateDirty();
+      });
+      return input;
+    });
+
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.className = "estimate-remove";
+    remove.setAttribute("aria-label", "ลบรายการนี้");
+    remove.textContent = "×";
+    remove.addEventListener("click", () => {
+      const index = job.items.indexOf(item);
+      if (index !== -1) job.items.splice(index, 1);
+      row.remove();
+      renumberEstimateRows();
+      markEstimateDirty();
+    });
+
+    row.append(no, description, keyCode, ...quantities, remove);
+    estimateView.rows.appendChild(row);
+    renumberEstimateRows();
+  }
+
+  function renumberEstimateRows() {
+    Array.from(estimateView.rows.children).forEach((row, index) => {
+      row.querySelector(".estimate-no").textContent = String(index + 1);
+    });
+  }
+
+  function openEstimateView(record) {
+    estimateRecord = record;
+    // ทำงานบนสำเนา ไม่ใช่ตัวจริงใน cache -- ออกจากหน้าโดยไม่บันทึกต้องไม่ทิ้งร่องรอย
+    const stored = record.estimate && Array.isArray(record.estimate.departments)
+      ? record.estimate
+      : { departments: [] };
+    estimateModel = JSON.parse(JSON.stringify(stored));
+
+    estimateDeptIndex = -1;
+    estimateJobIndex = -1;
+    estimateDirty = false;
+    estimateView.dirty.hidden = true;
+    estimateView.success.hidden = true;
+    hideError(estimateView.error);
+
+    estimateView.contextWbs.textContent = record.wbs ? `WBS: ${record.wbs}` : "ยังไม่มีเลข WBS";
+    estimateView.contextCustomer.textContent =
+      [record.requestNumber, record.customerName].filter(Boolean).join(" · ");
+
+    showView("estimate");
+    showEstimateLevel(0);
+
+    ensureEstimateCatalog().catch(err => {
+      console.error("CS Connect estimate catalog error:", err);
+      estimateView.catalogNote.textContent =
+        "โหลดรายการตั้งต้นไม่สำเร็จ — พิมพ์ Description และ KeyCode เองได้ตามปกติ";
+    });
+  }
+
+  document.getElementById("extEstimateOpenBtn").addEventListener("click", () => {
+    if (extendFormRecord) openEstimateView(extendFormRecord);
+  });
+
+  document.getElementById("estAddDeptBtn").addEventListener("click", () => {
+    const input = document.getElementById("estNewDept");
+    const section = input.value.trim();
+    if (!section) {
+      showError(estimateView.error, "กรุณากรอกชื่อแผนกก่อน");
+      return;
+    }
+    hideError(estimateView.error);
+    estimateModel.departments.push({ section, jobs: [] });
+    input.value = "";
+    markEstimateDirty();
+    renderEstimateDepts();
+  });
+
+  document.getElementById("estAddJobBtn").addEventListener("click", () => {
+    const dept = currentDept();
+    if (!dept) return;
+
+    const name = document.getElementById("estNewJob");
+    const group = document.getElementById("estNewJobGroup");
+    const investment = document.getElementById("estNewJobInvestment");
+
+    dept.jobs.push({
+      name: name.value.trim(),
+      group: group.value.trim(),
+      investment: investment.value.trim(),
+      items: []
+    });
+
+    name.value = "";
+    group.value = "";
+    investment.value = "";
+    markEstimateDirty();
+    renderEstimateJobs();
+  });
+
+  document.getElementById("estAddRowBtn").addEventListener("click", () => addEstimateRow());
+
+  // หัวใบผูกสดกับโมเดลเหมือนช่องในตาราง
+  estimateView.jobName.addEventListener("input", () => {
+    const job = currentJob();
+    if (!job) return;
+    job.name = estimateView.jobName.value;
+    estimateView.formPaneTitle.textContent = jobLabel(job, estimateJobIndex);
+    markEstimateDirty();
+  });
+
+  estimateView.group.addEventListener("input", () => {
+    const job = currentJob();
+    if (job) { job.group = estimateView.group.value; markEstimateDirty(); }
+  });
+
+  estimateView.investment.addEventListener("input", () => {
+    const job = currentJob();
+    if (job) { job.investment = estimateView.investment.value; markEstimateDirty(); }
+  });
+
+  document.getElementById("estimateBackBtn").addEventListener("click", () => {
+    // ถอยทีละชั้นก่อน แล้วค่อยออกจากหน้า -- และเตือนถ้ายังไม่ได้บันทึก
+    if (!estimateView.formPane.hidden) return showEstimateLevel(1);
+    if (!estimateView.jobPane.hidden) return showEstimateLevel(0);
+
+    if (estimateDirty && !confirm("ยังไม่ได้บันทึกประมาณการ ออกจากหน้านี้เลยหรือไม่?")) return;
+
+    const record = estimateRecord;
+    showView("requests");
+    openRequestForm("extend", record, { returnTo: "extendWork" });
+  });
+
+  document.getElementById("estimateSaveBtn").addEventListener("click", async (e) => {
+    const btn = e.currentTarget;
+    hideError(estimateView.error);
+    estimateView.success.hidden = true;
+
+    if (!estimateRecord) return;
+
+    setBusy(btn, true, "กำลังบันทึก...");
+
+    try {
+      // ตัดแถวว่างทิ้งตอนบันทึก -- แถวเปล่าที่เติมไว้ให้พิมพ์ ไม่ใช่ข้อมูล
+      const clean = {
+        departments: estimateModel.departments.map(dept => ({
+          section: dept.section,
+          jobs: (dept.jobs || []).map(job => ({
+            name: job.name || "",
+            group: job.group || "",
+            investment: job.investment || "",
+            items: (job.items || []).filter(item => item.description)
+          }))
+        }))
+      };
+
+      const { byName: savedByName, byEmail: savedByEmail } = actingStaff();
+      const now = Date.now();
+
+      const requests = getRequests();
+      const index = requests.findIndex(r => r.id === estimateRecord.id);
+      if (index === -1) throw new Error("ไม่พบคำร้องนี้แล้ว (อาจถูกแก้ไขไปแล้ว)");
+
+      requests[index] = {
+        ...requests[index],
+        estimate: clean,
+        updatedByName: savedByName,
+        updatedByEmail: savedByEmail,
+        updatedAt: now
+      };
+
+      await saveRequests(requests);
+
+      estimateRecord = requests[index];
+      estimateModel = JSON.parse(JSON.stringify(clean));
+      estimateDirty = false;
+      estimateView.dirty.hidden = true;
+      estimateView.success.textContent = "บันทึกประมาณการเรียบร้อย";
+      estimateView.success.hidden = false;
+    } catch (err) {
+      console.error("CS Connect estimate save error:", err);
+      showError(estimateView.error, friendlyError(err, "บันทึกประมาณการไม่สำเร็จ กรุณาลองใหม่อีกครั้ง"));
     } finally {
       setBusy(btn, false);
     }
