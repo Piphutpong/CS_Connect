@@ -1359,19 +1359,51 @@ button:active {
   min-width: 220px;
 }
 
-/* ตัวอย่างแผนผังที่แนบไว้ (ไฟล์ภาพ หรือหน้าแรกของ PDF) */
+/* แผนผังที่แนบไว้ -- หลายไฟล์ได้ แต่ละใบมีภาพตัวอย่างของตัวเอง */
+.plan-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 12px;
+}
+
+.plan-list:empty {
+  display: none;
+}
+
+.plan-item {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--paper);
+}
+
+/* ตัวอย่างแผนผัง (ไฟล์ภาพ หรือหน้าแรกของ PDF) */
 .plan-preview {
   width: 100%;
-  max-height: 460px;
+  height: 200px;
   object-fit: contain;
-  border: 1px solid var(--border);
   border-radius: 8px;
   background: var(--white);
 }
 
-/* ตั้ง display ไว้ในกฎด้านบนของรูปทั่วไป จึงต้องกันไว้ (ดู Gotcha ใน CLAUDE.md) */
+/* ตั้ง display ไว้ในกฎด้านบน จึงต้องกันไว้ (ดู Gotcha ใน CLAUDE.md) */
 .plan-preview[hidden] {
   display: none;
+}
+
+.plan-item-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12.5px;
+}
+
+.plan-item-when {
+  color: var(--ink-soft);
 }
 
 /* ===== ภาพหน้างาน ===== */

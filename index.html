@@ -971,15 +971,15 @@
 
           <p id="extPlanCurrent" class="field-hint"></p>
 
-  <!-- แสดงตัวอย่างแผนผัง -- ใช้ลิงก์แบบ thumbnail ของ Drive ซึ่งเรนเดอร์ให้ทั้ง
-       ไฟล์ภาพและ PDF (PDF จะได้ภาพหน้าแรก) ถ้าเรนเดอร์ไม่ได้จะซ่อนตัวเองไป
-       เหลือแค่ลิงก์เปิดไฟล์ -->
-  <img id="extPlanPreview" class="plan-preview" alt="ตัวอย่างแผนผังที่แนบไว้" hidden>
+          <!-- แผนผังที่แนบไว้ทั้งหมด -- วาดจาก app.js เพราะจำนวนไฟล์ไม่คงที่
+               แต่ละใบมีภาพตัวอย่าง (Drive เรนเดอร์ได้ทั้งไฟล์ภาพและหน้าแรกของ
+               PDF) ลิงก์เปิดไฟล์เต็ม และปุ่มลบสำหรับกรณีแนบผิดไฟล์ -->
+          <div id="extPlanList" class="plan-list"></div>
 
           <div class="field">
-            <label for="extPlanFile">ไฟล์แผนผัง (PDF หรือรูปภาพ ไม่เกิน 10 MB)</label>
-            <input type="file" id="extPlanFile" accept="application/pdf,image/*">
-            <p class="field-hint">แนบแล้ว สถานะจะเปลี่ยนเป็น “รอประมาณการ” ให้อัตโนมัติ</p>
+            <label for="extPlanFile">ไฟล์แผนผัง (PDF หรือรูปภาพ ไม่เกิน 10 MB ต่อไฟล์)</label>
+            <input type="file" id="extPlanFile" accept="application/pdf,image/*" multiple>
+            <p class="field-hint">เลือกได้หลายไฟล์พร้อมกัน · แนบไฟล์แรกแล้ว สถานะจะเปลี่ยนเป็น “รอประมาณการ” ให้อัตโนมัติ</p>
           </div>
 
           <div class="batch-toolbar">
@@ -1101,9 +1101,16 @@
       </div>
       <div id="estJobList" class="estimate-cards"></div>
       <div class="estimate-add-row">
-        <input type="text" id="estNewJob" placeholder="ชื่องานย่อย (ถ้ามี)" autocomplete="off">
-        <input type="text" id="estNewJobGroup" list="estGroupList" placeholder="Group เช่น HT.OHGW" autocomplete="off">
-        <input type="text" id="estNewJobInvestment" list="estInvestmentList" placeholder="การลงทุน เช่น 01.1" autocomplete="off">
+        <!-- ชื่องานย่อยมาพร้อมคำนำหน้าของแผนก (HT./TR./LT./SL./MT.) ให้แล้ว
+             พิมพ์ต่อได้เลย -- ดู DEPARTMENT_PREFIX ใน app.js -->
+        <input type="text" id="estNewJob" placeholder="ชื่องานย่อย" autocomplete="off">
+        <select id="estNewJobInvestment">
+          <option value="">-- เลือกการลงทุน --</option>
+          <option value="01.1">01.1</option>
+          <option value="02.1">02.1</option>
+          <option value="02.2">02.2</option>
+          <option value="03.1">03.1</option>
+        </select>
         <button type="button" id="estAddJobBtn" class="btn btn-primary">+ เพิ่มงานย่อย</button>
       </div>
     </div>
@@ -1120,12 +1127,14 @@
           <input type="text" id="estJobName" placeholder="เช่น ปักเสาช่วงที่ 1" autocomplete="off">
         </div>
         <div class="field">
-          <label for="estGroup">Group</label>
-          <input type="text" id="estGroup" list="estGroupList" placeholder="เช่น HT.OHGW" autocomplete="off">
-        </div>
-        <div class="field">
           <label for="estInvestment">การลงทุน/ทรัพย์สิน</label>
-          <input type="text" id="estInvestment" list="estInvestmentList" placeholder="เช่น 01.1" autocomplete="off">
+          <select id="estInvestment">
+          <option value="">-- เลือกการลงทุน --</option>
+          <option value="01.1">01.1</option>
+          <option value="02.1">02.1</option>
+          <option value="02.2">02.2</option>
+          <option value="03.1">03.1</option>
+          </select>
         </div>
       </div>
 
@@ -1153,8 +1162,6 @@
 
     <!-- รายการตัวเลือกใช้ร่วมกันทั้งหน้า -- รายการคำอธิบายมีสองพันกว่ารายการ
          ถ้าทำ datalist ต่อแถวจะกลายเป็นหลายหมื่นโหนดในหน้าเดียว -->
-    <datalist id="estGroupList"></datalist>
-    <datalist id="estInvestmentList"></datalist>
     <datalist id="estDescList"></datalist>
   </main>
 </section>

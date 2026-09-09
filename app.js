@@ -256,6 +256,10 @@
       throw new Error("โหมดออฟไลน์ไม่รองรับการแนบไฟล์");
     },
 
+    async deleteExtendFile() {
+      throw new Error("โหมดออฟไลน์ไม่รองรับการลบไฟล์แนบ");
+    },
+
     async listEstimateItems() {
       throw new Error("โหมดออฟไลน์ไม่รองรับรายการประมาณการ");
     }
@@ -446,6 +450,14 @@
       // คืนคำร้องที่อัปเดตแล้วกลับมาเพื่อเอาไปทับใน cache
       async saveExtendFile(id, kind, file) {
         const data = await callAsUser({ action: "saveExtendFile", id, kind, file });
+        const updated = data.request;
+        if (updated) savedRequests.set(String(updated.id), JSON.stringify(updated));
+        return updated;
+      },
+
+      // ลบไฟล์แนบทีละไฟล์ (แนบผิดไฟล์) -- คืนคำร้องที่อัปเดตแล้วกลับมา
+      async deleteExtendFile(id, kind, url) {
+        const data = await callAsUser({ action: "deleteExtendFile", id, kind, url });
         const updated = data.request;
         if (updated) savedRequests.set(String(updated.id), JSON.stringify(updated));
         return updated;
@@ -2219,7 +2231,7 @@
   const extPlanFile = document.getElementById("extPlanFile");
   const extPlanError = document.getElementById("extPlanError");
   const extPlanSuccess = document.getElementById("extPlanSuccess");
-  const extPlanPreview = document.getElementById("extPlanPreview");
+  const extPlanList = document.getElementById("extPlanList");
   const extPhotoSection = document.getElementById("extPhotoSection");
   const extPhotoError = document.getElementById("extPhotoError");
   const extPhotoSuccess = document.getElementById("extPhotoSuccess");
@@ -2668,32 +2680,91 @@
     return `${departments.length} แผนก · ${jobs} งานย่อย · ${items} รายการ`;
   }
 
+  /**
+   * แผนผังที่แนบไว้ทั้งหมดของคำร้องใบหนึ่ง
+   *
+   * คำร้องเก่าเก็บไฟล์เดียวไว้ในคอลัมน์ planFile ส่วนของใหม่เก็บเป็นรายการใน
+   * planFiles -- อ่านผ่านตัวนี้ที่เดียว หน้าจอจึงไม่ต้องรู้ว่าแถวไหนเป็นแบบไหน
+   * (ฝั่งเซิร์ฟเวอร์ย้ายของเก่าเข้ารายการให้เองตอนอัปโหลดครั้งถัดไป)
+   */
+  function planFilesOf(record) {
+    if (Array.isArray(record.planFiles) && record.planFiles.length) return record.planFiles;
+    if (record.planFile) return [{ url: record.planFile, at: record.planFileAt }];
+    return [];
+  }
+
   function renderPlanCurrent(record) {
-    extPlanCurrent.textContent = "";
+    const files = planFilesOf(record);
 
-    if (!record.planFile) {
-      extPlanCurrent.textContent = "ยังไม่ได้แนบแผนผัง";
-      extPlanPreview.hidden = true;
-      // ล้าง src ด้วย ไม่ใช่แค่ซ่อน -- ไม่งั้นแผนผังของคำร้องใบก่อนยังค้างใน DOM
-      extPlanPreview.removeAttribute("src");
-      return;
+    extPlanCurrent.textContent = files.length
+      ? `แผนผังที่แนบไว้ ${files.length} ไฟล์`
+      : "ยังไม่ได้แนบแผนผัง";
+
+    extPlanList.innerHTML = "";
+
+    files.forEach((file, index) => {
+      const item = document.createElement("div");
+      item.className = "plan-item";
+
+      // ลิงก์แบบ thumbnail เรนเดอร์ได้ทั้งไฟล์ภาพและ PDF (PDF ได้ภาพหน้าแรก)
+      // จึงไม่ต้องแยกเส้นทางตามชนิดไฟล์ ส่วนไฟล์ที่ Drive ทำภาพตัวอย่างไม่ได้
+      // ตัวรูปจะซ่อนตัวเอง เหลือลิงก์เปิดไฟล์
+      const preview = document.createElement("img");
+      preview.className = "plan-preview";
+      preview.alt = `ตัวอย่างแผนผังไฟล์ที่ ${index + 1}`;
+      preview.src = driveThumbnailUrl(file.url);
+      preview.addEventListener("error", () => { preview.hidden = true; });
+
+      const foot = document.createElement("div");
+      foot.className = "plan-item-foot";
+
+      const link = document.createElement("a");
+      link.href = file.url;
+      link.target = "_blank";
+      link.rel = "noopener";
+      link.textContent = `เปิดไฟล์ที่ ${index + 1}`;
+
+      const when = document.createElement("span");
+      when.className = "plan-item-when";
+      when.textContent = file.at ? formatThaiDateTime(file.at) : "";
+
+      const remove = document.createElement("button");
+      remove.type = "button";
+      remove.className = "estimate-remove";
+      remove.setAttribute("aria-label", `ลบแผนผังไฟล์ที่ ${index + 1}`);
+      remove.textContent = "\u00d7";
+      remove.addEventListener("click", () => deletePlanFile(remove, file.url, index + 1));
+
+      foot.append(link, when, remove);
+      item.append(preview, foot);
+      extPlanList.appendChild(item);
+    });
+  }
+
+  /** ลบแผนผังทีละไฟล์ -- ใช้ตอนแนบผิดไฟล์ */
+  async function deletePlanFile(button, url, position) {
+    if (!extendFormRecord) return;
+    if (!confirm(`ลบแผนผังไฟล์ที่ ${position} ออกจากคำร้องนี้?`)) return;
+
+    hideError(extPlanError);
+    extPlanSuccess.hidden = true;
+    setBusy(button, true, "...");
+
+    try {
+      const updated = await backend.deleteExtendFile(extendFormRecord.id, "plan", url);
+
+      requestsCache = requestsCache.map(r => (String(r.id) === String(updated.id) ? updated : r));
+      extendFormRecord = updated;
+      renderPlanCurrent(updated);
+
+      extPlanSuccess.textContent = "ลบไฟล์แล้ว";
+      extPlanSuccess.hidden = false;
+    } catch (err) {
+      console.error("CS Connect plan delete error:", err);
+      showError(extPlanError, friendlyError(err, "ลบไฟล์ไม่สำเร็จ กรุณาลองใหม่อีกครั้ง"));
+    } finally {
+      setBusy(button, false);
     }
-
-    // ลิงก์แบบ thumbnail เรนเดอร์ได้ทั้งไฟล์ภาพและ PDF (PDF ได้ภาพหน้าแรก)
-    // จึงใช้เส้นทางเดียวกันหมด ไม่ต้องแยกตามชนิดไฟล์ -- ส่วนไฟล์ที่ Drive ทำ
-    // ภาพตัวอย่างไม่ได้ ตัวรูปจะซ่อนตัวเองผ่าน error ด้านล่าง เหลือลิงก์เปิดไฟล์
-    extPlanPreview.hidden = false;
-    extPlanPreview.src = driveThumbnailUrl(record.planFile);
-
-    extPlanCurrent.textContent = "แผนผังที่แนบไว้: ";
-    const link = document.createElement("a");
-    link.href = record.planFile;
-    link.target = "_blank";
-    link.rel = "noopener";
-    link.textContent = record.planFileAt
-      ? `เปิดไฟล์ (แนบเมื่อ ${formatThaiDateTime(record.planFileAt)})`
-      : "เปิดไฟล์";
-    extPlanCurrent.appendChild(link);
   }
 
   // คำร้องที่กำลังเปิดอยู่ในฟอร์มขอขยายเขตฯ -- การแนบแผนผังต้องรู้ id และสถานะ
@@ -4195,8 +4266,8 @@
     hideError(extPlanError);
     extPlanSuccess.hidden = true;
 
-    const file = extPlanFile.files && extPlanFile.files[0];
-    if (!file) {
+    const files = Array.from(extPlanFile.files || []);
+    if (!files.length) {
       showError(extPlanError, "กรุณาเลือกไฟล์แผนผังก่อน");
       return;
     }
@@ -4208,25 +4279,33 @@
 
     // กันตั้งแต่ต้นทาง ผู้ใช้จะได้ไม่รอโหลดไฟล์ใหญ่จนจบแล้วค่อยโดนปฏิเสธ
     // (ฝั่งเซิร์ฟเวอร์ยังตรวจซ้ำอยู่ดี -- ที่นั่นคือด่านจริง)
-    if (file.size > 10 * 1024 * 1024) {
-      showError(extPlanError, "ไฟล์แผนผังใหญ่เกินไป (จำกัดไม่เกิน 10 MB)");
+    const tooBig = files.find(f => f.size > 10 * 1024 * 1024);
+    if (tooBig) {
+      showError(extPlanError, `ไฟล์ "${tooBig.name}" ใหญ่เกินไป (จำกัดไม่เกิน 10 MB ต่อไฟล์)`);
       return;
     }
 
     setBusy(btn, true, "กำลังอัปโหลด...");
 
     try {
-      const dataUrl = await new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result);
-        reader.onerror = () => reject(new Error("อ่านไฟล์ไม่สำเร็จ"));
-        reader.readAsDataURL(file);
-      });
+      let updated = null;
 
-      const updated = await backend.saveExtendFile(extendFormRecord.id, "plan", dataUrl);
+      // ส่งทีละไฟล์ ไม่รวบส่งทีเดียว -- แต่ละไฟล์เป็นการเขียนชีตหนึ่งครั้งที่จบ
+      // ในตัวเอง ถ้าไฟล์ที่สามพัง สองไฟล์แรกที่ขึ้นไปแล้วยังอยู่ครบ
+      for (let i = 0; i < files.length; i++) {
+        if (files.length > 1) setBusy(btn, true, `กำลังอัปโหลด ${i + 1}/${files.length}...`);
 
-      requestsCache = requestsCache.map(r => (String(r.id) === String(updated.id) ? updated : r));
-      extendFormRecord = updated;
+        const dataUrl = await new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result);
+          reader.onerror = () => reject(new Error("อ่านไฟล์ไม่สำเร็จ"));
+          reader.readAsDataURL(files[i]);
+        });
+
+        updated = await backend.saveExtendFile(extendFormRecord.id, "plan", dataUrl);
+        requestsCache = requestsCache.map(r => (String(r.id) === String(updated.id) ? updated : r));
+        extendFormRecord = updated;
+      }
 
       // สถานะอาจถูกเดินต่อโดยเซิร์ฟเวอร์ -- หน้าจอต้องสะท้อนของจริง
       extJobStatus.value = updated.jobStatus;
@@ -4234,7 +4313,8 @@
       syncExtendStageFields(updated);
 
       extPlanFile.value = "";
-      extPlanSuccess.textContent = `แนบแผนผังเรียบร้อย สถานะปัจจุบัน: ${updated.jobStatus}`;
+      extPlanSuccess.textContent =
+        `แนบแผนผัง ${files.length} ไฟล์เรียบร้อย สถานะปัจจุบัน: ${updated.jobStatus}`;
       extPlanSuccess.hidden = false;
     } catch (err) {
       console.error("CS Connect plan upload error:", err);
@@ -4296,10 +4376,6 @@
       setBusy(button, false);
     }
   }
-
-  // PDF บางไฟล์ Drive ทำภาพตัวอย่างไม่ได้ -- ซ่อนกรอบรูปไปเลยดีกว่าโชว์ไอคอน
-  // รูปเสีย ลิงก์ "เปิดไฟล์" ยังอยู่ครบ
-  extPlanPreview.addEventListener("error", () => { extPlanPreview.hidden = true; });
 
   document.getElementById("extSitePhotoBtn").addEventListener("click", (e) =>
     uploadExtendPhoto(e.currentTarget, "sitePhoto", document.getElementById("extSitePhotoFile")));
@@ -4444,7 +4520,6 @@
     crumbs: document.getElementById("estCrumbs"),
     rows: document.getElementById("estRows"),
     jobName: document.getElementById("estJobName"),
-    group: document.getElementById("estGroup"),
     investment: document.getElementById("estInvestment"),
     catalogNote: document.getElementById("estCatalogNote"),
     error: document.getElementById("estimateError"),
@@ -4489,14 +4564,25 @@
     estimateCatalog = data.items || [];
     estimateLists = data.lists || { section: [], group: [], investment: [] };
 
-    fillDatalist(document.getElementById("estGroupList"), estimateLists.group || []);
-    fillDatalist(document.getElementById("estInvestmentList"), estimateLists.investment || []);
     fillDatalist(document.getElementById("estDescList"), estimateCatalog.map(i => i.description));
 
     estimateView.catalogNote.textContent = estimateCatalog.length
       ? `รายการตั้งต้นในระบบ ${estimateCatalog.length} รายการ · พิมพ์บางส่วนของชื่อเพื่อค้นหา แล้ว KeyCode จะเติมให้เอง`
       : "ยังไม่มีรายการตั้งต้นในระบบ (แท็บ EstimateItems ในชีตยังว่าง) — พิมพ์ Description และ KeyCode เองได้ตามปกติ";
   }
+
+  /**
+   * คำนำหน้าชื่องานย่อยของแต่ละแผนก -- ตรงกับที่แผนกใช้เรียกกันจริง (HT.OHGW,
+   * LT.สาย, TR.Cover ...) เติมให้ตั้งแต่ตอนเปิดช่อง เจ้าหน้าที่พิมพ์ต่อได้เลย
+   * และยังลบทิ้งพิมพ์เองทั้งหมดได้ ไม่ได้บังคับ
+   */
+  const DEPARTMENT_PREFIX = {
+    "แผนกแรงสูง 22 kV": "HT.",
+    "แผนกหม้อแปลง 22 kV": "TR.",
+    "แผนกแรงต่ำ": "LT.",
+    "แผนกไฟสาธารณะ": "SL.",
+    "แผนกมิเตอร์": "MT."
+  };
 
   function currentDept() {
     return estimateModel && estimateModel.departments[estimateDeptIndex];
@@ -4627,6 +4713,7 @@
     if (!dept) return showEstimateLevel(0);
 
     estimateView.jobPaneTitle.textContent = `งานย่อยใน ${dept.section || "แผนกไม่มีชื่อ"}`;
+    document.getElementById("estNewJob").value = DEPARTMENT_PREFIX[dept.section] || "";
     estimateView.jobList.innerHTML = "";
 
     if (!dept.jobs.length) {
@@ -4638,6 +4725,7 @@
     }
 
     dept.jobs.forEach((job, index) => {
+      // job.group มีเฉพาะในใบที่สร้างไว้ก่อนจะรวมชื่องานย่อยกับ Group เข้าด้วยกัน
       const bits = [job.group, job.investment].filter(Boolean).join(" · ");
       estimateView.jobList.appendChild(estimateCard(
         jobLabel(job, index),
@@ -4658,8 +4746,7 @@
     if (!job) return showEstimateLevel(1);
 
     estimateView.formPaneTitle.textContent = jobLabel(job, estimateJobIndex);
-    estimateView.jobName.value = job.name || "";
-    estimateView.group.value = job.group || "";
+    estimateView.jobName.value = job.name || job.group || "";
     estimateView.investment.value = job.investment || "";
 
     estimateView.rows.innerHTML = "";
@@ -4819,18 +4906,26 @@
     if (!dept) return;
 
     const name = document.getElementById("estNewJob");
-    const group = document.getElementById("estNewJobGroup");
     const investment = document.getElementById("estNewJobInvestment");
 
+    const jobName = name.value.trim();
+    const prefix = DEPARTMENT_PREFIX[dept.section] || "";
+
+    // มีแต่คำนำหน้าที่เติมให้ = ยังไม่ได้พิมพ์ชื่อจริง
+    if (!jobName || jobName === prefix) {
+      showError(estimateView.error, "กรุณากรอกชื่องานย่อย");
+      return;
+    }
+    hideError(estimateView.error);
+
     dept.jobs.push({
-      name: name.value.trim(),
-      group: group.value.trim(),
+      name: jobName,
       investment: investment.value.trim(),
       items: []
     });
 
-    name.value = "";
-    group.value = "";
+    // กลับไปเป็นคำนำหน้าของแผนก ไม่ใช่ช่องว่าง -- ส่วนใหญ่เพิ่มติด ๆ กันหลายงาน
+    name.value = prefix;
     investment.value = "";
     markEstimateDirty();
     renderEstimateJobs();
@@ -4847,12 +4942,7 @@
     markEstimateDirty();
   });
 
-  estimateView.group.addEventListener("input", () => {
-    const job = currentJob();
-    if (job) { job.group = estimateView.group.value; markEstimateDirty(); }
-  });
-
-  estimateView.investment.addEventListener("input", () => {
+  estimateView.investment.addEventListener("change", () => {
     const job = currentJob();
     if (job) { job.investment = estimateView.investment.value; markEstimateDirty(); }
   });
@@ -4883,6 +4973,7 @@
           section: dept.section,
           jobs: (dept.jobs || []).map(job => ({
             name: job.name || "",
+            // เก็บต่อไว้เฉย ๆ สำหรับใบเก่าที่เคยแยกช่อง Group ไว้ ของใหม่ไม่ได้ใช้
             group: job.group || "",
             investment: job.investment || "",
             items: (job.items || []).filter(item => item.description)
