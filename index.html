@@ -25,7 +25,7 @@
 <title>CS Connect</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=Sarabun:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=20260909b">
+<link rel="stylesheet" href="style.css?v=20260909c">
 </head>
 <body>
 
@@ -790,9 +790,39 @@
             <input type="text" id="extAssignee" placeholder="ยังไม่ได้จ่ายงาน" readonly>
             <p class="field-hint">หัวหน้างานเป็นผู้จ่ายงานจากหน้า “ขอขยายเขตระบบจำหน่ายไฟฟ้า” ที่หน้าแรก</p>
           </div>
+          <!-- ขึ้นตั้งแต่สถานะ "รอสำรวจ" เป็นต้นไป (หรือเมื่อคำร้องมีเลข WBS แล้ว)
+               ค่าเริ่มต้นคือเลขถัดจาก WBS ล่าสุดของปี พ.ศ. นี้ -- ดู nextWbs -->
+          <div class="field" id="extWbsField" hidden>
+            <label for="extWbs">เลข WBS</label>
+            <input type="text" id="extWbs" placeholder="C-69-A-HADSR.0000" autocomplete="off">
+            <p class="field-hint">บันทึกพร้อมเลข WBS แล้ว สถานะจะเปลี่ยนเป็น “รอเขียนผัง” ให้อัตโนมัติ</p>
+          </div>
+
           <div class="field">
             <label for="extNote">หมายเหตุ</label>
             <textarea id="extNote" rows="2" placeholder="หมายเหตุเพิ่มเติม (ถ้ามี)"></textarea>
+          </div>
+
+          <!-- แนบแผนผัง -- อยู่ในฟอร์มแต่ไม่ได้ถูกส่งไปพร้อม submit ของฟอร์ม:
+               ไฟล์ขึ้น Drive ผ่านคำสั่งของตัวเอง (savePlan) แล้วเดินสถานะให้เอง
+               จึงมีปุ่มของตัวเองแยกจากปุ่มบันทึกคำร้อง -->
+          <div class="field-section" id="extPlanSection" hidden>
+            <p class="field-section-label">แผนผัง</p>
+
+            <p id="extPlanCurrent" class="field-hint"></p>
+
+            <div class="field">
+              <label for="extPlanFile">ไฟล์แผนผัง (PDF หรือรูปภาพ ไม่เกิน 10 MB)</label>
+              <input type="file" id="extPlanFile" accept="application/pdf,image/*">
+              <p class="field-hint">แนบแล้ว สถานะจะเปลี่ยนเป็น “รอประมาณการ” ให้อัตโนมัติ</p>
+            </div>
+
+            <div class="batch-toolbar">
+              <button type="button" id="extPlanUploadBtn" class="btn btn-primary">อัปโหลดแผนผัง</button>
+            </div>
+
+            <p id="extPlanError" class="form-error" hidden></p>
+            <p id="extPlanSuccess" class="form-success" hidden></p>
           </div>
           <p id="extendFormError" class="form-error" hidden></p>
           <button type="submit" id="extendFormSubmitBtn" class="btn btn-primary btn-block">บันทึกคำร้อง</button>
@@ -925,6 +955,6 @@
      ที่หาสาเหตุยากมาก
      **ต้องเปลี่ยนเลขนี้ทุกครั้งที่แก้ app.js / style.css / track.js / qr.js**
      ไม่งั้นผู้ใช้บางคนจะยังได้ไฟล์เก่าไปอีกพักใหญ่ -->
-<script src="app.js?v=20260909b"></script>
+<script src="app.js?v=20260909c"></script>
 </body>
 </html>

@@ -250,6 +250,10 @@
 
     async setUserRole() {
       throw new Error("โหมดออฟไลน์ไม่รองรับการตั้งสิทธิ์หัวหน้างาน");
+    },
+
+    async savePlan() {
+      throw new Error("โหมดออฟไลน์ไม่รองรับการแนบแผนผัง");
     }
 
     // track()/uploadSlip() live in track.js now -- the public tracking page
@@ -425,6 +429,15 @@
         // สำเนาที่ใช้เทียบว่า "อะไรเปลี่ยน" ต้องรู้ค่าใหม่ด้วย ไม่งั้นการบันทึก
         // ครั้งถัดไปจะส่งเรกคอร์ดเหล่านี้ซ้ำโดยไม่จำเป็น
         updated.forEach(r => savedRequests.set(String(r.id), JSON.stringify(r)));
+        return updated;
+      },
+
+      // แนบไฟล์แผนผัง -- ฝั่งเซิร์ฟเวอร์อัปขึ้น Drive แล้วเดินสถานะให้เอง
+      // คืนคำร้องที่อัปเดตแล้วกลับมาเพื่อเอาไปทับใน cache
+      async savePlan(id, file) {
+        const data = await callAsUser({ action: "savePlan", id, file });
+        const updated = data.request;
+        if (updated) savedRequests.set(String(updated.id), JSON.stringify(updated));
         return updated;
       },
 
@@ -1082,6 +1095,39 @@
     return Array.from({ length: count }, (_, i) =>
       `${prefix}${String(maxSeq + 1 + i).padStart(4, "0")}`
     );
+  }
+
+  /**
+   * เลข WBS ถัดไปของปี พ.ศ. ปัจจุบัน
+   *
+   * รูปแบบ C-<ปี พ.ศ. 2 หลัก>-A-HADSR.<ลำดับ 4 หลัก> และ **รันแยกตามปี**:
+   * ขึ้นปีใหม่ ลำดับกลับไปเริ่มใหม่ เพราะไม่มีคำร้องไหนถือเลขขึ้นต้นปีใหม่มาก่อน
+   *
+   * ไล่หาเลขสูงสุดจากคำร้องที่โหลดมาแล้ว (แบบเดียวกับเลขที่คำร้องระบบ) ไม่ได้เก็บ
+   * ตัวนับไว้ที่ไหน จึงเป็นแค่ "ค่าที่เดาให้" ไม่ใช่การจอง -- เจ้าหน้าที่แก้ทับได้
+   * และถ้าสองคนกรอกพร้อมกันอาจได้เลขซ้ำ ซึ่งจะเห็นได้จากในชีต (ข้อจำกัดเดียวกับ
+   * เลขที่คำร้องระบบ ยอมรับได้ที่ขนาดสำนักงานนี้)
+   *
+   * ยังไม่เคยมี WBS ของปีนี้เลย -> .0000 ตามที่ตกลงไว้
+   */
+  function wbsPrefix() {
+    const beYear = new Date().getFullYear() + 543;
+    return `C-${String(beYear % 100).padStart(2, "0")}-A-HADSR.`;
+  }
+
+  function nextWbs() {
+    const prefix = wbsPrefix();
+
+    const numbers = getRequests()
+      .map(r => r.wbs)
+      .filter(w => typeof w === "string" && w.startsWith(prefix))
+      .map(w => parseInt(w.slice(prefix.length), 10))
+      .filter(n => Number.isInteger(n));
+
+    if (!numbers.length) return `${prefix}0000`;
+
+    const max = numbers.reduce((a, b) => Math.max(a, b), 0);
+    return `${prefix}${String(max + 1).padStart(4, "0")}`;
   }
 
   function generateTrackingNumber(type) {
@@ -2147,6 +2193,13 @@
   const extJobStatus = document.getElementById("extJobStatus");
   const extTrackingNumber = document.getElementById("extTrackingNumber");
   const extAssigneeField = document.getElementById("extAssigneeField");
+  const extWbs = document.getElementById("extWbs");
+  const extWbsField = document.getElementById("extWbsField");
+  const extPlanSection = document.getElementById("extPlanSection");
+  const extPlanCurrent = document.getElementById("extPlanCurrent");
+  const extPlanFile = document.getElementById("extPlanFile");
+  const extPlanError = document.getElementById("extPlanError");
+  const extPlanSuccess = document.getElementById("extPlanSuccess");
   const extDistrict = document.getElementById("extDistrict");
   const extSubdistrict = document.getElementById("extSubdistrict");
   const extZipcode = document.getElementById("extZipcode");
@@ -2508,11 +2561,57 @@
   const updateExtPhoneSecondaryCall = wireCallButton(
     document.getElementById("extPhoneSecondary"), document.getElementById("extPhoneSecondaryCallBtn"));
 
-  // ผู้รับผิดชอบปรากฏก็ต่อเมื่อสถานะพ้น "รอจ่ายงาน" แล้ว (งานถูกจ่ายออกไปแล้ว
-  // จริง ๆ) -- ค่าเริ่มต้นของฟอร์มใหม่คือ "รอจ่ายงาน" จึงซ่อนโดยปริยาย
-  extJobStatus.addEventListener("change", () => {
-    extAssigneeField.hidden = extJobStatus.value === "รอจ่ายงาน" || !extJobStatus.value;
-  });
+  /**
+   * ช่องที่โผล่มาตามขั้นของงาน -- ผู้รับผิดชอบ, เลข WBS, และการแนบแผนผัง
+   *
+   * ผู้รับผิดชอบและ WBS ตัดสินจาก "สถานะที่เลือกอยู่ในดรอปดาวน์" เพราะเป็นช่องที่
+   * กรอกไปพร้อมกับการเปลี่ยนสถานะในครั้งเดียวกัน
+   *
+   * ส่วนการแนบแผนผังตัดสินจาก **สถานะที่บันทึกไว้จริง** ของคำร้อง ไม่ใช่ค่าใน
+   * ดรอปดาวน์: การอัปโหลดยิงคำสั่งของตัวเองไปที่คำร้องใบนั้นทันที (ไม่ได้รอกด
+   * บันทึก) และฝั่งเซิร์ฟเวอร์เดินสถานะจากค่าที่เก็บไว้ ถ้าโชว์ตามดรอปดาวน์
+   * เจ้าหน้าที่จะแนบไฟล์ตั้งแต่ยังไม่ได้บันทึกสถานะ แล้วงานจะค้างครึ่งทาง
+   * (มีไฟล์แต่สถานะไม่เดิน) -- คำร้องใหม่ที่ยังไม่มี id ก็แนบไม่ได้ด้วยเหตุผลเดียวกัน
+   */
+  function syncExtendStageFields(record) {
+    const status = extJobStatus.value;
+
+    extAssigneeField.hidden = status === "รอจ่ายงาน" || !status;
+
+    const hasWbs = Boolean(record && record.wbs);
+    extWbsField.hidden = !(status === "รอสำรวจ" || hasWbs);
+
+    const storedStatus = record ? record.jobStatus : "";
+    const showPlan = Boolean(record) && (storedStatus === "รอเขียนผัง" || Boolean(record.planFile));
+    extPlanSection.hidden = !showPlan;
+
+    if (showPlan) renderPlanCurrent(record);
+  }
+
+  function renderPlanCurrent(record) {
+    extPlanCurrent.textContent = "";
+
+    if (!record.planFile) {
+      extPlanCurrent.textContent = "ยังไม่ได้แนบแผนผัง";
+      return;
+    }
+
+    extPlanCurrent.textContent = "แผนผังที่แนบไว้: ";
+    const link = document.createElement("a");
+    link.href = record.planFile;
+    link.target = "_blank";
+    link.rel = "noopener";
+    link.textContent = record.planFileAt
+      ? `เปิดไฟล์ (แนบเมื่อ ${formatThaiDateTime(record.planFileAt)})`
+      : "เปิดไฟล์";
+    extPlanCurrent.appendChild(link);
+  }
+
+  // คำร้องที่กำลังเปิดอยู่ในฟอร์มขอขยายเขตฯ -- การแนบแผนผังต้องรู้ id และสถานะ
+  // ที่บันทึกไว้จริง ซึ่ง editingId อย่างเดียวบอกไม่ได้
+  let extendFormRecord = null;
+
+  extJobStatus.addEventListener("change", () => syncExtendStageFields(extendFormRecord));
 
   function setActiveNavItem(filter) {
     requestsNavItems.forEach(item => {
@@ -3028,6 +3127,8 @@
     extJobStatus.dispatchEvent(new Event("change"));
     // อ่านอย่างเดียว -- ตั้งค่าได้จากหน้าจ่ายงานเท่านั้น (ดู assignRequests_)
     document.getElementById("extAssignee").value = r.assignee || "";
+    // มีเลขแล้วใช้เลขเดิม ยังไม่มีก็เดาเลขถัดไปของปีนี้ให้ (แก้ทับได้)
+    extWbs.value = r.wbs || nextWbs();
     document.getElementById("extNote").value = r.note || "";
 
     extLat.value = r.lat || "";
@@ -3422,8 +3523,14 @@
     updateReqPhoneSecondaryCall();
     updateExtPhonePrimaryCall();
     updateExtPhoneSecondaryCall();
-    // ค่าเริ่มต้นของฟอร์มใหม่คือ "รอจ่ายงาน" จึงซ่อนผู้รับผิดชอบไว้ก่อน
+    // คำร้องใหม่เริ่มที่ "รอจ่ายงาน" -- ยังไม่มีทั้งผู้รับผิดชอบ WBS และแผนผัง
+    extendFormRecord = null;
     extAssigneeField.hidden = true;
+    extWbsField.hidden = true;
+    extPlanSection.hidden = true;
+    extPlanFile.value = "";
+    hideError(extPlanError);
+    extPlanSuccess.hidden = true;
 
     const isSupported = FORM_SUPPORTED_TYPES.has(type);
     const isPower = type === "power";
@@ -3475,7 +3582,9 @@
       fillRequestForm(record);
     }
     if (isSupported && isExtend && record) {
+      extendFormRecord = record;
       fillExtendForm(record);
+      syncExtendStageFields(record);
     }
 
     // Audit strip only makes sense for a record that already exists -- and
@@ -3826,6 +3935,7 @@
       const jobStatus = extJobStatus.value;
       const note = document.getElementById("extNote").value.trim();
       const trackingNumber = extTrackingNumber.value;
+      const wbs = extWbs.value.trim();
       const lat = extLat.value.trim();
       const lng = extLng.value.trim();
 
@@ -3867,6 +3977,10 @@
         return;
       }
 
+      // กรอกเลข WBS แล้ว = งานสำรวจเดินต่อไปขั้นเขียนผัง สถานะจึงเลื่อนให้เอง
+      // (เลื่อนก่อนสร้าง statusHistory ด้านล่าง ประวัติจะได้บันทึกการเปลี่ยนนี้ด้วย)
+      const nextStatus = (jobStatus === "รอสำรวจ" && wbs) ? "รอเขียนผัง" : jobStatus;
+
       // ไม่มีฟิลด์การจ่ายงาน (assignee/assigneeEmail/assigned*) อยู่ในนี้โดย
       // ตั้งใจ -- จ่ายงานได้ทางเดียวคือผ่าน assignRequests ของหัวหน้างาน และ
       // ฝั่งเซิร์ฟเวอร์เขียนค่าเดิมทับให้อยู่แล้วถ้ามีใครส่งมา
@@ -3887,7 +4001,8 @@
         village,
         location,
         purpose,
-        jobStatus,
+        jobStatus: nextStatus,
+        wbs,
         note,
         lat,
         lng
@@ -3902,7 +4017,7 @@
         if (idx !== -1) {
           const prev = requests[idx];
           const statusHistory = appendStatusHistoryIfChanged(
-            prev.statusHistory, prev.jobStatus, jobStatus, savedByName, savedByEmail, now);
+            prev.statusHistory, prev.jobStatus, nextStatus, savedByName, savedByEmail, now);
 
           requests[idx] = {
             ...prev,
@@ -3917,7 +4032,7 @@
         requests.push({
           id: newRequestId(),
           ...recordData,
-          statusHistory: [{ status: jobStatus, byName: savedByName, byEmail: savedByEmail, at: now }],
+          statusHistory: [{ status: nextStatus, byName: savedByName, byEmail: savedByEmail, at: now }],
           createdByName: savedByName,
           createdByEmail: savedByEmail,
           createdAt: now
@@ -3947,6 +4062,68 @@
     }
   });
 
+  /**
+   * อัปโหลดไฟล์แผนผังของคำร้องที่เปิดอยู่
+   *
+   * แยกจากปุ่มบันทึกคำร้องโดยตั้งใจ: ไฟล์ไม่ได้ไปอยู่ในชีต แต่ขึ้น Drive ผ่าน
+   * คำสั่งของตัวเอง และฝั่งเซิร์ฟเวอร์เป็นคนเดินสถานะให้หลังไฟล์ขึ้นสำเร็จแล้ว
+   * เท่านั้น -- ถ้าผูกไว้กับ submit เดียวกัน การบันทึกที่ล้มกลางทางจะทำให้สถานะ
+   * กับไฟล์ไม่ตรงกัน
+   */
+  document.getElementById("extPlanUploadBtn").addEventListener("click", async (e) => {
+    const btn = e.currentTarget;
+    hideError(extPlanError);
+    extPlanSuccess.hidden = true;
+
+    const file = extPlanFile.files && extPlanFile.files[0];
+    if (!file) {
+      showError(extPlanError, "กรุณาเลือกไฟล์แผนผังก่อน");
+      return;
+    }
+
+    if (!extendFormRecord) {
+      showError(extPlanError, "ต้องบันทึกคำร้องก่อนจึงจะแนบแผนผังได้");
+      return;
+    }
+
+    // กันตั้งแต่ต้นทาง ผู้ใช้จะได้ไม่รอโหลดไฟล์ใหญ่จนจบแล้วค่อยโดนปฏิเสธ
+    // (ฝั่งเซิร์ฟเวอร์ยังตรวจซ้ำอยู่ดี -- ที่นั่นคือด่านจริง)
+    if (file.size > 10 * 1024 * 1024) {
+      showError(extPlanError, "ไฟล์แผนผังใหญ่เกินไป (จำกัดไม่เกิน 10 MB)");
+      return;
+    }
+
+    setBusy(btn, true, "กำลังอัปโหลด...");
+
+    try {
+      const dataUrl = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = () => reject(new Error("อ่านไฟล์ไม่สำเร็จ"));
+        reader.readAsDataURL(file);
+      });
+
+      const updated = await backend.savePlan(extendFormRecord.id, dataUrl);
+
+      requestsCache = requestsCache.map(r => (String(r.id) === String(updated.id) ? updated : r));
+      extendFormRecord = updated;
+
+      // สถานะอาจถูกเดินต่อโดยเซิร์ฟเวอร์ -- หน้าจอต้องสะท้อนของจริง
+      extJobStatus.value = updated.jobStatus;
+      renderStatusHistory(updated);
+      syncExtendStageFields(updated);
+
+      extPlanFile.value = "";
+      extPlanSuccess.textContent = `แนบแผนผังเรียบร้อย สถานะปัจจุบัน: ${updated.jobStatus}`;
+      extPlanSuccess.hidden = false;
+    } catch (err) {
+      console.error("CS Connect plan upload error:", err);
+      showError(extPlanError, friendlyError(err, "แนบแผนผังไม่สำเร็จ กรุณาลองใหม่อีกครั้ง"));
+    } finally {
+      setBusy(btn, false);
+    }
+  });
+
   // ---------- งานขอขยายเขตระบบจำหน่ายไฟฟ้า (โมดูลปฏิบัติงาน) ----------
   //
   // หน้านี้ไม่ได้ถือข้อมูลของตัวเองเลย -- อ่านจาก requestsCache ชุดเดียวกับหน้า
@@ -3966,6 +4143,9 @@
 
   const EXTEND_FILTER_ALL = "all";
   const EXTEND_FILTER_MINE = "mine";
+  // มุมมองพิเศษ: ไม่ได้กรองเฉย ๆ แต่จัดเรียงใหม่เป็นคิวของแต่ละคน
+  const EXTEND_FILTER_QUEUE = "queue";
+  const EXTEND_SURVEY_STATUS = "รอสำรวจ";
 
   let extendFilter = EXTEND_FILTER_ALL;
   let extendSearchQuery = "";
@@ -3999,6 +4179,7 @@
 
   function extendFilterMatches(record) {
     if (extendFilter === EXTEND_FILTER_ALL) return true;
+    if (extendFilter === EXTEND_FILTER_QUEUE) return record.jobStatus === EXTEND_SURVEY_STATUS;
     if (extendFilter === EXTEND_FILTER_MINE) {
       const email = String(getSession()?.email || "").toLowerCase();
       return Boolean(email) && String(record.assigneeEmail || "").toLowerCase() === email;
@@ -4009,7 +4190,113 @@
   function extendFilterLabel() {
     if (extendFilter === EXTEND_FILTER_ALL) return "งานทั้งหมด";
     if (extendFilter === EXTEND_FILTER_MINE) return "งานของฉัน";
+    if (extendFilter === EXTEND_FILTER_QUEUE) return "คิวรอสำรวจ";
     return extendFilter;
+  }
+
+  /**
+   * คิวรอสำรวจ แยกเป็นของแต่ละคน
+   *
+   * "คิวที่เท่าไร" ต้องมีความหมายเดียวเท่านั้น จึงเรียงตามวันที่รับคำร้องจากเก่า
+   * ไปใหม่ (มาก่อนได้ก่อน) ไม่ใช่เรียงตามวันที่บันทึกล่าสุดเหมือนรายการอื่นในแอป
+   * -- คิวที่สลับลำดับได้ทุกครั้งที่มีคนแก้คำร้อง ไม่ใช่คิว
+   *
+   * คิวของตัวเองถูกดันขึ้นบนสุดเสมอ เพราะคนเปิดหน้านี้ส่วนใหญ่เปิดมาดูของตัวเอง
+   * งานที่ยังไม่มีผู้รับผิดชอบถูกรวมไว้กลุ่มท้ายสุด ปกติไม่ควรมี (การจ่ายงานเป็น
+   * ตัวพาสถานะมาที่ "รอสำรวจ") แต่ถ้ามีคนตั้งสถานะเองก็จะเห็น ไม่หายไปเงียบ ๆ
+   */
+  function renderSurveyQueue(jobs) {
+    const myEmail = String(getSession()?.email || "").toLowerCase();
+
+    const groups = new Map();
+    jobs.forEach(record => {
+      const key = String(record.assigneeEmail || "").toLowerCase();
+      if (!groups.has(key)) {
+        groups.set(key, { key, name: record.assignee || "", jobs: [] });
+      }
+      groups.get(key).jobs.push(record);
+    });
+
+    const ordered = Array.from(groups.values()).sort((a, b) => {
+      if (a.key === myEmail) return -1;
+      if (b.key === myEmail) return 1;
+      if (!a.key) return 1;
+      if (!b.key) return -1;
+      return String(a.name).localeCompare(String(b.name), "th");
+    });
+
+    extendWorkList.innerHTML = "";
+
+    if (!ordered.length) {
+      const empty = document.createElement("div");
+      empty.className = "request-empty";
+      empty.textContent = "ยังไม่มีงานที่รอสำรวจ";
+      extendWorkList.appendChild(empty);
+      return;
+    }
+
+    ordered.forEach(group => {
+      const section = document.createElement("section");
+      section.className = "queue-group";
+      if (group.key && group.key === myEmail) section.classList.add("is-mine");
+
+      const head = document.createElement("div");
+      head.className = "queue-group-head";
+
+      const who = document.createElement("span");
+      who.className = "queue-group-name";
+      who.textContent = group.key
+        ? (group.name || group.key) + (group.key === myEmail ? " (ของฉัน)" : "")
+        : "ยังไม่ได้จ่ายงาน";
+
+      const count = document.createElement("span");
+      count.className = "queue-group-count";
+      count.textContent = `${group.jobs.length} งาน`;
+
+      head.append(who, count);
+      section.appendChild(head);
+
+      group.jobs
+        .slice()
+        .sort((a, b) => String(a.receivedDate || "").localeCompare(String(b.receivedDate || ""))
+          || (a.createdAt || 0) - (b.createdAt || 0))
+        .forEach((record, index) => {
+          const position = index + 1;
+
+          const item = document.createElement("button");
+          item.type = "button";
+          item.className = "queue-item";
+
+          const pos = document.createElement("span");
+          pos.className = "queue-pos";
+          pos.textContent = String(position);
+
+          const body = document.createElement("span");
+          body.className = "queue-body";
+
+          const title = document.createElement("span");
+          title.className = "queue-title";
+          title.textContent = [record.requestNumber, record.customerName].filter(Boolean).join(" · ") || "-";
+
+          const meta = document.createElement("span");
+          meta.className = "queue-meta";
+          meta.textContent = position === 1
+            ? `ถึงคิวแล้ว · รับคำร้อง ${formatThaiDate(record.receivedDate)}`
+            : `เหลืออีก ${position - 1} คิวจะถึงคิวนี้ · รับคำร้อง ${formatThaiDate(record.receivedDate)}`;
+
+          body.append(title, meta);
+          item.append(pos, body);
+
+          item.addEventListener("click", () => {
+            showView("requests");
+            openRequestForm("extend", record, { returnTo: "extendWork" });
+          });
+
+          section.appendChild(item);
+        });
+
+      extendWorkList.appendChild(section);
+    });
   }
 
   /**
@@ -4027,7 +4314,12 @@
 
     const chips = [
       { key: EXTEND_FILTER_ALL, label: "ทั้งหมด", count: jobs.length },
-      { key: EXTEND_FILTER_MINE, label: "งานของฉัน", count: mine }
+      { key: EXTEND_FILTER_MINE, label: "งานของฉัน", count: mine },
+      {
+        key: EXTEND_FILTER_QUEUE,
+        label: "คิวรอสำรวจ",
+        count: jobs.filter(r => r.jobStatus === EXTEND_SURVEY_STATUS).length
+      }
     ].concat(extendStatuses().map(status => ({
       key: status,
       label: status,
@@ -4206,6 +4498,12 @@
 
     extendWorkTitle.textContent = extendFilterLabel();
     extendWorkCount.textContent = `ทั้งหมด ${filtered.length} รายการ`;
+
+    if (extendFilter === EXTEND_FILTER_QUEUE) {
+      renderSurveyQueue(filtered);
+      renderAssignBar();
+      return;
+    }
 
     extendWorkList.innerHTML = "";
 
