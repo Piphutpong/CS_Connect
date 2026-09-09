@@ -2147,6 +2147,9 @@
   const extJobStatus = document.getElementById("extJobStatus");
   const extTrackingNumber = document.getElementById("extTrackingNumber");
   const extAssigneeField = document.getElementById("extAssigneeField");
+  const extDistrict = document.getElementById("extDistrict");
+  const extSubdistrict = document.getElementById("extSubdistrict");
+  const extZipcode = document.getElementById("extZipcode");
   const extLat = document.getElementById("extLat");
   const extLng = document.getElementById("extLng");
   const extMapBtn = document.getElementById("extMapBtn");
@@ -2168,6 +2171,9 @@
   // "requests" (หน้ารับคำร้อง) หรือ "extendWork" (คิวงานขอขยายเขตฯ) -- ดู
   // leaveRequestForm ว่าใช้ทำอะไร
   let formReturnTo = "requests";
+  // true ระหว่างที่ fillRequestForm/fillExtendForm กำลังยัดค่าลงฟอร์ม -- ตัวช่วย
+  // ที่ฟัง change อยู่ (เช่นค่าธรรมเนียมอัตโนมัติ) ต้องไม่ทำงานในช่วงนั้น
+  let fillingForm = false;
   let currentSearchQuery = "";
 
   // Which half of the คุมคำร้องส่งแผนกมิเตอร์ tab is showing: "pending" (the
@@ -2239,6 +2245,86 @@
   const FEE_REQUIRED_MESSAGE =
     'สถานะ "รอชำระเงิน" ต้องระบุค่าธรรมเนียมมากกว่า 0 (ถ้าไม่มีค่าใช้จ่าย ให้เลือกสถานะ "ไม่มีค่าใช้จ่าย")';
 
+  /**
+   * ค่าธรรมเนียมมาตรฐานตาม ความประสงค์ + ขนาดมิเตอร์
+   *
+   * เป็น "ค่าตั้งต้น" ไม่ใช่ราคาบังคับ -- เจ้าหน้าที่พิมพ์ทับได้เสมอ และฝั่ง
+   * เซิร์ฟเวอร์ไม่ได้บังคับให้ตรงตารางนี้โดยตั้งใจ (มีกรณีที่คิดไม่เท่ามาตรฐานจริง)
+   * สิ่งที่เซิร์ฟเวอร์ยังบังคับอยู่มีอย่างเดียวคือ สถานะ "รอชำระเงิน" ต้องมียอด
+   * มากกว่า 0 -- ดู assertFeeForPayment_
+   *
+   * ความประสงค์/ขนาดมิเตอร์ที่ไม่อยู่ในตารางนี้ = ไม่มีราคามาตรฐาน ระบบจะไม่เดา
+   * ให้ ปล่อยให้กรอกเอง คีย์ต้องตรงกับค่าใน <option> ของฟอร์มเป๊ะ ๆ
+   */
+  const STANDARD_FEES = {
+    "ขอติดตั้งมิเตอร์ใหม่": {
+      "5A 1P": "107",
+      "15A 1P": "749",
+      "30A 1P": "749",
+      "15A 3P": "749",
+      "30A 3P": "1605"
+    },
+    "ขอใช้ไฟฟ้าชั่วคราว": {
+      "5A 1P": "600",
+      "15A 1P": "4000",
+      "30A 1P": "8000",
+      "15A 3P": "12000",
+      "30A 3P": "24000"
+    },
+    "ขอเปลี่ยนประเภทมิเตอร์ (TOU)": {
+      "5(45)A 1P TOU": "3531",
+      "5(100)A 1P TOU": "3531",
+      "5(45)A 3P TOU": "4012.50",
+      "5(100)A 3P TOU": "4012.50"
+    }
+  };
+
+  function standardFee(purpose, meterSize) {
+    const byMeter = STANDARD_FEES[purpose];
+    return byMeter ? byMeter[meterSize] : undefined;
+  }
+
+  /**
+   * เติมค่าธรรมเนียมให้อัตโนมัติเมื่อเลือกความประสงค์คู่กับขนาดมิเตอร์
+   *
+   * กฎเดียวที่ต้องจำ: **ระบบแตะเฉพาะค่าที่ระบบเป็นคนใส่เอง** ถ้าเจ้าหน้าที่พิมพ์
+   * ทับแล้ว (ฟัง input บนช่องค่าธรรมเนียม) ธงจะถูกลบ และจากนั้นระบบจะไม่เขียนทับ
+   * อีกเลย -- ยอดที่คนตั้งใจพิมพ์เองต้องไม่หายไปเพราะไปแก้ช่องอื่นทีหลัง
+   *
+   * ในทางกลับกัน ถ้าค่าที่อยู่ในช่องเป็นค่าที่ระบบใส่ไว้ แล้วเปลี่ยนไปเป็นคู่ที่
+   * ไม่มีราคามาตรฐาน ต้องล้างทิ้ง ไม่ใช่ปล่อยยอดของคู่เดิมค้างไว้ให้เข้าใจผิด
+   *
+   * รับ element เป็นพารามิเตอร์แบบเดียวกับ wireLocationCascade เพื่อให้แถวใน
+   * กลุ่มคำร้อง (ที่โคลนช่องเหล่านี้ไป) ใช้ตัวเดียวกันได้
+   */
+  function wireFeeAutofill(purposeEl, meterEl, feeEl) {
+    function update() {
+      // ตอนเปิดคำร้องเก่าขึ้นมาแก้ ค่าที่บันทึกไว้คือค่าที่ถูกต้อง ไม่ใช่ราคา
+      // มาตรฐานวันนี้ -- fillRequestForm ยิง change เพื่อขับ cascade อยู่แล้ว
+      // ถ้าไม่กันไว้ ยอดเดิมของคำร้องจะโดนทับเงียบ ๆ
+      if (fillingForm) return;
+
+      const fee = standardFee(purposeEl.value, meterEl.value);
+
+      if (fee !== undefined) {
+        if (!feeEl.value || feeEl.dataset.autoFee === "1") {
+          feeEl.value = fee;
+          feeEl.dataset.autoFee = "1";
+        }
+        return;
+      }
+
+      if (feeEl.dataset.autoFee === "1") {
+        feeEl.value = "";
+        delete feeEl.dataset.autoFee;
+      }
+    }
+
+    purposeEl.addEventListener("change", update);
+    meterEl.addEventListener("change", update);
+    feeEl.addEventListener("input", () => { delete feeEl.dataset.autoFee; });
+  }
+
   function isFeeValidForStatus(jobStatus, fee) {
     if (jobStatus !== "รอชำระเงิน") return true;
     const amount = Number(String(fee || "").replace(/,/g, ""));
@@ -2281,6 +2367,14 @@
     reqSubdistrict.innerHTML = '<option value="">-- เลือกอำเภอก่อน --</option>';
     reqSubdistrict.disabled = true;
     reqZipcode.value = "";
+  }
+
+  /** เหมือน resetLocationFields แต่ของฟอร์มขอขยายเขตฯ -- form.reset() คืนค่า
+   *  ในช่องได้ แต่คืน <option> ของตำบลที่ถูกสร้างไว้ตามอำเภอไม่ได้ */
+  function resetExtendLocationFields() {
+    extSubdistrict.innerHTML = '<option value="">-- เลือกอำเภอก่อน --</option>';
+    extSubdistrict.disabled = true;
+    extZipcode.value = "";
   }
 
   function setDefaultRequestDate() {
@@ -2334,6 +2428,8 @@
   }
 
   wireLocationCascade(reqDistrict, reqSubdistrict, reqZipcode);
+  wireLocationCascade(extDistrict, extSubdistrict, extZipcode);
+  wireFeeAutofill(reqPurpose, document.getElementById("reqMeterSize"), document.getElementById("reqFee"));
 
   reqPurpose.addEventListener("change", () => {
     reqPurposeOtherField.hidden = reqPurpose.value !== "other";
@@ -2857,6 +2953,7 @@
   });
 
   function fillRequestForm(r) {
+    fillingForm = true;
     document.getElementById("reqNumber").value = r.requestNumber || "";
     document.getElementById("reqDate").value = r.receivedDate || "";
     document.getElementById("reqBP").value = r.bp || "";
@@ -2902,15 +2999,28 @@
     updateReqCoords();
     updateReqPhonePrimaryCall();
     updateReqPhoneSecondaryCall();
+    fillingForm = false;
   }
 
   /** เหมือน fillRequestForm ด้านบนแต่สำหรับ #extendForm -- ชุดฟิลด์ไม่เหมือนกัน */
   function fillExtendForm(r) {
+    fillingForm = true;
     document.getElementById("extNumber").value = r.requestNumber || "";
     extDate.value = r.receivedDate || "";
     document.getElementById("extCustomerName").value = r.customerName || "";
     document.getElementById("extPhonePrimary").value = r.phonePrimary || "";
     document.getElementById("extPhoneSecondary").value = r.phoneSecondary || "";
+    const extDistrictKey = Object.keys(DISTRICTS).find(key => DISTRICTS[key].label === r.district);
+    if (extDistrictKey) {
+      extDistrict.value = extDistrictKey;
+      extDistrict.dispatchEvent(new Event("change"));
+      extSubdistrict.value = r.subdistrict || "";
+      extSubdistrict.dispatchEvent(new Event("change"));
+    }
+
+    document.getElementById("extHouseNo").value = r.houseNo || "";
+    document.getElementById("extMoo").value = r.moo || "";
+    document.getElementById("extVillage").value = r.village || "";
     document.getElementById("extLocation").value = r.location || "";
     document.getElementById("extPurpose").value = r.purpose || "";
     extJobStatus.value = r.jobStatus || "รอจ่ายงาน";
@@ -2925,6 +3035,7 @@
     updateExtCoords();
     updateExtPhonePrimaryCall();
     updateExtPhoneSecondaryCall();
+    fillingForm = false;
   }
 
   // One stamp per status the record has been through, oldest first so the
@@ -3060,6 +3171,14 @@
 
     const purposeEl = grid.querySelector('[data-batch-key="purposeChoice"]');
     purposeEl.addEventListener("change", () => syncBatchRowConditionalFields(grid));
+
+    // ทุกใบในกลุ่มมีความประสงค์/ขนาดมิเตอร์/ค่าธรรมเนียมของตัวเอง จึงต้องได้
+    // ค่าธรรมเนียมอัตโนมัติเหมือนฟอร์มเดี่ยว
+    wireFeeAutofill(
+      purposeEl,
+      grid.querySelector('[data-batch-key="meterSize"]'),
+      grid.querySelector('[data-batch-key="fee"]')
+    );
 
     syncBatchRowConditionalFields(grid);
   }
@@ -3293,6 +3412,7 @@
     resetPurposeFields();
     setDefaultRequestDate();
     extendForm.reset();
+    resetExtendLocationFields();
     setDefaultExtendDate();
     // .reset() ล้างค่าในช่อง แต่ไม่ยิง input event -- ปุ่มเปิดแผนที่/นำทาง/โทรออก
     // ต้องสั่งคำนวณใหม่เองไม่งั้นจะค้างสถานะของคำร้องก่อนหน้า
@@ -3695,6 +3815,13 @@
       const phonePrimary = document.getElementById("extPhonePrimary").value.trim();
       const phoneSecondary = document.getElementById("extPhoneSecondary").value.trim();
       const location = document.getElementById("extLocation").value.trim();
+      const province = document.getElementById("extProvince").value;
+      const districtKey = extDistrict.value;
+      const subdistrict = extSubdistrict.value;
+      const zipcode = extZipcode.value;
+      const houseNo = document.getElementById("extHouseNo").value.trim();
+      const moo = document.getElementById("extMoo").value.trim();
+      const village = document.getElementById("extVillage").value.trim();
       const purpose = document.getElementById("extPurpose").value;
       const jobStatus = extJobStatus.value;
       const note = document.getElementById("extNote").value.trim();
@@ -3718,8 +3845,12 @@
         showError(extendFormError, "กรุณากรอกเบอร์โทรศัพท์ (หลัก)");
         return;
       }
-      if (!location) {
-        showError(extendFormError, "กรุณากรอกสถานที่ขอขยายเขตฯ");
+      if (!districtKey) {
+        showError(extendFormError, "กรุณาเลือกอำเภอ");
+        return;
+      }
+      if (!subdistrict) {
+        showError(extendFormError, "กรุณาเลือกตำบล");
         return;
       }
       if (!purpose) {
@@ -3747,6 +3878,13 @@
         customerName,
         phonePrimary,
         phoneSecondary,
+        province,
+        district: DISTRICTS[districtKey].label,
+        subdistrict,
+        zipcode,
+        houseNo,
+        moo,
+        village,
         location,
         purpose,
         jobStatus,
@@ -3791,6 +3929,7 @@
 
       editingId = null;
       extendForm.reset();
+      resetExtendLocationFields();
       setDefaultExtendDate();
       updateExtCoords();
       updateExtPhonePrimaryCall();

@@ -25,7 +25,7 @@
 <title>CS Connect</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=Sarabun:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=20260909a">
+<link rel="stylesheet" href="style.css?v=20260909b">
 </head>
 <body>
 
@@ -569,6 +569,7 @@
             <div class="field">
               <label for="reqFee">ค่าธรรมเนียม</label>
               <input type="number" id="reqFee" placeholder="0.00" min="0" step="0.01" autocomplete="off">
+              <p class="field-hint">ระบบใส่ค่าธรรมเนียมมาตรฐานให้ตามความประสงค์และขนาดมิเตอร์ พิมพ์ทับได้</p>
             </div>
           </div>
           <div class="field">
@@ -663,9 +664,65 @@
               </div>
             </div>
           </div>
-          <div class="field">
-            <label for="extLocation">สถานที่ขอขยายเขตฯ</label>
-            <textarea id="extLocation" rows="2" placeholder="บ้านเลขที่ / หมู่บ้าน / ตำบล / อำเภอ ฯลฯ" required></textarea>
+          <!-- โครงเดียวกับ "สถานที่ขอใช้ไฟฟ้า" ของฟอร์มขอใช้ไฟฟ้า: อำเภอ -> ตำบล
+               -> รหัสไปรษณีย์ เป็นดรอปดาวน์ที่ไล่กันมา ใช้ตัวเลือกชุดเดียวกัน
+               (DISTRICTS ใน app.js) จึงเลือกผิดเป็นตำบลนอกเขตไม่ได้ -->
+          <div class="field-section">
+            <p class="field-section-label">สถานที่ขอขยายเขตฯ</p>
+
+            <div class="field-row">
+              <div class="field">
+                <label for="extHouseNo">บ้านเลขที่</label>
+                <input type="text" id="extHouseNo" placeholder="บ้านเลขที่ (ถ้ามี)" autocomplete="off">
+              </div>
+              <div class="field">
+                <label for="extMoo">หมู่</label>
+                <input type="text" id="extMoo" placeholder="หมู่ที่ (ถ้ามี)" inputmode="numeric" autocomplete="off">
+              </div>
+              <div class="field">
+                <label for="extVillage">หมู่บ้าน</label>
+                <input type="text" id="extVillage" placeholder="ชื่อหมู่บ้าน (ถ้ามี)" autocomplete="off">
+              </div>
+            </div>
+
+            <div class="field-row">
+              <div class="field">
+                <label for="extSubdistrict">ตำบล</label>
+                <select id="extSubdistrict" required disabled>
+                  <option value="">-- เลือกอำเภอก่อน --</option>
+                </select>
+              </div>
+              <div class="field">
+                <label for="extDistrict">อำเภอ</label>
+                <select id="extDistrict" required>
+                  <option value="">-- เลือกอำเภอ --</option>
+                  <option value="hangdong">อำเภอหางดง</option>
+                  <option value="sanpatong">อำเภอสันป่าตอง</option>
+                  <option value="mueangchiangmai">อำเภอเมืองเชียงใหม่</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="field-row">
+              <div class="field">
+                <label for="extProvince">จังหวัด</label>
+                <select id="extProvince" required>
+                  <option value="เชียงใหม่">เชียงใหม่</option>
+                </select>
+              </div>
+              <div class="field">
+                <label for="extZipcode">รหัสไปรษณีย์</label>
+                <input type="text" id="extZipcode" placeholder="เลือกตำบลเพื่อกรอกอัตโนมัติ" readonly>
+              </div>
+            </div>
+
+            <!-- งานขยายเขตฯ หลายงานอยู่นอกบ้านเลขที่ (กลางทุ่ง ริมถนน ท้ายซอย)
+                 ช่องนี้จึงยังต้องมี และเป็นที่เก็บของคำร้องเก่าที่บันทึกสถานที่
+                 เป็นข้อความล้วนไว้ก่อนมีดรอปดาวน์ -->
+            <div class="field">
+              <label for="extLocation">รายละเอียดสถานที่เพิ่มเติม</label>
+              <textarea id="extLocation" rows="2" placeholder="จุดสังเกต / รายละเอียดเพิ่มเติม (ถ้ามี)"></textarea>
+            </div>
           </div>
 
           <!-- ไม่บังคับกรอก -- ดูหมายเหตุเดียวกันที่ #reqLat ในฟอร์มขอใช้ไฟฟ้า
@@ -868,6 +925,6 @@
      ที่หาสาเหตุยากมาก
      **ต้องเปลี่ยนเลขนี้ทุกครั้งที่แก้ app.js / style.css / track.js / qr.js**
      ไม่งั้นผู้ใช้บางคนจะยังได้ไฟล์เก่าไปอีกพักใหญ่ -->
-<script src="app.js?v=20260909a"></script>
+<script src="app.js?v=20260909b"></script>
 </body>
 </html>
