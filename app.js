@@ -5195,6 +5195,36 @@ ${sheetHtml}
     printEstimateSheets();
   });
 
+  /**
+   * ล็อกทุกช่องกรอกและปุ่มนำทางของหน้าประมาณการระหว่างที่กำลังยิงคำขอบันทึก
+   *
+   * ก่อนหน้านี้ล็อกแค่ปุ่ม "บันทึกประมาณการ" ปุ่มเดียว -- ระหว่างรอเครือข่าย
+   * (พิมพ์เร็ว ๆ นี้ก็ยังพอสังเกตได้ราวครึ่งถึงหนึ่งวินาที) เจ้าหน้าที่ยังกด
+   * "+ เพิ่มรายการ" หรือ "กลับ" ได้ตามปกติ ถ้ากด "กลับ" ออกไปก่อนคำขอตอบกลับ
+   * estimateModel จะยังไม่ถูกแทนที่ด้วยฉบับที่เพิ่งบันทึก แล้วพอคำขอตอบกลับทีหลัง
+   * การอัปเดตตัวแปรก็เกิดขึ้นบนหน้าที่ผู้ใช้ออกไปแล้ว -- ดูเหมือนกดบันทึกแล้ว
+   * ข้อมูลหายไปเฉย ๆ ทั้งที่จริงบันทึกขึ้นเซิร์ฟเวอร์ไปแล้ว เพียงแต่จอไม่ตรงกัน
+   */
+  function setEstimatePageBusy(busy) {
+    document.getElementById("estimateBackBtn").disabled = busy;
+    document.getElementById("estimatePrintBtn").disabled = busy;
+    document.getElementById("estAddRowBtn").disabled = busy;
+    estimateView.rows.querySelectorAll("input, select, button").forEach(el => { el.disabled = busy; });
+    estimateView.jobName.disabled = busy;
+    estimateView.investment.disabled = busy;
+    estimateView.crumbs.querySelectorAll("button").forEach(el => { el.disabled = busy; });
+    // ปุ่มเพิ่มแผนก/เพิ่มงานย่อยอยู่คนละชั้นกับฟอร์ม แต่ปุ่มบันทึกอยู่บนแถบบนที่
+    // เห็นได้ทุกชั้น -- กันไว้เผื่อกดบันทึกตอนอยู่ชั้นแผนก/งานย่อยแล้วยังกดเพิ่ม
+    // รายการใหม่ได้ในช่วงที่รอเครือข่ายอยู่ ซึ่งจะถูกทับหายไปตอนบันทึกเสร็จ
+    document.getElementById("estAddDeptBtn").disabled = busy;
+    document.getElementById("estNewDept").disabled = busy;
+    document.getElementById("estAddJobBtn").disabled = busy;
+    document.getElementById("estNewJob").disabled = busy;
+    document.getElementById("estNewJobInvestment").disabled = busy;
+    estimateView.deptList.querySelectorAll("button").forEach(el => { el.disabled = busy; });
+    estimateView.jobList.querySelectorAll("button").forEach(el => { el.disabled = busy; });
+  }
+
   document.getElementById("estimateSaveBtn").addEventListener("click", async (e) => {
     const btn = e.currentTarget;
     hideError(estimateView.error);
@@ -5203,6 +5233,7 @@ ${sheetHtml}
     if (!estimateRecord) return;
 
     setBusy(btn, true, "กำลังบันทึก...");
+    setEstimatePageBusy(true);
 
     try {
       // ตัดแถวว่างทิ้งตอนบันทึก -- แถวเปล่าที่เติมไว้ให้พิมพ์ ไม่ใช่ข้อมูล
@@ -5249,11 +5280,19 @@ ${sheetHtml}
       estimateView.dirty.hidden = true;
       estimateView.success.textContent = "บันทึกประมาณการเรียบร้อย";
       estimateView.success.hidden = false;
+
+      // วาดใบที่กำลังเปิดอยู่ใหม่จาก estimateModel ฉบับที่เพิ่งบันทึกเสมอ --
+      // ต่อให้ก่อนหน้านี้จอกับโมเดลจะไม่มีวันเพี้ยนกันอยู่แล้ว การวาดซ้ำที่นี่
+      // คือการยืนยันด้วยโค้ด ไม่ใช่แค่ด้วยความเชื่อ ว่าสิ่งที่เห็นตรงกับที่บันทึกจริง
+      if (!estimateView.formPane.hidden) renderEstimateForm();
+      else if (!estimateView.jobPane.hidden) renderEstimateJobs();
+      else if (!estimateView.deptPane.hidden) renderEstimateDepts();
     } catch (err) {
       console.error("CS Connect estimate save error:", err);
       showError(estimateView.error, friendlyError(err, "บันทึกประมาณการไม่สำเร็จ กรุณาลองใหม่อีกครั้ง"));
     } finally {
       setBusy(btn, false);
+      setEstimatePageBusy(false);
     }
   });
 
