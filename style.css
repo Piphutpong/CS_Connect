@@ -396,6 +396,13 @@ button:active {
   border-top: 1px dashed var(--border);
 }
 
+/* ตั้ง display ไว้ตายตัวด้านบน จึงต้องมีบรรทัดนี้ ไม่งั้น hidden ไม่มีผลเลย
+   -- #extPlanSection (แนบแผนผัง) เคยโผล่ตั้งแต่หน้าเพิ่มคำร้องเพราะขาดตรงนี้
+   ดู Gotcha ใน CLAUDE.md */
+.field-section[hidden] {
+  display: none;
+}
+
 .field-section-label {
   font-family: var(--font-display);
   font-size: 12.5px;

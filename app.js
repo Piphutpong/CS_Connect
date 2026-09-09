@@ -3528,6 +3528,7 @@
     extAssigneeField.hidden = true;
     extWbsField.hidden = true;
     extPlanSection.hidden = true;
+    extPlanCurrent.textContent = "";
     extPlanFile.value = "";
     hideError(extPlanError);
     extPlanSuccess.hidden = true;
