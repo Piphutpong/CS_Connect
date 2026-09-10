@@ -1319,6 +1319,9 @@
   function hideError(el) {
     el.hidden = true;
     el.textContent = "";
+    // กล่องเดียวกันนี้ถูกยืมไปใช้แสดงข้อความยืนยัน (is-notice) ด้วยในบางที่ --
+    // ถ้าไม่ล้างคลาสทิ้ง ความผิดพลาดครั้งถัดไปจะยังทาสีเป็นข้อความยืนยันอยู่
+    el.classList.remove("is-notice");
   }
 
   /**
@@ -2275,8 +2278,7 @@
   const reqPurposeOtherField = document.getElementById("reqPurposeOtherField");
   const reqPurposeOther = document.getElementById("reqPurposeOther");
   const reqDate = document.getElementById("reqDate");
-  const reqLat = document.getElementById("reqLat");
-  const reqLng = document.getElementById("reqLng");
+  const reqCoord = document.getElementById("reqCoord");
   const reqMapBtn = document.getElementById("reqMapBtn");
   const reqNavBtn = document.getElementById("reqNavBtn");
 
@@ -2307,8 +2309,8 @@
   const extDistrict = document.getElementById("extDistrict");
   const extSubdistrict = document.getElementById("extSubdistrict");
   const extZipcode = document.getElementById("extZipcode");
-  const extLat = document.getElementById("extLat");
-  const extLng = document.getElementById("extLng");
+  const extCoord = document.getElementById("extCoord");
+  const extDeed = document.getElementById("extDeed");
   const extMapBtn = document.getElementById("extMapBtn");
   const extNavBtn = document.getElementById("extNavBtn");
 
@@ -2616,11 +2618,41 @@
    * เว็บ Google Maps จริงแทน (ไม่ต้องใช้ API key เลย) แล้วเจ้าหน้าที่คัดลอกพิกัด
    * (คลิกขวาที่จุด -> คัดลอกพิกัด) กลับมาวางในสองช่องนี้เอง
    */
-  function wireCoordControls(latEl, lngEl, mapBtn, navBtn) {
+  /**
+   * อ่านพิกัดจากช่องเดียว -- คืน { lat, lng } เป็นข้อความ หรือ null ถ้าอ่านไม่ออก
+   *
+   * เป็นช่องเดียวเพราะสิ่งที่เจ้าหน้าที่มีอยู่ในมือคือข้อความชุดเดียวที่คัดลอกมา
+   * จาก Google Maps ("18.710625, 98.909944") การบังคับให้แยกวางสองช่องคือการให้
+   * คนทำงานแทนเครื่อง
+   *
+   * ที่รวมคือช่องกรอก ไม่ใช่ข้อมูล -- ยังเก็บลงชีตเป็นสองคอลัมน์ lat/lng เหมือนเดิม
+   * ค่าที่อ่านได้จึงยังเป็นตัวเลขสองตัวที่ map ลงสองฟิลด์ตอนย้าย Django ได้ตรง ๆ
+   */
+  function parseCoordText(text) {
+    const parts = String(text || "").trim().split(/[,\s]+/).filter(Boolean);
+    if (parts.length !== 2) return null;
+
+    const lat = Number(parts[0]);
+    const lng = Number(parts[1]);
+    if (!isFinite(lat) || !isFinite(lng)) return null;
+    if (Math.abs(lat) > 90 || Math.abs(lng) > 180) return null;
+
+    // คืนเป็นข้อความตามที่พิมพ์มา ไม่ใช่ที่ Number แปลงกลับ -- ทศนิยมท้าย ๆ ของ
+    // พิกัดมีความหมาย และคอลัมน์นี้เก็บเป็นข้อความอยู่แล้ว
+    return { lat: parts[0], lng: parts[1] };
+  }
+
+  /** ประกอบ lat/lng ที่เก็บไว้กลับเป็นบรรทัดเดียวสำหรับช่องกรอก */
+  function formatCoordText(lat, lng) {
+    return (lat && lng) ? `${lat}, ${lng}` : "";
+  }
+
+  function wireCoordControls(coordEl, mapBtn, navBtn) {
     function update() {
-      const lat = parseFloat(latEl.value);
-      const lng = parseFloat(lngEl.value);
-      const hasCoord = isFinite(lat) && isFinite(lng) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180;
+      const coord = parseCoordText(coordEl.value);
+      const lat = coord && coord.lat;
+      const lng = coord && coord.lng;
+      const hasCoord = Boolean(coord);
 
       if (hasCoord) {
         mapBtn.href = `https://www.google.com/maps?q=${lat},${lng}`;
@@ -2633,28 +2665,50 @@
         navBtn.hidden = true;
       }
     }
-    latEl.addEventListener("input", update);
-    lngEl.addEventListener("input", update);
+    coordEl.addEventListener("input", update);
     update();
     return update;
   }
 
-  const updateReqCoords = wireCoordControls(reqLat, reqLng, reqMapBtn, reqNavBtn);
-  const updateExtCoords = wireCoordControls(extLat, extLng, extMapBtn, extNavBtn);
+  const updateReqCoords = wireCoordControls(reqCoord, reqMapBtn, reqNavBtn);
+  const updateExtCoords = wireCoordControls(extCoord, extMapBtn, extNavBtn);
 
   /**
    * พิกัดไม่บังคับกรอก แต่ถ้ากรอกต้องกรอกให้ครบคู่และเป็นพิกัดจริง -- ใช้ร่วมกัน
    * ทั้งฟอร์มขอใช้ไฟฟ้าและขอขยายเขตฯ คืนข้อความ error หรือ null ถ้าผ่าน
    */
-  function validateCoordPair(lat, lng) {
-    if (!lat && !lng) return null;
-    if (!lat || !lng) return "กรุณากรอกพิกัดให้ครบทั้งละติจูดและลองจิจูด (หรือเว้นว่างทั้งคู่)";
-    const latNum = parseFloat(lat);
-    const lngNum = parseFloat(lng);
-    if (!isFinite(latNum) || Math.abs(latNum) > 90 || !isFinite(lngNum) || Math.abs(lngNum) > 180) {
-      return "พิกัดไม่ถูกต้อง";
+  function readCoordField(coordEl) {
+    const text = coordEl.value.trim();
+    if (!text) return { lat: "", lng: "" };
+
+    const coord = parseCoordText(text);
+    if (!coord) {
+      return { error: "พิกัดไม่ถูกต้อง กรอกเป็น ละติจูด, ลองจิจูด เช่น 18.788300, 98.985300" };
     }
-    return null;
+    return coord;
+  }
+
+  /**
+   * ไอคอนหูโทรศัพท์ -- สร้างเป็นโหนด SVG ใหม่ทุกครั้งที่เรียก
+   *
+   * ประกอบด้วย createElementNS ไม่ใช่ innerHTML: ข้อความที่ประกอบเป็น markup
+   * แล้วยัดเข้า DOM คือรูปแบบที่เคยเปิดช่องให้ XSS ในหน้านี้มาแล้ว จึงไม่เปิด
+   * ประตูนั้นทิ้งไว้แม้ในที่ที่ค่าคงที่ล้วน
+   */
+  function callIconSvg() {
+    const NS = "http://www.w3.org/2000/svg";
+    const svg = document.createElementNS(NS, "svg");
+    svg.setAttribute("viewBox", "0 0 24 24");
+    svg.setAttribute("width", "16");
+    svg.setAttribute("height", "16");
+    svg.setAttribute("fill", "currentColor");
+    svg.setAttribute("aria-hidden", "true");
+
+    const path = document.createElementNS(NS, "path");
+    path.setAttribute("d", "M6.6 10.8a15.1 15.1 0 0 0 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.2.4 2.4.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1A17 17 0 0 1 3 4c0-.6.4-1 1-1h3.5c.6 0 1 .4 1 1 0 1.3.2 2.5.6 3.6.1.4 0 .8-.2 1l-2.3 2.2z");
+    svg.appendChild(path);
+
+    return svg;
   }
 
   /** ปุ่มโทรออกข้างช่องเบอร์โทร -- tel: link ธรรมดา กดได้จริงเฉพาะเปิดผ่านมือถือ */
@@ -3330,8 +3384,7 @@
     document.getElementById("reqJobStatus").value = r.jobStatus || "รอตรวจสอบ";
     document.getElementById("reqNote").value = r.note || "";
 
-    reqLat.value = r.lat || "";
-    reqLng.value = r.lng || "";
+    reqCoord.value = formatCoordText(r.lat, r.lng);
     updateReqCoords();
     updateReqPhonePrimaryCall();
     updateReqPhoneSecondaryCall();
@@ -3370,8 +3423,8 @@
     extApprovalDate.value = r.approvalDate || "";
     document.getElementById("extNote").value = r.note || "";
 
-    extLat.value = r.lat || "";
-    extLng.value = r.lng || "";
+    extCoord.value = formatCoordText(r.lat, r.lng);
+    extDeed.value = r.deed || "";
     updateExtCoords();
     updateExtPhonePrimaryCall();
     updateExtPhoneSecondaryCall();
@@ -3433,7 +3486,8 @@
   // Comments save on their own, straight to the record -- they're an
   // independent stream, so adding one shouldn't require the main form to
   // pass validation first.
-  document.getElementById("requestCommentBtn").addEventListener("click", async () => {
+  document.getElementById("requestCommentBtn").addEventListener("click", async (e) => {
+    const btn = e.currentTarget;
     hideError(requestCommentError);
 
     try {
@@ -3455,6 +3509,11 @@
       const comments = Array.isArray(requests[idx].comments) ? requests[idx].comments.slice() : [];
       comments.push({ text, ...actingStaff(), at: Date.now() });
       requests[idx] = { ...requests[idx], comments };
+
+      // คอมเมนต์วิ่งผ่านเครือข่ายเหมือนการบันทึกคำร้อง ปุ่มจึงต้องบอกว่ากำลัง
+      // ทำงานและกดซ้ำไม่ได้แบบเดียวกัน -- ปุ่มที่กดแล้วนิ่งไปเฉย ๆ ทำให้คนกดไม่
+      // แน่ใจว่ากดติดหรือยัง แล้วกดซ้ำ ซึ่งจะได้คอมเมนต์ซ้ำสองบรรทัด
+      setBusy(btn, true, "กำลังบันทึก...");
       await saveRequests(requests);
 
       requestCommentInput.value = "";
@@ -3462,6 +3521,8 @@
     } catch (err) {
       console.error("CS Connect comment error:", err);
       showError(requestCommentError, "เกิดข้อผิดพลาด ไม่สามารถบันทึกคอมเมนต์ได้ กรุณาลองใหม่อีกครั้ง");
+    } finally {
+      setBusy(btn, false);
     }
   });
 
@@ -3904,8 +3965,7 @@
       const fee = document.getElementById("reqFee").value.trim();
       const jobStatus = document.getElementById("reqJobStatus").value;
       const note = document.getElementById("reqNote").value.trim();
-      const lat = reqLat.value.trim();
-      const lng = reqLng.value.trim();
+      const coord = readCoordField(reqCoord);
 
       // In batch mode this field is hidden and each row carries its own,
       // checked per row further down.
@@ -3950,9 +4010,8 @@
       }
 
       if (!batchMode) {
-        const coordError = validateCoordPair(lat, lng);
-        if (coordError) {
-          showError(requestFormError, coordError);
+        if (coord.error) {
+          showError(requestFormError, coord.error);
           return;
         }
       }
@@ -4005,8 +4064,8 @@
         fee,
         jobStatus,
         note,
-        lat,
-        lng
+        lat: coord.lat,
+        lng: coord.lng
       };
 
       // Stamped from the signed-in session so the form's audit strip can show
@@ -4204,8 +4263,8 @@
       const wbs = extWbs.value.trim();
       const approvalNo = extApprovalNo.value.trim();
       const approvalDate = extApprovalDate.value;
-      const lat = extLat.value.trim();
-      const lng = extLng.value.trim();
+      const deed = extDeed.value.trim();
+      const coord = readCoordField(extCoord);
 
       if (!requestNumber) {
         showError(extendFormError, "กรุณากรอกเลขที่คำร้อง");
@@ -4239,9 +4298,8 @@
         showError(extendFormError, "กรุณาเลือกสถานะงาน");
         return;
       }
-      const coordError = validateCoordPair(lat, lng);
-      if (coordError) {
-        showError(extendFormError, coordError);
+      if (coord.error) {
+        showError(extendFormError, coord.error);
         return;
       }
 
@@ -4267,6 +4325,7 @@
         houseNo,
         moo,
         village,
+        deed,
         location,
         purpose,
         jobStatus: nextStatus,
@@ -4274,8 +4333,8 @@
         approvalNo,
         approvalDate,
         note,
-        lat,
-        lng
+        lat: coord.lat,
+        lng: coord.lng
       };
 
 
@@ -4601,6 +4660,16 @@
     formPaneTitle: document.getElementById("estFormPaneTitle"),
     crumbs: document.getElementById("estCrumbs"),
     rows: document.getElementById("estRows"),
+    rowsEmpty: document.getElementById("estRowsEmpty"),
+    pickGroup: document.getElementById("estPickGroup"),
+    pickItem: document.getElementById("estPickItem"),
+    pickSearch: document.getElementById("estPickSearch"),
+    pickSearchList: document.getElementById("estPickSearchList"),
+    pickKeyCode: document.getElementById("estPickKeyCode"),
+    pickIn: document.getElementById("estPickIn"),
+    pickRm: document.getElementById("estPickRm"),
+    pickRp: document.getElementById("estPickRp"),
+    pickError: document.getElementById("estPickError"),
     jobName: document.getElementById("estJobName"),
     investment: document.getElementById("estInvestment"),
     catalogNote: document.getElementById("estCatalogNote"),
@@ -4875,28 +4944,62 @@
     estimateView.jobName.value = job.name || job.group || "";
     estimateView.investment.value = job.investment || "";
 
-    estimateView.rows.innerHTML = "";
-    (job.items || []).forEach(item => addEstimateRow(item));
-    while (estimateView.rows.children.length < 3) addEstimateRow();
+    renderEstimateRows();
+    resetItemPicker();
   }
 
   /**
-   * หนึ่งแถวของใบประมาณการ -- ผูกกับ job.items โดยตรง พิมพ์ปุ๊บเข้าโมเดลปั๊บ
+   * วาดเฉพาะตารางพัสดุใหม่ โดยไม่แตะแผงเลือกด้านบน
    *
-   * ตัวเลือกของ Description ถูกจำกัดด้วย Group ที่เลือกไว้ในแถวนั้นก่อนเสมอ --
-   * แค็ตตาล็อกมีสองพันกว่ารายการ การเอาทั้งหมดมาใส่ทุกแถวคือรายการที่เลื่อนหา
-   * ไม่ไหว และเป็นโหนดหลายหมื่นตัวในหน้าเดียว
+   * แยกจาก renderEstimateForm เพราะการรวมจำนวนเข้ารายการเดิมต้องวาดตารางใหม่
+   * แต่ต้องไม่ล้างกลุ่มที่ผู้ใช้เลือกค้างไว้ -- คนที่กำลังไล่เพิ่มพัสดุในกลุ่ม
+   * เดียวกันติด ๆ กันจะต้องมาเลือกกลุ่มใหม่ทุกครั้งที่บังเอิญเพิ่มของซ้ำ
    */
-  function addEstimateRow(values) {
+  function renderEstimateRows() {
     const job = currentJob();
     if (!job) return;
-    if (!Array.isArray(job.items)) job.items = [];
 
-    let item = values;
-    if (!item) {
-      item = { group: "", description: "", keyCode: "", in: "", rm: "", rp: "" };
-      job.items.push(item);
+    estimateView.rows.innerHTML = "";
+    // เฉพาะพัสดุที่เพิ่มไว้จริง ไม่มีแถวเปล่าเติมให้แล้ว -- แถวเปล่าคือแถวที่ต้อง
+    // กรองทิ้งตอนบันทึกและตอนพิมพ์ ซึ่งเป็นกฎที่ต้องจำไว้ในสองที่โดยไม่จำเป็น
+    (job.items || []).filter(item => item.description).forEach(item => renderEstimateRow(item));
+    syncEstimateEmpty();
+  }
+
+  /**
+   * ค้นรายการในแค็ตตาล็อกจากคำอธิบาย -- ใช้ตอนไม่ได้เลือกกลุ่มไว้
+   *
+   * จำกัดผลลัพธ์ไว้ที่ SEARCH_LIMIT โดยตั้งใจ: แค็ตตาล็อกมีสองพันกว่ารายการ
+   * การยัดทั้งหมดลง <datalist> คือโหนดหลายพันตัวที่เบราว์เซอร์ต้องวาดใหม่ทุก
+   * ครั้งที่พิมพ์หนึ่งตัวอักษร และเป็นรายการที่ยาวเกินกว่าจะกวาดตาหาได้อยู่ดี
+   */
+  const SEARCH_LIMIT = 50;
+
+  function searchCatalog(section, query) {
+    const q = String(query || "").trim().toLowerCase();
+    if (q.length < 2) return [];
+
+    const out = [];
+    for (const item of catalogRowsForSection(section)) {
+      if (String(item.description || "").toLowerCase().includes(q)) {
+        out.push(item);
+        if (out.length >= SEARCH_LIMIT) break;
+      }
     }
+    return out;
+  }
+
+  /**
+   * หนึ่งแถวในตารางพัสดุที่เพิ่มไว้แล้ว
+   *
+   * ต่างจากเดิมตรงที่แถวไม่ใช่ที่สำหรับ "เลือก" อีกต่อไป -- การเลือกกลุ่มและ
+   * รายการเกิดที่แผงด้านบน แถวจึงเหลือเพียงสิ่งที่เลือกมาแล้ว (แสดงเป็นข้อความ)
+   * กับจำนวนที่ยังแก้ตรงนี้ได้ เพราะการพิมพ์เลขผิดหนึ่งตัวไม่ควรต้องลบทั้งแถว
+   * แล้วเลือกใหม่
+   */
+  function renderEstimateRow(item) {
+    const job = currentJob();
+    if (!job) return;
 
     const row = document.createElement("div");
     row.className = "estimate-row";
@@ -4904,57 +5007,23 @@
     const no = document.createElement("span");
     no.className = "estimate-no";
 
-    const section = (currentDept() || {}).section || "";
+    const keyCode = document.createElement("span");
+    keyCode.className = "estimate-cell-key";
+    keyCode.textContent = item.keyCode || "-";
 
-    // Group -> Description -> KeyCode: เลือกกลุ่มก่อน รายการถึงจะแคบลงเหลือเฉพาะ
-    // ของกลุ่มนั้น แล้ว KeyCode ตามมาเองจากรายการที่เลือก
-    const group = document.createElement("select");
-    fillSelect(group, groupsForSection(section), item.group || "", "-- Group --");
+    const description = document.createElement("span");
+    description.className = "estimate-cell-desc";
+    description.textContent = item.description || "";
+    description.title = item.description || "";
 
-    const description = document.createElement("select");
-    const keyCode = document.createElement("input");
-    keyCode.type = "text";
-    keyCode.className = "estimate-keycode";
-    keyCode.readOnly = true;
-    keyCode.value = item.keyCode || "";
-
-    function fillDescriptions(selected) {
-      fillSelect(
-        description,
-        itemsForGroup(section, group.value).map(i => i.description),
-        selected || "",
-        "-- Description --"
-      );
-    }
-
-    fillDescriptions(item.description || "");
-
-    group.addEventListener("change", () => {
-      item.group = group.value;
-      // เปลี่ยนกลุ่มแล้วรายการเดิมมักไม่อยู่ในกลุ่มใหม่ -- ล้างทั้งรายการและรหัส
-      // ดีกว่าปล่อยให้เหลือคู่ที่ไม่เข้ากัน
-      item.description = "";
-      item.keyCode = "";
-      keyCode.value = "";
-      fillDescriptions("");
-      markEstimateDirty();
-    });
-
-    description.addEventListener("change", () => {
-      item.description = description.value;
-
-      const match = itemsForGroup(section, group.value)
-        .find(i => i.description === description.value);
-      item.keyCode = match ? match.keyCode : "";
-      keyCode.value = item.keyCode;
-
-      markEstimateDirty();
-    });
+    const group = document.createElement("span");
+    group.className = "estimate-cell-group";
+    group.textContent = item.group || "-";
+    group.title = item.group || "";
 
     const quantities = ["in", "rm", "rp"].map(key => {
       const input = document.createElement("input");
       input.type = "number";
-      input.min = "0";
       input.step = "1";
       input.className = "estimate-qty";
       input.value = item[key] || "";
@@ -4968,19 +5037,27 @@
     const remove = document.createElement("button");
     remove.type = "button";
     remove.className = "estimate-remove";
-    remove.setAttribute("aria-label", "ลบรายการนี้");
+    remove.setAttribute("aria-label", `ลบ ${item.description || "รายการนี้"}`);
+    remove.title = remove.getAttribute("aria-label");
     remove.textContent = "×";
     remove.addEventListener("click", () => {
       const index = job.items.indexOf(item);
       if (index !== -1) job.items.splice(index, 1);
       row.remove();
       renumberEstimateRows();
+      syncEstimateEmpty();
       markEstimateDirty();
     });
 
-    row.append(no, group, description, keyCode, ...quantities, remove);
+    row.append(no, keyCode, description, group, ...quantities, remove);
     estimateView.rows.appendChild(row);
     renumberEstimateRows();
+    syncEstimateEmpty();
+  }
+
+  /** ข้อความ "ยังไม่มีพัสดุ" โผล่เฉพาะตอนตารางว่างจริง ๆ */
+  function syncEstimateEmpty() {
+    estimateView.rowsEmpty.hidden = estimateView.rows.children.length > 0;
   }
 
   function renumberEstimateRows() {
@@ -5064,11 +5141,8 @@
     const jobName = name.value.trim();
     const prefix = DEPARTMENT_PREFIX[dept.section] || "";
 
-    // มีแต่คำนำหน้าที่เติมให้ = ยังไม่ได้พิมพ์ชื่อจริง
-    if (!jobName || jobName === prefix) {
-      showError(estimateView.error, "กรุณากรอกชื่องานย่อย");
-      return;
-    }
+    // ชื่องานย่อยไม่บังคับกรอก -- ใบที่ยังไม่รู้ชื่อก็เปิดไว้ทำงานก่อนได้ แล้วค่อย
+    // ตั้งชื่อทีหลังจากในใบเอง (jobLabel เติม "งานย่อยที่ N" ให้ระหว่างที่ยังว่าง)
     hideError(estimateView.error);
 
     dept.jobs.push({
@@ -5084,7 +5158,180 @@
     renderEstimateJobs();
   });
 
-  document.getElementById("estAddRowBtn").addEventListener("click", () => addEstimateRow());
+  /**
+   * แผงเลือกพัสดุ -- เลือกกลุ่ม แล้วเลือกรายการ แล้วป้อนจำนวน แล้วจึงกดเพิ่ม
+   *
+   * ที่ไม่ให้เลือกในตารางโดยตรงเหมือนเดิม เพราะตารางที่มีแถวเปล่ารออยู่ทำให้
+   * "รายการที่อยู่ในใบ" กับ "ช่องที่ยังไม่ได้กรอก" ปนกันอยู่ในที่เดียวกัน --
+   * ตารางในแบบนี้จึงมีแต่ของจริง และการเลือกเกิดที่เดียวคือแผงนี้
+   */
+
+  /** รายการพัสดุที่กำลังเลือกค้างอยู่ในแผง (null = ยังไม่ได้เลือก) */
+  let pickedItem = null;
+
+  function setPickedItem(item) {
+    pickedItem = item || null;
+    estimateView.pickKeyCode.value = pickedItem ? (pickedItem.keyCode || "") : "";
+  }
+
+  function resetItemPicker() {
+    const section = (currentDept() || {}).section || "";
+
+    fillSelect(estimateView.pickGroup, groupsForSection(section), "", "-- ทุกกลุ่ม (พิมพ์ค้นหา) --");
+    estimateView.pickSearch.value = "";
+    estimateView.pickIn.value = "";
+    estimateView.pickRm.value = "";
+    estimateView.pickRp.value = "";
+    setPickedItem(null);
+    hideError(estimateView.pickError);
+    syncItemPickerMode();
+  }
+
+  /**
+   * ไม่เลือกกลุ่ม = พิมพ์ค้นหาทั้งแค็ตตาล็อก, เลือกกลุ่ม = ดรอปดาวน์ของกลุ่มนั้น
+   *
+   * สองโหมดนี้ตอบสองสถานการณ์จริงคนละแบบ: รู้ว่าของอยู่กลุ่มไหนก็ไล่ดูจนเจอเร็ว
+   * กว่า ส่วนรู้แค่ชื่อของแต่ไม่รู้กลุ่ม การไล่เปิดทีละกลุ่มคือทางตัน
+   */
+  function syncItemPickerMode() {
+    const section = (currentDept() || {}).section || "";
+    const group = estimateView.pickGroup.value;
+    const byGroup = Boolean(group);
+
+    estimateView.pickItem.hidden = !byGroup;
+    estimateView.pickSearch.hidden = byGroup;
+
+    if (byGroup) {
+      fillSelect(
+        estimateView.pickItem,
+        itemsForGroup(section, group).map(i => i.description),
+        "",
+        "-- เลือกรายการพัสดุ --"
+      );
+    }
+
+    setPickedItem(null);
+  }
+
+  estimateView.pickGroup.addEventListener("change", () => {
+    hideError(estimateView.pickError);
+    syncItemPickerMode();
+  });
+
+  estimateView.pickItem.addEventListener("change", () => {
+    const section = (currentDept() || {}).section || "";
+    const match = itemsForGroup(section, estimateView.pickGroup.value)
+      .find(i => i.description === estimateView.pickItem.value);
+    setPickedItem(match);
+    hideError(estimateView.pickError);
+  });
+
+  estimateView.pickSearch.addEventListener("input", () => {
+    const section = (currentDept() || {}).section || "";
+    const matches = searchCatalog(section, estimateView.pickSearch.value);
+
+    estimateView.pickSearchList.innerHTML = "";
+    matches.forEach(item => {
+      const option = document.createElement("option");
+      option.value = item.description;
+      estimateView.pickSearchList.appendChild(option);
+    });
+
+    // เลือกจากรายการที่ขึ้นมา (หรือพิมพ์จนตรงพอดี) ถึงจะนับว่าเลือกแล้ว --
+    // พิมพ์ค้างครึ่งทางยังไม่ใช่การเลือก KeyCode จึงยังว่างอยู่
+    const exact = matches.find(i => i.description === estimateView.pickSearch.value);
+    setPickedItem(exact);
+  });
+
+  /** อ่านจำนวนจากช่อง -- ว่าง = 0, อ่านไม่ออก = null (ให้ผู้เรียกทักท้วง) */
+  function readQty(input) {
+    const text = input.value.trim();
+    if (!text) return 0;
+    const value = Number(text);
+    return isFinite(value) ? value : null;
+  }
+
+  document.getElementById("estAddItemBtn").addEventListener("click", () => {
+    const job = currentJob();
+    if (!job) return;
+    if (!Array.isArray(job.items)) job.items = [];
+
+    hideError(estimateView.pickError);
+
+    if (!pickedItem) {
+      showError(estimateView.pickError, "กรุณาเลือกรายการพัสดุก่อน");
+      return;
+    }
+
+    const quantities = {
+      in: readQty(estimateView.pickIn),
+      rm: readQty(estimateView.pickRm),
+      rp: readQty(estimateView.pickRp)
+    };
+
+    if (quantities.in === null || quantities.rm === null || quantities.rp === null) {
+      showError(estimateView.pickError, "จำนวนต้องเป็นตัวเลข");
+      return;
+    }
+
+    if (!quantities.in && !quantities.rm && !quantities.rp) {
+      showError(estimateView.pickError, "กรุณากรอกจำนวนอย่างน้อยหนึ่งช่อง (ติดตั้ง / รื้อถอน / นำกลับมาใช้)");
+      return;
+    }
+
+    // รายการต้องไม่ซ้ำกันในใบเดียว -- เพิ่มพัสดุตัวเดิมซ้ำคือการปรับจำนวนของแถว
+    // ที่มีอยู่ ไม่ใช่การสร้างแถวใหม่ (ใส่จำนวนติดลบเพื่อหักออกได้) เทียบด้วย
+    // KeyCode ถ้ามี เพราะเป็นรหัสจริงของพัสดุ ชื่อรายการเป็นแค่คำอธิบาย
+    const existing = job.items.find(item => (
+      pickedItem.keyCode
+        ? item.keyCode === pickedItem.keyCode
+        : item.description === pickedItem.description
+    ));
+
+    if (existing) {
+      ["in", "rm", "rp"].forEach(key => {
+        const total = (Number(existing[key]) || 0) + quantities[key];
+        existing[key] = total ? String(total) : "";
+      });
+
+      renderEstimateRows();
+      markEstimateDirty();
+
+      // ต้องบอกให้รู้ว่าเกิดอะไรขึ้น -- ไม่มีแถวใหม่โผล่มา ถ้าเงียบไว้จะดูเหมือน
+      // กดเพิ่มแล้วไม่มีอะไรเกิดขึ้น แล้วผู้ใช้จะกดซ้ำอีก
+      showError(estimateView.pickError, `รวมจำนวนเข้ากับรายการเดิมแล้ว: ${pickedItem.description}`);
+      estimateView.pickError.classList.add("is-notice");
+
+      estimateView.pickIn.value = "";
+      estimateView.pickRm.value = "";
+      estimateView.pickRp.value = "";
+      estimateView.pickSearch.value = "";
+      estimateView.pickItem.value = "";
+      setPickedItem(null);
+      return;
+    }
+
+    const item = {
+      group: pickedItem.group || estimateView.pickGroup.value || "",
+      description: pickedItem.description,
+      keyCode: pickedItem.keyCode || "",
+      in: quantities.in ? String(quantities.in) : "",
+      rm: quantities.rm ? String(quantities.rm) : "",
+      rp: quantities.rp ? String(quantities.rp) : ""
+    };
+
+    job.items.push(item);
+    renderEstimateRow(item);
+    markEstimateDirty();
+
+    // ล้างเฉพาะจำนวนกับรายการ ไม่ล้างกลุ่ม -- พัสดุที่เพิ่มติด ๆ กันมักอยู่กลุ่มเดียวกัน
+    estimateView.pickIn.value = "";
+    estimateView.pickRm.value = "";
+    estimateView.pickRp.value = "";
+    estimateView.pickSearch.value = "";
+    estimateView.pickItem.value = "";
+    setPickedItem(null);
+  });
 
   // หัวใบผูกสดกับโมเดลเหมือนช่องในตาราง
   estimateView.jobName.addEventListener("input", () => {
@@ -5290,7 +5537,13 @@ ${sheetHtml}
   function setEstimatePageBusy(busy) {
     document.getElementById("estimateBackBtn").disabled = busy;
     document.getElementById("estimatePrintBtn").disabled = busy;
-    document.getElementById("estAddRowBtn").disabled = busy;
+    document.getElementById("estAddItemBtn").disabled = busy;
+    estimateView.pickGroup.disabled = busy;
+    estimateView.pickItem.disabled = busy;
+    estimateView.pickSearch.disabled = busy;
+    estimateView.pickIn.disabled = busy;
+    estimateView.pickRm.disabled = busy;
+    estimateView.pickRp.disabled = busy;
     estimateView.rows.querySelectorAll("input, select, button").forEach(el => { el.disabled = busy; });
     estimateView.jobName.disabled = busy;
     estimateView.investment.disabled = busy;
@@ -5904,6 +6157,20 @@ ${sheetHtml}
     card.addEventListener("click", () => openRequestForm("extend", record, { returnTo: "extendWork" }));
 
     const actions = [];
+
+    // โทรหาลูกค้าได้จากการ์ดโดยไม่ต้องเปิดคำร้องเข้าไปก่อน -- งานสำรวจนัดหมาย
+    // กันทางโทรศัพท์เป็นหลัก และหน้านี้คือหน้าที่เจ้าหน้าที่เปิดค้างไว้ทั้งวัน
+    // (เบอร์บนบรรทัด "โทร:" ด้านบนก็กดได้ ปุ่มนี้คือเป้าที่นิ้วกดโดนบนมือถือ)
+    if (record.phonePrimary) {
+      const callLink = document.createElement("a");
+      callLink.className = "btn btn-ghost request-card-action-btn";
+      callLink.href = `tel:${record.phonePrimary.replace(/[^0-9+]/g, "")}`;
+      callLink.title = `โทรหา ${record.customerName || "ลูกค้า"} (${record.phonePrimary})`;
+      callLink.setAttribute("aria-label", callLink.title);
+      callLink.appendChild(callIconSvg());
+      callLink.addEventListener("click", (e) => e.stopPropagation());
+      actions.push(callLink);
+    }
 
     const lat = parseFloat(record.lat);
     const lng = parseFloat(record.lng);

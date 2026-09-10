@@ -1355,8 +1355,37 @@ button:active {
   color: var(--ink-soft);
 }
 
+/* ดรอปดาวน์เลือกผู้รับผิดชอบ -- ใช้ลูกศรที่วาดเองแบบเดียวกับตารางประมาณการ
+   แทนลูกศรดีฟอลต์ของเบราว์เซอร์ ซึ่งหน้าตาต่างกันไปทุกเครื่องและดูเป็นคนละหน้า
+   กับที่เหลือ นี่คือช่องที่หัวหน้าใช้บ่อยที่สุดในหน้านี้ จึงให้ที่ยืนเต็มที่ */
 .assign-bar-field select {
-  min-width: 220px;
+  min-width: 260px;
+  padding: 9px 34px 9px 12px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  font-family: inherit;
+  font-size: 14px;
+  color: var(--ink);
+  background-color: var(--white);
+  background-image: linear-gradient(45deg, transparent 50%, var(--volt-500) 50%),
+                    linear-gradient(135deg, var(--volt-500) 50%, transparent 50%);
+  background-position: right 15px center, right 10px center;
+  background-size: 6px 6px, 6px 6px;
+  background-repeat: no-repeat;
+  appearance: none;
+  -webkit-appearance: none;
+  cursor: pointer;
+  outline: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.assign-bar-field select:hover {
+  border-color: var(--border-strong);
+}
+
+.assign-bar-field select:focus {
+  border-color: var(--volt-300);
+  box-shadow: 0 0 0 3px var(--volt-100);
 }
 
 /* แผนผังที่แนบไว้ -- หลายไฟล์ได้ แต่ละใบมีภาพตัวอย่างของตัวเอง */
@@ -1617,7 +1646,7 @@ span.estimate-crumb {
 
 .estimate-row {
   display: grid;
-  grid-template-columns: 44px 150px minmax(220px, 1fr) 130px 62px 62px 62px 40px;
+  grid-template-columns: 44px 108px minmax(240px, 1fr) 150px 72px 72px 72px 40px;
   align-items: center;
   gap: 8px;
   padding: 8px 10px;
@@ -1691,6 +1720,120 @@ span.estimate-crumb {
   background-size: 5px 5px, 5px 5px;
   background-repeat: no-repeat;
   cursor: pointer;
+}
+
+
+/* ---------- แผงเลือกพัสดุของใบประมาณการ ---------- */
+
+/* การเลือกพัสดุเกิดที่นี่ที่เดียว ตารางด้านล่างมีแต่ของที่เพิ่มแล้ว -- แผงจึงถูก
+   ยกออกมาเป็นกล่องของตัวเองให้ต่างจากตาราง ไม่ใช่แถวหนึ่งในตารางเดียวกัน */
+.est-picker {
+  margin: 18px 0 14px;
+  padding: 16px 18px 18px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--paper);
+}
+
+.est-picker-title {
+  margin: 0 0 14px;
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--volt-700);
+}
+
+.est-picker-grid {
+  display: grid;
+  grid-template-columns: minmax(150px, 1fr) minmax(260px, 2.2fr) 118px repeat(3, 92px);
+  gap: 12px;
+  align-items: end;
+}
+
+/* ดรอปดาวน์กับช่องค้นหาซ้อนตำแหน่งเดียวกัน สลับกันตามว่าเลือกกลุ่มไว้หรือไม่ */
+.est-picker-item select,
+.est-picker-item input {
+  width: 100%;
+}
+
+.est-picker-key input {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  background: var(--volt-50);
+  color: var(--volt-700);
+  cursor: default;
+}
+
+.est-picker-qty input {
+  text-align: right;
+}
+
+/* เลขจำนวนพิมพ์เองเสมอ ลูกศรขึ้นลงของเบราว์เซอร์กินที่และกดโดนโดยไม่ตั้งใจ */
+.est-picker-qty input::-webkit-outer-spin-button,
+.est-picker-qty input::-webkit-inner-spin-button {
+  appearance: none;
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.est-picker-qty input[type="number"] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
+.est-picker-add {
+  width: 100%;
+  margin-top: 14px;
+}
+
+/* ข้อความ "รวมจำนวนเข้ากับรายการเดิมแล้ว" ใช้กล่องเดียวกับ error แต่ไม่ใช่ error
+   -- เป็นการยืนยันว่าเกิดอะไรขึ้น จึงต้องอ่านออกว่าเป็นคนละเรื่องกับความผิดพลาด */
+.est-picker .form-error.is-notice {
+  color: var(--volt-700);
+  background: var(--volt-50);
+  border-color: var(--volt-100);
+}
+
+/* ---------- เซลล์ที่เลือกมาแล้ว แสดงเป็นข้อความ ไม่ใช่ช่องกรอก ---------- */
+.estimate-cell-key {
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  color: var(--volt-700);
+}
+
+.estimate-cell-desc {
+  font-size: 13.5px;
+  color: var(--ink);
+  line-height: 1.4;
+}
+
+.estimate-cell-group {
+  font-size: 12.5px;
+  color: var(--ink-soft);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.estimate-empty {
+  margin: 0;
+  padding: 26px 16px;
+  text-align: center;
+  font-size: 13.5px;
+  color: var(--ink-soft);
+}
+
+/* .estimate-empty ไม่ได้ตั้ง display ตายตัว จึงไม่ต้องมี [hidden] override
+   (ดูหมายเหตุเรื่อง hidden vs display ใน CLAUDE.md) */
+
+@media (max-width: 900px) {
+  .est-picker-grid {
+    grid-template-columns: 1fr 1fr 1fr;
+  }
+
+  .est-picker-item {
+    grid-column: 1 / -1;
+  }
 }
 
 .estimate-no {

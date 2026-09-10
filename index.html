@@ -25,7 +25,7 @@
 <title>CS Connect</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=Sarabun:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=20260910b">
+<link rel="stylesheet" href="style.css?v=20260910c">
 </head>
 <body>
 
@@ -499,18 +499,12 @@
             <!-- ไม่บังคับกรอก -- ไม่มี Google Maps API key ให้คลิกเลือกตำแหน่ง
                  ในหน้านี้โดยตรง ปุ่ม "เปิด Google Maps" จึงพาไปหาตำแหน่งบน
                  Google Maps จริงแทน คัดลอกพิกัดจากที่นั่นแล้ววางกลับมาได้เลย -->
-            <div class="field-row">
-              <div class="field">
-                <label for="reqLat">ละติจูด</label>
-                <input type="text" id="reqLat" placeholder="เช่น 18.7883" inputmode="decimal" autocomplete="off">
-              </div>
-              <div class="field">
-                <label for="reqLng">ลองจิจูด</label>
-                <input type="text" id="reqLng" placeholder="เช่น 98.9853" inputmode="decimal" autocomplete="off">
-              </div>
+            <div class="field">
+              <label for="reqCoord">พิกัด (ละติจูด, ลองจิจูด)</label>
+              <input type="text" id="reqCoord" class="coord-input" placeholder="18.788300, 98.985300" inputmode="decimal" autocomplete="off">
             </div>
             <div class="field">
-              <p class="field-hint">พิกัดไม่บังคับกรอก จะใส่ทีหลังก็ได้</p>
+              <p class="field-hint">วางพิกัดจาก Google Maps ได้ทั้งบรรทัด (คลิกขวาที่จุดบนแผนที่ &rarr; คัดลอกพิกัด) &mdash; ไม่บังคับกรอก จะใส่ทีหลังก็ได้</p>
               <div class="batch-toolbar">
                 <a href="https://www.google.com/maps" target="_blank" rel="noopener" id="reqMapBtn" class="btn btn-ghost">เปิด Google Maps เพื่อหาตำแหน่ง</a>
                 <a href="#" target="_blank" rel="noopener" id="reqNavBtn" class="btn btn-ghost" hidden>นำทาง</a>
@@ -720,25 +714,24 @@
                  ช่องนี้จึงยังต้องมี และเป็นที่เก็บของคำร้องเก่าที่บันทึกสถานที่
                  เป็นข้อความล้วนไว้ก่อนมีดรอปดาวน์ -->
             <div class="field">
+              <label for="extDeed">โฉนด</label>
+              <input type="text" id="extDeed" placeholder="เลขที่โฉนด (ถ้ามี)" autocomplete="off">
+            </div>
+
+            <div class="field">
               <label for="extLocation">รายละเอียดสถานที่เพิ่มเติม</label>
               <textarea id="extLocation" rows="2" placeholder="จุดสังเกต / รายละเอียดเพิ่มเติม (ถ้ามี)"></textarea>
             </div>
           </div>
 
-          <!-- ไม่บังคับกรอก -- ดูหมายเหตุเดียวกันที่ #reqLat ในฟอร์มขอใช้ไฟฟ้า
+          <!-- ไม่บังคับกรอก -- ดูหมายเหตุเดียวกันที่ #reqCoord ในฟอร์มขอใช้ไฟฟ้า
                เรื่องทำไมไม่มีแผนที่ให้คลิกเลือกตำแหน่งโดยตรง -->
-          <div class="field-row">
-            <div class="field">
-              <label for="extLat">ละติจูด</label>
-              <input type="text" id="extLat" placeholder="เช่น 18.7883" inputmode="decimal" autocomplete="off">
-            </div>
-            <div class="field">
-              <label for="extLng">ลองจิจูด</label>
-              <input type="text" id="extLng" placeholder="เช่น 98.9853" inputmode="decimal" autocomplete="off">
-            </div>
+          <div class="field">
+            <label for="extCoord">พิกัด (ละติจูด, ลองจิจูด)</label>
+            <input type="text" id="extCoord" class="coord-input" placeholder="18.788300, 98.985300" inputmode="decimal" autocomplete="off">
           </div>
           <div class="field">
-            <p class="field-hint">พิกัดไม่บังคับกรอก จะใส่ทีหลังก็ได้</p>
+            <p class="field-hint">วางพิกัดจาก Google Maps ได้ทั้งบรรทัด (คลิกขวาที่จุดบนแผนที่ &rarr; คัดลอกพิกัด) &mdash; ไม่บังคับกรอก จะใส่ทีหลังก็ได้</p>
             <div class="batch-toolbar">
               <a href="https://www.google.com/maps" target="_blank" rel="noopener" id="extMapBtn" class="btn btn-ghost">เปิด Google Maps เพื่อหาตำแหน่ง</a>
               <a href="#" target="_blank" rel="noopener" id="extNavBtn" class="btn btn-ghost" hidden>นำทาง</a>
@@ -753,6 +746,9 @@
               <option value="ขอขยายเขตระบบจำหน่ายไฟฟ้าแรงต่ำ 3 เฟส">ขอขยายเขตระบบจำหน่ายไฟฟ้าแรงต่ำ 3 เฟส</option>
               <option value="ขอขยายเขตระบบจำหน่ายไฟฟ้าแรงสูง 1 เฟส">ขอขยายเขตระบบจำหน่ายไฟฟ้าแรงสูง 1 เฟส</option>
               <option value="ขอขยายเขตระบบจำหน่ายไฟฟ้าแรงสูง 3 เฟส">ขอขยายเขตระบบจำหน่ายไฟฟ้าแรงสูง 3 เฟส</option>
+              <option value="ขอขยายเขตที่ดินจัดสรร">ขอขยายเขตที่ดินจัดสรร</option>
+              <option value="ขอขยายเขตที่ดินแบ่งขาย">ขอขยายเขตที่ดินแบ่งขาย</option>
+              <option value="ขอปักเสาบริการ">ขอปักเสาบริการ</option>
               <option value="ขอย้ายแนวเสาและ/หรืออุปกรณ์ต่างๆ">ขอย้ายแนวเสาและ/หรืออุปกรณ์ต่างๆ</option>
               <option value="ขอติดตั้งหม้อแปลงชั่วคราว">ขอติดตั้งหม้อแปลงชั่วคราว</option>
               <option value="ขอเปลี่ยนเพิ่ม/ลดขนาดหม้อแปลง">ขอเปลี่ยนเพิ่ม/ลดขนาดหม้อแปลง</option>
@@ -1143,24 +1139,70 @@
 
       <p id="estCatalogNote" class="field-hint"></p>
 
+      <!-- แผงเลือกพัสดุ: เลือกกลุ่ม -> เลือกรายการ -> ป้อนจำนวน -> กดเพิ่ม
+           รายการจะลงตารางด้านล่างก็ต่อเมื่อกดเพิ่มแล้วเท่านั้น -->
+      <div class="est-picker">
+        <h3 class="est-picker-title">เพิ่มพัสดุ</h3>
+
+        <div class="est-picker-grid">
+          <div class="field">
+            <label for="estPickGroup">กลุ่ม</label>
+            <select id="estPickGroup">
+              <option value="">-- ทุกกลุ่ม (พิมพ์ค้นหา) --</option>
+            </select>
+          </div>
+
+          <div class="field est-picker-item">
+            <label for="estPickItem">รายการพัสดุ</label>
+            <!-- สองช่องซ้อนที่เดียวกัน: เลือกกลุ่มแล้วใช้ดรอปดาวน์ (เหลือไม่กี่สิบ
+                 รายการ) ไม่เลือกกลุ่มก็พิมพ์ค้นหาจากทั้งแค็ตตาล็อกได้ -->
+            <select id="estPickItem">
+              <option value="">-- เลือกรายการพัสดุ --</option>
+            </select>
+            <input type="text" id="estPickSearch" list="estPickSearchList" placeholder="พิมพ์เพื่อค้นหารายการพัสดุ" autocomplete="off" hidden>
+            <datalist id="estPickSearchList"></datalist>
+          </div>
+
+          <div class="field est-picker-key">
+            <label for="estPickKeyCode">KeyCode</label>
+            <input type="text" id="estPickKeyCode" readonly tabindex="-1" placeholder="&mdash;">
+          </div>
+
+          <div class="field est-picker-qty">
+            <label for="estPickIn">ติดตั้ง</label>
+            <input type="number" id="estPickIn" step="1" placeholder="0" inputmode="numeric">
+          </div>
+
+          <div class="field est-picker-qty">
+            <label for="estPickRm">รื้อถอน</label>
+            <input type="number" id="estPickRm" step="1" placeholder="0" inputmode="numeric">
+          </div>
+
+          <div class="field est-picker-qty">
+            <label for="estPickRp">นำกลับมาใช้</label>
+            <input type="number" id="estPickRp" step="1" placeholder="0" inputmode="numeric">
+          </div>
+        </div>
+
+        <button type="button" id="estAddItemBtn" class="btn btn-primary est-picker-add">+ เพิ่มพัสดุ</button>
+        <p id="estPickError" class="form-error" hidden></p>
+      </div>
+
       <div class="estimate-scroll">
         <div class="estimate-table">
           <div class="estimate-row estimate-head-row">
             <span>No.</span>
-            <span>Group</span>
-            <span>Description</span>
             <span>KeyCode</span>
-            <span>IN.</span>
-            <span>RM.</span>
-            <span>RP.</span>
+            <span>รายการพัสดุ</span>
+            <span>กลุ่ม</span>
+            <span>ติดตั้ง</span>
+            <span>รื้อถอน</span>
+            <span>นำกลับ</span>
             <span></span>
           </div>
           <div id="estRows"></div>
+          <p id="estRowsEmpty" class="estimate-empty">ยังไม่มีพัสดุในใบนี้ &mdash; เลือกจากแผงด้านบนแล้วกด &ldquo;เพิ่มพัสดุ&rdquo;</p>
         </div>
-      </div>
-
-      <div class="batch-toolbar">
-        <button type="button" id="estAddRowBtn" class="btn btn-ghost">+ เพิ่มรายการ</button>
       </div>
     </div>
 
@@ -1200,6 +1242,6 @@
      ที่หาสาเหตุยากมาก
      **ต้องเปลี่ยนเลขนี้ทุกครั้งที่แก้ app.js / style.css / track.js / qr.js**
      ไม่งั้นผู้ใช้บางคนจะยังได้ไฟล์เก่าไปอีกพักใหญ่ -->
-<script src="app.js?v=20260910b"></script>
+<script src="app.js?v=20260910c"></script>
 </body>
 </html>
