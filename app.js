@@ -284,20 +284,83 @@
       return map;
     }
 
+    /**
+     * คำสั่งที่ "ยิงซ้ำแล้วผลเท่าเดิม" จึงลองใหม่เองได้อย่างปลอดภัย
+     *
+     * ทุกคำสั่งที่ POST ไป /exec ถูก Apps Script ตอบเป็น 302 ไปยัง
+     * script.googleusercontent.com เสมอ และปลายทางนั้นหลุดเป็น 404 เป็นครั้งคราว
+     * ทั้งที่สคริปต์ฝั่งกูเกิลทำงานจนจบไปแล้ว -- ข้อมูลเข้าชีตเรียบร้อยแต่เบราว์เซอร์
+     * เห็นว่าล้มเหลว ซึ่งเป็นที่มาของทั้งข้อความ HTTP 404 และคำร้องที่ซ้ำกันเมื่อ
+     * เจ้าหน้าที่กดบันทึกใหม่
+     *
+     * เป็น allowlist ไม่ใช่ blocklist โดยตั้งใจ -- คำสั่งใหม่ที่ยังไม่ได้พิจารณา
+     * จะไม่ถูกยิงซ้ำเอง ซึ่งเป็นด้านที่ปลอดภัยกว่าเมื่อเดาผิด
+     *
+     * ที่ไม่อยู่ในรายการนี้ และเหตุผล:
+     *   assignRequests     ต่อคอมเมนต์ "จ่ายงานให้ ..." ทุกครั้งที่เรียก
+     *   saveExtendFile     อัปโหลดไฟล์ขึ้น Drive ใหม่ทุกครั้ง
+     *   saveMeterDispatch  เพิ่มสมุดคุมเล่มใหม่ทุกครั้ง
+     *   login / register / changePassword / adminResetPassword
+     *
+     * saveRequests ยิงซ้ำได้เพราะฝั่งเซิร์ฟเวอร์ upsert ด้วย id -- เขียนทับแถวเดิม
+     * ไม่ใช่ต่อแถวใหม่ ซึ่งจะจริงก็ต่อเมื่อ id ของคำร้องใหม่คงที่ข้ามการลองใหม่ด้วย
+     * (ดู pendingNewId)
+     */
+    const RETRYABLE_ACTIONS = new Set([
+      "loadRequests", "saveRequests", "searchArchivedRequests",
+      "listStaff", "listEstimateItems", "listEstimateLists"
+    ]);
+
+    const RETRY_ATTEMPTS = 3;
+
     async function call(payload) {
-      // text/plain on purpose: an application/json body would trigger a CORS
-      // preflight, which Apps Script web apps cannot answer.
-      const response = await fetch(SHEETS_ENDPOINT, {
-        method: "POST",
-        headers: { "Content-Type": "text/plain;charset=utf-8" },
-        body: JSON.stringify(payload)
-      });
+      let lastError = null;
 
-      if (!response.ok) throw new Error(`เชื่อมต่อฐานข้อมูลไม่สำเร็จ (HTTP ${response.status})`);
+      for (let attempt = 1; attempt <= RETRY_ATTEMPTS; attempt++) {
+        let transient = false;
 
-      const body = await response.json();
-      if (!body.ok) throw new Error(body.error || "ฐานข้อมูลตอบกลับผิดพลาด");
-      return body.data;
+        try {
+          // text/plain on purpose: an application/json body would trigger a CORS
+          // preflight, which Apps Script web apps cannot answer.
+          const response = await fetch(SHEETS_ENDPOINT, {
+            method: "POST",
+            headers: { "Content-Type": "text/plain;charset=utf-8" },
+            body: JSON.stringify(payload)
+          });
+
+          if (!response.ok) {
+            // 404 คือปลายทาง redirect หลุด, 429/5xx คือฝั่งกูเกิลรับไม่ไหวชั่วคราว
+            // -- ลองใหม่แล้วมีโอกาสผ่าน ต่างจาก 401/403 ที่ลองกี่ครั้งก็ได้คำตอบเดิม
+            transient = response.status === 404 || response.status === 429 || response.status >= 500;
+            throw new Error(`เชื่อมต่อฐานข้อมูลไม่สำเร็จ (HTTP ${response.status})`);
+          }
+
+          const body = await response.json();
+
+          // ตอบกลับเป็น JSON ที่อ่านได้ = สคริปต์ทำงานแล้วและตัดสินใจแล้ว ไม่ใช่
+          // ปัญหาการเชื่อมต่อ จึงไม่ลองใหม่ ต่อให้ ok เป็น false
+          if (!body.ok) throw new Error(body.error || "ฐานข้อมูลตอบกลับผิดพลาด");
+          return body.data;
+        } catch (err) {
+          // fetch โยน error เอง = เครือข่ายไม่ถึงปลายทาง (ออฟไลน์, DNS, ตัดกลางคัน)
+          if (err instanceof TypeError) transient = true;
+
+          lastError = err;
+
+          const canRetry = transient
+            && attempt < RETRY_ATTEMPTS
+            && RETRYABLE_ACTIONS.has(payload.action);
+
+          if (!canRetry) throw err;
+
+          // ถอยห่างขึ้นเรื่อย ๆ แทนที่จะยิงรัว -- ถ้าปลายทางกำลังไม่ไหว
+          // การยิงซ้ำทันทีคือการซ้ำเติม
+          await new Promise(resolve => setTimeout(resolve, 400 * attempt));
+          console.warn(`CS Connect: ${payload.action} ล้มเหลวชั่วคราว กำลังลองใหม่`, err);
+        }
+      }
+
+      throw lastError;
     }
 
     /**
@@ -1527,6 +1590,7 @@
     document.getElementById("extendAssignSuccess").hidden = true;
 
     editingId = null;
+    pendingNewId = null;
     batchMode = false;
     formReturnTo = "requests";
     currentSearchQuery = "";
@@ -2261,6 +2325,19 @@
   let currentRequestFilter = "power";
   let currentAddType = "power";
   let editingId = null;
+
+  /**
+   * id ของคำร้องใหม่ที่ยังบันทึกไม่สำเร็จ -- จองครั้งเดียวต่อการกรอกหนึ่งใบ
+   *
+   * เดิมสร้าง id ใหม่ทุกครั้งที่กดบันทึก พอการบันทึกครั้งแรกล้มเหลวแบบที่ข้อมูล
+   * เข้าชีตไปแล้ว (ดู RETRYABLE_ACTIONS) แล้วเจ้าหน้าที่กดบันทึกซ้ำ ครั้งที่สอง
+   * จะได้ id คนละตัว ฝั่งเซิร์ฟเวอร์จึงมองว่าเป็นคนละคำร้องและต่อแถวใหม่ --
+   * กลายเป็นคำร้องซ้ำสองใบทั้งที่เพิ่มเข้ามาครั้งเดียว
+   *
+   * ใช้ id เดิมซ้ำ การกดบันทึกใหม่จึงเขียนทับแถวเดิมแทนที่จะสร้างเพิ่ม ไม่ว่าจะ
+   * ลองใหม่เองอัตโนมัติหรือเจ้าหน้าที่กดเอง
+   */
+  let pendingNewId = null;
   // "requests" (หน้ารับคำร้อง) หรือ "extendWork" (คิวงานขอขยายเขตฯ) -- ดู
   // leaveRequestForm ว่าใช้ทำอะไร
   let formReturnTo = "requests";
@@ -3664,6 +3741,7 @@
   function openRequestForm(type, record, options = {}) {
     currentAddType = type;
     editingId = record ? record.id : null;
+    pendingNewId = null;
     formReturnTo = options.returnTo || "requests";
     // เพิ่มหลายคำร้องมีเฉพาะขอใช้ไฟฟ้า -- ปุ่มที่ส่ง { batch: true } มา ก็ถูก
     // ซ่อนไว้แล้วสำหรับแท็บอื่น (ดู renderRequestsList) การ์ดนี้กันไว้อีกชั้น
@@ -4057,8 +4135,9 @@
           };
         }
       } else {
+        if (!pendingNewId) pendingNewId = newRequestId();
         requests.push({
-          id: newRequestId(),
+          id: pendingNewId,
           ...recordData,
           statusHistory: [{ status: jobStatus, byName: savedByName, byEmail: savedByEmail, at: now }],
           createdByName: savedByName,
@@ -4073,6 +4152,7 @@
       await saveRequests(requests);
 
       editingId = null;
+      pendingNewId = null;
       requestForm.reset();
       resetLocationFields();
       resetPurposeFields();
@@ -4220,8 +4300,9 @@
           };
         }
       } else {
+        if (!pendingNewId) pendingNewId = newRequestId();
         requests.push({
-          id: newRequestId(),
+          id: pendingNewId,
           ...recordData,
           statusHistory: [{ status: nextStatus, byName: savedByName, byEmail: savedByEmail, at: now }],
           createdByName: savedByName,
@@ -4234,6 +4315,7 @@
       await saveRequests(requests);
 
       editingId = null;
+      pendingNewId = null;
       extendForm.reset();
       resetExtendLocationFields();
       setDefaultExtendDate();
