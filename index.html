@@ -25,7 +25,7 @@
 <title>CS Connect</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=Sarabun:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=20260911g">
+<link rel="stylesheet" href="style.css?v=20260911h">
 </head>
 <body>
 
@@ -1047,7 +1047,10 @@
         </div>
           </div>
 
-          <div id="extendPaneMeta"></div>
+          <!-- กล่องรับแผงประวัติ/คอมเมนต์ (#requestFormMeta ถูกย้ายเข้ามาไว้ข้างใน)
+               ตัวที่เป็นลูกของ .form-layout คือกล่องนี้ ไม่ใช่ .form-side เอง จึงต้องมี
+               คลาสของตัวเองไว้ให้จอแคบสั่งสลับลำดับได้ -- ดู .form-meta-slot ใน style.css -->
+          <div id="extendPaneMeta" class="form-meta-slot"></div>
         </div>
       </main>
     </div>
@@ -1297,6 +1300,6 @@
      ที่หาสาเหตุยากมาก
      **ต้องเปลี่ยนเลขนี้ทุกครั้งที่แก้ app.js / style.css / track.js / qr.js**
      ไม่งั้นผู้ใช้บางคนจะยังได้ไฟล์เก่าไปอีกพักใหญ่ -->
-<script src="app.js?v=20260911g"></script>
+<script src="app.js?v=20260911h"></script>
 </body>
 </html>
