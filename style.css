@@ -1955,12 +1955,12 @@ span.estimate-crumb {
   width: 100%;
 }
 
+/* ฟอนต์โมโนไว้เพราะเป็นรหัส -- แต่สีต้องเหมือนช่องกรอกอื่นทุกช่อง
+   พื้นม่วงอ่อน + cursor: default เป็นหน้าตาของช่องอ่านอย่างเดียว (ตอนที่ช่องนี้
+   ยังเป็น readonly) พอพิมพ์ค้นได้แล้วยังคงสีนั้นไว้ คนจะเข้าใจว่ากรอกไม่ได้ */
 .est-picker-key input {
   font-family: var(--font-mono);
   font-size: 13px;
-  background: var(--volt-50);
-  color: var(--volt-700);
-  cursor: default;
 }
 
 .est-picker-qty input {
