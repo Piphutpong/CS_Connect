@@ -1581,6 +1581,9 @@
     document.getElementById("requestFormMeta").hidden = true;
     document.getElementById("requestFormStatusHistory").innerHTML = "";
     document.getElementById("requestFormComments").innerHTML = "";
+    document.getElementById("requestFormSummary").hidden = true;
+    document.getElementById("requestSummaryType").textContent = "";
+    document.getElementById("requestSummaryList").innerHTML = "";
     document.getElementById("requestCommentInput").value = "";
 
     document.getElementById("batchRows").innerHTML = "";
@@ -1594,6 +1597,7 @@
 
     editingId = null;
     pendingNewId = null;
+    summaryRecord = null;
     batchMode = false;
     formReturnTo = "requests";
     currentSearchQuery = "";
@@ -2267,6 +2271,10 @@
   const batchAddRowBtn = document.getElementById("batchAddRowBtn");
   const batchResult = document.getElementById("batchResult");
   const requestFormStatusHistory = document.getElementById("requestFormStatusHistory");
+  const requestFormSummary = document.getElementById("requestFormSummary");
+  const requestSummaryType = document.getElementById("requestSummaryType");
+  const requestSummaryList = document.getElementById("requestSummaryList");
+  const requestSummaryCopyBtn = document.getElementById("requestSummaryCopyBtn");
   const requestFormComments = document.getElementById("requestFormComments");
   const requestCommentInput = document.getElementById("requestCommentInput");
   const requestCommentError = document.getElementById("requestCommentError");
@@ -2509,7 +2517,6 @@
     { key: "receivedDate", label: "วันที่รับคำร้อง" },
     { key: "customerName", label: "ชื่อลูกค้า" },
     { key: "phonePrimary", label: "เบอร์โทรศัพท์หลัก" },
-    { key: "moo", label: "หมู่ที่" },
     { key: "district", label: "อำเภอ" },
     { key: "subdistrict", label: "ตำบล" },
     { key: "purposeChoice", label: "ความประสงค์" },
@@ -3431,6 +3438,116 @@
     fillingForm = false;
   }
 
+  // คำร้องที่การ์ดสรุปกำลังอธิบายอยู่ -- เก็บไว้เพื่อให้ปุ่มคัดลอกอ่านจากข้อมูลชุดเดียวกับที่วาดบนจอ
+  let summaryRecord = null;
+
+  /**
+   * บรรทัดของการ์ดสรุป คืนเป็น {label, value} เพื่อให้ทั้งการวาดบนจอและ
+   * ข้อความที่ปุ่มคัดลอกส่งออกไป อ่านจากชุดเดียวกัน จะได้ไม่หลุดกันเมื่อเพิ่มบรรทัดใหม่
+   *
+   * ตั้งใจเลือกเฉพาะที่จำเป็นต่อการตามงาน -- ยังไม่ใส่ BP/CA และเลขโฉนด เพราะภาพที่แคปไป
+   * จะหลุดออกนอกระบบไปอยู่ในแชท และจะถูกส่งต่อได้เรื่อย ๆ โดยที่เราตามต่อไม่ได้
+   * ส่วนเบอร์โทรกับพิกัดเป็นการตัดสินใจของเจ้าของระบบเอง หลังชั่งข้อแลกเปลี่ยนนี้แล้ว
+   * (ผู้รับผิดชอบต้องโทรและต้องนำทางจากหน้างานได้) บรรทัดที่จะเพิ่มทีหลังควรผ่านเกณฑ์เดียวกัน
+   */
+  function summaryLines(record) {
+    const lines = [
+      { label: "เลขที่คำร้อง", value: record.requestNumber || "-", mono: true },
+      { label: "เลขที่คำร้อง (ระบบ)", value: record.trackingNumber || "-", mono: true },
+      { label: "วันที่รับคำร้อง", value: formatThaiDate(record.receivedDate), mono: true },
+      { label: "ชื่อลูกค้า", value: record.customerName || "-" },
+      // ผู้รับผิดชอบมักอ่านการ์ดนี้ตอนอยู่หน้างานบนมือถือ ทำเป็นลิงก์ tel: ให้กดโทรได้เลย
+      // ส่วนในภาพที่แคปไปมันก็อ่านเป็นตัวเลขธรรมดาเหมือนบรรทัดอื่น
+      {
+        label: "เบอร์โทรศัพท์",
+        value: record.phonePrimary || "-",
+        href: record.phonePrimary ? `tel:${record.phonePrimary}` : ""
+      },
+      { label: "ความประสงค์", value: record.purpose || "-" },
+      {
+        label: record.type === "extend" ? "สถานที่ขอขยายเขตฯ" : "สถานที่ขอใช้ไฟฟ้า",
+        value: buildLocationText(record) || "-"
+      },
+      { label: "สถานะงาน", value: record.jobStatus || "-", status: true }
+    ];
+
+    // มีเฉพาะคำร้องที่กรอกพิกัดไว้ -- ไม่ขึ้นขีดว่างให้รกในใบที่ไม่มี
+    // ลิงก์ไปหน้านำทางของ Google Maps ชุดเดียวกับปุ่ม "นำทาง" ในฟอร์ม (ไม่ต้องใช้ API key)
+    const coordText = formatCoordText(record.lat, record.lng);
+    if (coordText) {
+      lines.splice(lines.length - 1, 0, {
+        label: "พิกัด",
+        value: coordText,
+        mono: true,
+        href: "https://www.google.com/maps/dir/?api=1&destination="
+          + encodeURIComponent(`${record.lat},${record.lng}`)
+      });
+    }
+
+    // ขอใช้ไฟฟ้าไม่มีการจ่ายงาน ช่องนี้จึงว่างเสมอ -- แสดงเฉพาะคำร้องขยายเขตฯ
+    // (ที่ยังไม่จ่ายก็ต้องตอบได้ว่ายังไม่จ่าย) หรือคำร้องที่มีชื่อคนรับผิดชอบติดอยู่จริง
+    if (record.type === "extend" || record.assignee) {
+      lines.push({ label: "ผู้รับผิดชอบ", value: record.assignee || "ยังไม่ได้จ่ายงาน" });
+    }
+
+    return lines;
+  }
+
+  function renderRequestSummary(record) {
+    summaryRecord = record;
+    requestSummaryType.textContent = REQUEST_TYPES[record.type] || "คำร้อง";
+    requestSummaryList.innerHTML = "";
+
+    summaryLines(record).forEach(line => {
+      const dt = document.createElement("dt");
+      dt.textContent = line.label;
+
+      const dd = document.createElement("dd");
+      if (line.status) {
+        const badge = document.createElement("span");
+        badge.className = `request-badge request-badge-status tone-${JOB_STATUS_TONE[record.jobStatus] || "info"}`;
+        badge.textContent = line.value;
+        dd.appendChild(badge);
+      } else if (line.href) {
+        const link = document.createElement("a");
+        link.className = "req-summary-link";
+        if (line.mono) link.classList.add("req-summary-mono");
+        link.href = line.href;
+        if (!line.href.startsWith("tel:")) {
+          link.target = "_blank";
+          link.rel = "noopener";
+        }
+        link.textContent = line.value;
+        dd.appendChild(link);
+      } else {
+        if (line.mono) dd.classList.add("req-summary-mono");
+        dd.textContent = line.value;
+      }
+
+      requestSummaryList.append(dt, dd);
+    });
+  }
+
+  // บางครั้งข้อความสะดวกกว่าภาพ (ค้นซ้ำได้ ส่งต่อได้) จึงให้ทางเลือกไว้ทั้งสองทาง
+  requestSummaryCopyBtn.addEventListener("click", async () => {
+    if (!summaryRecord) return;
+
+    const text = [REQUEST_TYPES[summaryRecord.type] || "คำร้อง"]
+      .concat(summaryLines(summaryRecord).map(line => `${line.label}: ${line.value}`))
+      .join("\n");
+
+    try {
+      await navigator.clipboard.writeText(text);
+      requestSummaryCopyBtn.textContent = "คัดลอกแล้ว";
+    } catch (err) {
+      requestSummaryCopyBtn.textContent = "คัดลอกไม่สำเร็จ";
+    }
+
+    setTimeout(() => {
+      requestSummaryCopyBtn.textContent = "คัดลอกข้อความ";
+    }, 1600);
+  });
+
   // One stamp per status the record has been through, oldest first so the
   // newest change reads at the bottom. Records saved before statusHistory
   // existed fall back to a single un-attributed pill for their current status.
@@ -3916,9 +4033,15 @@
     // it's entirely generic (reads only `record`, not the type), so every
     // FORM_SUPPORTED_TYPES form shares it as-is with no extra wiring.
     requestFormMeta.hidden = !record;
+    // การ์ดสรุปเป็นคอลัมน์ของตัวเองแล้ว จึงต้องซ่อน/แสดงเอง ไม่ได้ติดไปกับแผงประวัติ
+    // คำร้องใหม่ยังไม่มีอะไรให้สรุป และ summaryRecord ต้องล้างด้วย ไม่งั้นปุ่มคัดลอก
+    // จะยังคัดลอกคำร้องใบก่อนหน้าที่เพิ่งปิดไป
+    summaryRecord = null;
+    requestFormSummary.hidden = !record;
     requestCommentInput.value = "";
     hideError(requestCommentError);
     if (record) {
+      renderRequestSummary(record);
       renderStatusHistory(record);
       renderComments(record);
       renderBatchInfo(record);
@@ -3996,11 +4119,6 @@
 
       if (!subdistrict) {
         showError(requestFormError, "กรุณาเลือกตำบล");
-        return;
-      }
-
-      if (!moo) {
-        showError(requestFormError, "กรุณากรอกหมู่");
         return;
       }
 
@@ -4663,9 +4781,9 @@
     rowsEmpty: document.getElementById("estRowsEmpty"),
     pickGroup: document.getElementById("estPickGroup"),
     pickItem: document.getElementById("estPickItem"),
-    pickSearch: document.getElementById("estPickSearch"),
-    pickSearchList: document.getElementById("estPickSearchList"),
+    pickItemList: document.getElementById("estPickItemList"),
     pickKeyCode: document.getElementById("estPickKeyCode"),
+    pickKeyList: document.getElementById("estPickKeyList"),
     pickIn: document.getElementById("estPickIn"),
     pickRm: document.getElementById("estPickRm"),
     pickRp: document.getElementById("estPickRp"),
@@ -4707,8 +4825,8 @@
     estimateLists = data.lists || { section: [], group: [], investment: [] };
 
     estimateView.catalogNote.textContent = estimateCatalog.length
-      ? `รายการตั้งต้นในระบบ ${estimateCatalog.length} รายการ · เลือก Group ก่อน แล้วรายการ Description จะแคบลงตามกลุ่มนั้น`
-      : "ยังไม่มีรายการตั้งต้นในระบบ (แท็บ EstimateItems ในชีตยังว่าง) — เมื่อใส่ข้อมูลแล้ว ดรอปดาวน์ Group และ Description จะขึ้นให้เอง";
+      ? `รายการตั้งต้นในระบบ ${estimateCatalog.length} รายการ (ใช้ร่วมกันทุกแผนก) · พิมพ์ค้นได้ทั้งช่อง KeyCode และช่องชื่อรายการ พิมพ์ช่องไหนอีกช่องเติมให้เอง · เลือกกลุ่มไว้จะค้นเฉพาะในกลุ่มนั้น`
+      : "ยังไม่มีรายการตั้งต้นในระบบ (แท็บ EstimateItems ในชีตยังว่าง) — เมื่อใส่ข้อมูลแล้ว กลุ่มและรายการพัสดุจะขึ้นให้เอง";
   }
 
   /**
@@ -4734,26 +4852,33 @@
   }
 
   /**
-   * Group ของแผนกที่กำลังทำใบอยู่ -- แต่ละแผนกมีกลุ่มงานคนละชุด (คอลัมน์ section
-   * ในแท็บ EstimateItems ต้องสะกดตรงกับชื่อแผนกที่เลือกไว้ในใบ)
+   * แค็ตตาล็อกเป็นชุดเดียวใช้ร่วมกันทุกแผนก -- ไม่ได้กรองตามแผนกอีกแล้ว
    *
-   * ถ้าไม่มีแถวไหนระบุ section ไว้เลย ให้ถือว่าใช้ได้กับทุกแผนก -- ตอนเริ่มใส่
-   * ข้อมูลจริงมักกรอก group/description มาก่อน แล้วค่อยไล่เติม section ทีหลัง
-   * ระหว่างนั้นดรอปดาวน์ต้องยังใช้งานได้ ไม่ใช่ว่างเปล่า
+   * เดิมกรองด้วยคอลัมน์ section ซึ่งทำให้พัสดุตัวเดียวกันที่ใช้หลายแผนกต้องมี
+   * หลายแถวในชีต แต่โค้ดที่รวมจำนวนพัสดุซ้ำ (ดู #estAddItemBtn) เทียบด้วย
+   * KeyCode ล้วน ๆ ไม่เคยดู section เลย -- ชีตกับโค้ดจึงเข้าใจ "ตัวตนของพัสดุ"
+   * ไม่ตรงกัน และเวลา กฟภ. แก้คำอธิบายพัสดุตัวหนึ่ง ต้องไล่แก้ทุกแถวที่ซ้ำ
+   * ลืมแถวเดียวก็เพี้ยน ตอนนี้ถือว่า **หนึ่ง KeyCode = หนึ่งแถว** ตรงกับโค้ด
+   *
+   * คอลัมน์ section ยังอยู่ในชีตและใน ESTIMATE_ITEM_COLUMNS โดยตั้งใจ ไม่ได้ลบ
+   * ทิ้ง -- readAll_ แมปเซลล์เป็นคีย์ตามตำแหน่ง การถอดคอลัมน์ออกจากกลาง array
+   * จะทำให้ข้อมูลที่วางไว้แล้วเลื่อนผิดทั้งแผ่น (เคยพังมาแล้ว ดู CLAUDE.md)
+   * ปล่อยไว้เฉย ๆ ไม่มีใครอ่าน ถูกกว่าและปลอดภัยกว่าการย้ายข้อมูล
+   *
+   * หมายเหตุ: "แผนก" ในตัวใบประมาณการ (แผนก -> งานย่อย -> ใบ) ไม่เกี่ยวกันเลย
+   * และยังอยู่ครบเหมือนเดิม -- #estNewDept เป็นรายการตายตัวใน index.html
    */
-  function catalogRowsForSection(section) {
-    const rows = estimateCatalog || [];
-    const scoped = rows.filter(item => item.section && item.section === section);
-    return scoped.length ? scoped : rows.filter(item => !item.section);
+  function catalogRows() {
+    return estimateCatalog || [];
   }
 
-  function groupsForSection(section) {
-    return Array.from(new Set(catalogRowsForSection(section).map(i => i.group).filter(Boolean)))
+  function catalogGroups() {
+    return Array.from(new Set(catalogRows().map(i => i.group).filter(Boolean)))
       .sort((a, b) => a.localeCompare(b, "th"));
   }
 
-  function itemsForGroup(section, group) {
-    return catalogRowsForSection(section).filter(i => (i.group || "") === (group || ""));
+  function itemsForGroup(group) {
+    return catalogRows().filter(i => (i.group || "") === (group || ""));
   }
 
   /**
@@ -4967,26 +5092,95 @@
   }
 
   /**
-   * ค้นรายการในแค็ตตาล็อกจากคำอธิบาย -- ใช้ตอนไม่ได้เลือกกลุ่มไว้
+   * เพดานจำนวนตัวเลือกที่ยัดลง <datalist> ได้
    *
-   * จำกัดผลลัพธ์ไว้ที่ SEARCH_LIMIT โดยตั้งใจ: แค็ตตาล็อกมีสองพันกว่ารายการ
-   * การยัดทั้งหมดลง <datalist> คือโหนดหลายพันตัวที่เบราว์เซอร์ต้องวาดใหม่ทุก
-   * ครั้งที่พิมพ์หนึ่งตัวอักษร และเป็นรายการที่ยาวเกินกว่าจะกวาดตาหาได้อยู่ดี
+   * แค็ตตาล็อกมีสองพันกว่ารายการ การใส่ทั้งหมดคือโหนดหลายพันตัวที่เบราว์เซอร์ต้อง
+   * วาดใหม่ทุกครั้งที่พิมพ์หนึ่งตัวอักษร และเป็นรายการที่ยาวเกินกว่าจะกวาดตาหาได้อยู่ดี
    */
   const SEARCH_LIMIT = 50;
 
-  function searchCatalog(section, query) {
-    const q = String(query || "").trim().toLowerCase();
-    if (q.length < 2) return [];
+  /** แถวแค็ตตาล็อกในขอบเขตปัจจุบัน -- เลือกกลุ่มไว้ก็เฉพาะกลุ่มนั้น ไม่เลือกก็ทั้งแค็ตตาล็อก */
+  function scopedRows() {
+    const group = estimateView.pickGroup.value;
+    return group ? itemsForGroup(group) : catalogRows();
+  }
+
+  /**
+   * ต้องพิมพ์กี่ตัวถึงเริ่มเสนอตัวเลือก
+   *
+   * เลือกกลุ่มไว้แล้วเสนอได้ทันทีตั้งแต่ยังไม่พิมพ์ (กลุ่มเดียวมีอย่างมากหลักร้อย
+   * และการ "คลิกดูว่ากลุ่มนี้มีอะไรบ้าง" คือสิ่งที่ดรอปดาวน์เดิมเคยทำได้ ต้องไม่หาย)
+   * ไม่เลือกกลุ่มต้องพิมพ์อย่างน้อยสองตัว ไม่งั้นคือการเสนอทั้งแค็ตตาล็อก
+   */
+  function suggestMinChars() {
+    return estimateView.pickGroup.value ? 0 : 2;
+  }
+
+  /**
+   * เติม <datalist> -- ใส่ label ควบคู่กับ value เสมอ
+   *
+   * ช่อง KeyCode เสนอเป็นรหัสล้วนจะอ่านไม่ออกว่ารหัสไหนคืออะไร เบราว์เซอร์แสดง
+   * label ต่อท้าย value ให้ และเวลาเลือกจะกรอกเฉพาะ value ลงช่อง ซึ่งเป็นสิ่งที่ต้องการ
+   */
+  function fillDatalist(list, pairs) {
+    list.innerHTML = "";
+    pairs.forEach(pair => {
+      const option = document.createElement("option");
+      option.value = pair.value;
+      if (pair.label) option.label = pair.label;
+      list.appendChild(option);
+    });
+  }
+
+  /** เสนอชื่อรายการที่ "มีคำที่พิมพ์อยู่ในนั้น" (ค้นแบบ substring) */
+  function suggestDescriptions() {
+    const q = estimateView.pickItem.value.trim().toLowerCase();
+    if (q.length < suggestMinChars()) {
+      fillDatalist(estimateView.pickItemList, []);
+      return;
+    }
 
     const out = [];
-    for (const item of catalogRowsForSection(section)) {
-      if (String(item.description || "").toLowerCase().includes(q)) {
-        out.push(item);
+    for (const item of scopedRows()) {
+      if (!item.description) continue;
+      if (!q || item.description.toLowerCase().includes(q)) {
+        out.push({ value: item.description, label: item.keyCode || "" });
         if (out.length >= SEARCH_LIMIT) break;
       }
     }
-    return out;
+    fillDatalist(estimateView.pickItemList, out);
+  }
+
+  /**
+   * เสนอ KeyCode ตามลำดับตัวอักษรที่พิมพ์ -- รหัสที่ "ขึ้นต้นด้วย" คำที่พิมพ์มาก่อนเสมอ
+   *
+   * รหัสพัสดุคนอ่านจากซ้ายไปขวา พิมพ์ไปทีละตัวเพื่อไล่ให้แคบลง การเอารหัสที่บังเอิญ
+   * มีเลขชุดนั้นอยู่กลางรหัสขึ้นมาปนก่อน จะทำให้ตัวที่กำลังไล่หาถูกดันตกไป -- แต่ก็ยัง
+   * เก็บพวกที่ตรงกลางไว้ท้ายรายการ เผื่อคนจำได้แค่ท่อนกลางของรหัส
+   */
+  function suggestKeyCodes() {
+    const q = estimateView.pickKeyCode.value.trim().toLowerCase();
+    if (q.length < suggestMinChars()) {
+      fillDatalist(estimateView.pickKeyList, []);
+      return;
+    }
+
+    const starts = [];
+    const inside = [];
+    for (const item of scopedRows()) {
+      const code = String(item.keyCode || "");
+      if (!code) continue;
+
+      const lower = code.toLowerCase();
+      const entry = { value: code, label: item.description || "" };
+
+      if (!q || lower.startsWith(q)) starts.push(entry);
+      else if (lower.includes(q)) inside.push(entry);
+
+      if (starts.length >= SEARCH_LIMIT) break;
+    }
+
+    fillDatalist(estimateView.pickKeyList, starts.concat(inside).slice(0, SEARCH_LIMIT));
   }
 
   /**
@@ -5169,79 +5363,84 @@
   /** รายการพัสดุที่กำลังเลือกค้างอยู่ในแผง (null = ยังไม่ได้เลือก) */
   let pickedItem = null;
 
-  function setPickedItem(item) {
+  /**
+   * ตั้งรายการที่เลือก แล้วให้ "ช่องที่ผู้ใช้ไม่ได้พิมพ์อยู่" สะท้อนแถวนั้น
+   *
+   * กติกาที่ยึดไว้: สองช่อง (KeyCode / ชื่อรายการ) ต้องมาจากแถวเดียวกันในแค็ตตาล็อกเสมอ
+   * ไม่งั้นช่องที่ไม่ได้พิมพ์ต้องว่าง -- ระหว่างพิมพ์ค้างครึ่งทางยังไม่นับว่าเลือก จึงล้าง
+   * อีกช่องทิ้ง ป้องกันไม่ให้เหลือ KeyCode ของรายการก่อนหน้าค้างคู่กับชื่อที่กำลังพิมพ์ใหม่
+   * ซึ่งถ้าเผลอกดเพิ่มตอนนั้นจะได้พัสดุผิดตัวไปเงียบ ๆ
+   *
+   * typedField บอกว่าช่องไหนคือช่องที่ผู้ใช้กำลังพิมพ์ จะได้ไม่เขียนทับสิ่งที่เขาพิมพ์ค้างไว้
+   */
+  function setPickedItem(item, typedField) {
     pickedItem = item || null;
-    estimateView.pickKeyCode.value = pickedItem ? (pickedItem.keyCode || "") : "";
+
+    if (typedField !== "desc") {
+      estimateView.pickItem.value = pickedItem ? pickedItem.description : "";
+    }
+    if (typedField !== "key") {
+      estimateView.pickKeyCode.value = pickedItem ? (pickedItem.keyCode || "") : "";
+    }
   }
 
-  function resetItemPicker() {
-    const section = (currentDept() || {}).section || "";
-
-    fillSelect(estimateView.pickGroup, groupsForSection(section), "", "-- ทุกกลุ่ม (พิมพ์ค้นหา) --");
-    estimateView.pickSearch.value = "";
+  /** ล้างช่องพัสดุทั้งหมด (ไม่แตะกลุ่ม) -- ใช้หลังเพิ่มพัสดุสำเร็จและตอนเปิดใบใหม่ */
+  function clearItemPick() {
     estimateView.pickIn.value = "";
     estimateView.pickRm.value = "";
     estimateView.pickRp.value = "";
     setPickedItem(null);
+  }
+
+  function resetItemPicker() {
+    fillSelect(estimateView.pickGroup, catalogGroups(), "", "-- ทุกกลุ่ม (พิมพ์ค้นหา) --");
+    clearItemPick();
     hideError(estimateView.pickError);
-    syncItemPickerMode();
+    syncItemPickerScope();
   }
 
   /**
-   * ไม่เลือกกลุ่ม = พิมพ์ค้นหาทั้งแค็ตตาล็อก, เลือกกลุ่ม = ดรอปดาวน์ของกลุ่มนั้น
+   * เปลี่ยนกลุ่ม = เปลี่ยนขอบเขตการค้นของทั้งสองช่อง
    *
-   * สองโหมดนี้ตอบสองสถานการณ์จริงคนละแบบ: รู้ว่าของอยู่กลุ่มไหนก็ไล่ดูจนเจอเร็ว
-   * กว่า ส่วนรู้แค่ชื่อของแต่ไม่รู้กลุ่ม การไล่เปิดทีละกลุ่มคือทางตัน
+   * ไม่มีโหมดสองแบบอีกแล้ว: ทั้งช่อง KeyCode และช่องชื่อรายการเป็นช่องพิมพ์ที่เสนอ
+   * ตัวเลือกระหว่างพิมพ์เหมือนกันทั้งคู่ ต่างกันแค่ค้นคนละคอลัมน์ การเลือกกลุ่มเป็นเพียง
+   * ตัวย่อขอบเขต ไม่ได้เปลี่ยนวิธีใช้งาน -- คนใช้จึงเรียนรู้ท่าเดียวแล้วใช้ได้ทุกกรณี
    */
-  function syncItemPickerMode() {
-    const section = (currentDept() || {}).section || "";
-    const group = estimateView.pickGroup.value;
-    const byGroup = Boolean(group);
-
-    estimateView.pickItem.hidden = !byGroup;
-    estimateView.pickSearch.hidden = byGroup;
-
-    if (byGroup) {
-      fillSelect(
-        estimateView.pickItem,
-        itemsForGroup(section, group).map(i => i.description),
-        "",
-        "-- เลือกรายการพัสดุ --"
-      );
-    }
-
+  function syncItemPickerScope() {
     setPickedItem(null);
+    suggestDescriptions();
+    suggestKeyCodes();
   }
 
   estimateView.pickGroup.addEventListener("change", () => {
     hideError(estimateView.pickError);
-    syncItemPickerMode();
+    syncItemPickerScope();
   });
 
-  estimateView.pickItem.addEventListener("change", () => {
-    const section = (currentDept() || {}).section || "";
-    const match = itemsForGroup(section, estimateView.pickGroup.value)
-      .find(i => i.description === estimateView.pickItem.value);
-    setPickedItem(match);
+  // input ครอบคลุมทั้งการพิมพ์เองและการเลือกจากรายการที่ datalist เสนอ
+  estimateView.pickItem.addEventListener("input", () => {
     hideError(estimateView.pickError);
+    suggestDescriptions();
+
+    // ตรงกับชื่อในแค็ตตาล็อกพอดีเท่านั้นจึงนับว่าเลือกแล้ว -- พิมพ์ค้างครึ่งทางยังไม่ใช่
+    const typed = estimateView.pickItem.value;
+    const exact = typed ? scopedRows().find(i => i.description === typed) : null;
+    setPickedItem(exact, "desc");
   });
 
-  estimateView.pickSearch.addEventListener("input", () => {
-    const section = (currentDept() || {}).section || "";
-    const matches = searchCatalog(section, estimateView.pickSearch.value);
+  estimateView.pickKeyCode.addEventListener("input", () => {
+    hideError(estimateView.pickError);
+    suggestKeyCodes();
 
-    estimateView.pickSearchList.innerHTML = "";
-    matches.forEach(item => {
-      const option = document.createElement("option");
-      option.value = item.description;
-      estimateView.pickSearchList.appendChild(option);
-    });
-
-    // เลือกจากรายการที่ขึ้นมา (หรือพิมพ์จนตรงพอดี) ถึงจะนับว่าเลือกแล้ว --
-    // พิมพ์ค้างครึ่งทางยังไม่ใช่การเลือก KeyCode จึงยังว่างอยู่
-    const exact = matches.find(i => i.description === estimateView.pickSearch.value);
-    setPickedItem(exact);
+    const typed = estimateView.pickKeyCode.value.trim();
+    const exact = typed ? scopedRows().find(i => (i.keyCode || "") === typed) : null;
+    setPickedItem(exact, "key");
   });
+
+  // คลิกช่องว่าง ๆ ตอนเลือกกลุ่มไว้ ต้องเห็นรายการทั้งกลุ่มเลย (suggestMinChars = 0)
+  // แทนที่ดรอปดาวน์เดิมที่เคยไล่ดูได้ -- ไม่งั้นความสามารถ "ดูว่ากลุ่มนี้มีอะไรบ้าง" จะหายไป
+  estimateView.pickItem.addEventListener("focus", suggestDescriptions);
+  estimateView.pickKeyCode.addEventListener("focus", suggestKeyCodes);
 
   /** อ่านจำนวนจากช่อง -- ว่าง = 0, อ่านไม่ออก = null (ให้ผู้เรียกทักท้วง) */
   function readQty(input) {
@@ -5302,12 +5501,7 @@
       showError(estimateView.pickError, `รวมจำนวนเข้ากับรายการเดิมแล้ว: ${pickedItem.description}`);
       estimateView.pickError.classList.add("is-notice");
 
-      estimateView.pickIn.value = "";
-      estimateView.pickRm.value = "";
-      estimateView.pickRp.value = "";
-      estimateView.pickSearch.value = "";
-      estimateView.pickItem.value = "";
-      setPickedItem(null);
+      clearItemPick();
       return;
     }
 
@@ -5325,12 +5519,7 @@
     markEstimateDirty();
 
     // ล้างเฉพาะจำนวนกับรายการ ไม่ล้างกลุ่ม -- พัสดุที่เพิ่มติด ๆ กันมักอยู่กลุ่มเดียวกัน
-    estimateView.pickIn.value = "";
-    estimateView.pickRm.value = "";
-    estimateView.pickRp.value = "";
-    estimateView.pickSearch.value = "";
-    estimateView.pickItem.value = "";
-    setPickedItem(null);
+    clearItemPick();
   });
 
   // หัวใบผูกสดกับโมเดลเหมือนช่องในตาราง
@@ -5540,7 +5729,7 @@ ${sheetHtml}
     document.getElementById("estAddItemBtn").disabled = busy;
     estimateView.pickGroup.disabled = busy;
     estimateView.pickItem.disabled = busy;
-    estimateView.pickSearch.disabled = busy;
+    estimateView.pickKeyCode.disabled = busy;
     estimateView.pickIn.disabled = busy;
     estimateView.pickRm.disabled = busy;
     estimateView.pickRp.disabled = busy;
@@ -5700,10 +5889,51 @@ ${sheetHtml}
    */
   const extendFormHome = extendForm.parentElement;
   const requestFormMetaHome = requestFormMeta.parentElement;
+  const extendFormLayout = extendPaneMeta.parentElement;
+
+  /**
+   * การ์ดสรุปมีสองที่อยู่ และเลือกที่อยู่ตามความกว้างจอ
+   *
+   * กว้างพอ -> เป็นคอลัมน์กลางระหว่างฟอร์มกับแผงประวัติ ซึ่งเป็นที่ว่างที่มีอยู่แล้ว
+   * ไม่พอ   -> ย้ายเข้าไปอยู่บนสุดของแผงขวา เหนือประวัติสถานะ
+   *
+   * เกณฑ์ 1640px ไม่ใช่ตัวเลขลอย ๆ แต่คือความกว้างที่สามคอลัมน์ต้องใช้จริง:
+   * 240 แถบซ้าย + 72 ขอบ + 480 ฟอร์ม + 32 ช่องไฟ + 340 การ์ด + 32 ช่องไฟ + 442 แผงขวา
+   * = 1638 ต่ำกว่านี้การ์ดจะไปเบียดฟอร์มให้แคบลง ซึ่งห้ามเกิดขึ้น -- ฟอร์มคือสิ่งที่
+   * คนกำลังทำงานด้วย การ์ดเป็นแค่ของแถม ของแถมต้องหลบ ไม่ใช่ให้ของหลักหลบ
+   *
+   * ทำด้วย JS ไม่ใช่ CSS เพราะสองที่นี้อยู่คนละกิ่งของ DOM -- media query ย้าย
+   * โหนดไม่ได้ ทำได้แค่ขยับตำแหน่งในกิ่งเดียวกัน (ความพยายามครั้งก่อนที่ใช้
+   * flex-wrap + order ล้มเพราะ max-width ไปหักล้าง width: 100% การ์ดจึงไม่ตก
+   * บรรทัดจริง กลายเป็นก้อนแทรกซ้ายและบีบฟอร์มแทน)
+   */
+  const summaryWideLayout = window.matchMedia("(min-width: 1640px)");
+
+  function placeSummaryCard() {
+    // แผงขวาเป็นโหนดที่ถูกย้ายไปมาระหว่างสองหน้าอยู่แล้ว ดูจากพ่อแม่ของมันว่า
+    // ตอนนี้อยู่หน้าไหน จะได้ไม่ต้องส่งสถานะ "อยู่หน้าไหน" มาอีกทาง
+    const inExtend = requestFormMeta.parentElement === extendPaneMeta;
+
+    const parent = summaryWideLayout.matches
+      ? (inExtend ? extendFormLayout : requestFormMetaHome)
+      : requestFormMeta;
+    const before = summaryWideLayout.matches
+      ? (inExtend ? extendPaneMeta : requestFormMeta)
+      : requestFormStatusHistory;
+
+    if (requestFormSummary.parentElement === parent
+      && requestFormSummary.nextSibling === before) return;
+
+    parent.insertBefore(requestFormSummary, before);
+  }
+
+  // ลากขอบหน้าต่างข้ามเกณฑ์แล้วต้องย้ายตาม ไม่ใช่ค้างผิดที่จนกว่าจะเปิดฟอร์มใหม่
+  summaryWideLayout.addEventListener("change", placeSummaryCard);
 
   function mountExtendDetail() {
     if (extendForm.parentElement !== extendPaneForm) extendPaneForm.appendChild(extendForm);
     if (requestFormMeta.parentElement !== extendPaneMeta) extendPaneMeta.appendChild(requestFormMeta);
+    placeSummaryCard();
   }
 
   function unmountExtendDetail() {
@@ -5711,6 +5941,8 @@ ${sheetHtml}
     if (requestFormMeta.parentElement !== requestFormMetaHome) {
       requestFormMetaHome.appendChild(requestFormMeta);
     }
+    // ต้องย้ายแผงขวากลับก่อน -- placeSummaryCard อ่านพ่อแม่ของแผงเพื่อรู้ว่าอยู่หน้าไหน
+    placeSummaryCard();
   }
 
   /** แถบซ้ายของหน้ารายละเอียด -- แต่ละปุ่มคือขั้นตอนหนึ่งของงาน */
@@ -5721,6 +5953,8 @@ ${sheetHtml}
 
     extendPaneForm.hidden = name !== "form";
     extendPaneMeta.hidden = name !== "form";
+    // การ์ดสรุปอยู่คู่กับแผงประวัติ -- แสดงเฉพาะหน้ารายละเอียดคำร้อง และเฉพาะคำร้องที่บันทึกแล้ว
+    requestFormSummary.hidden = name !== "form" || !summaryRecord;
     extPlanSection.hidden = name !== "plan" || !extendStage.plan;
     extPhotoSection.hidden = name !== "photo" || !extendStage.photo;
     extEstimateSection.hidden = name !== "estimate" || !extendStage.estimate;

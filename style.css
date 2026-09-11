@@ -1011,6 +1011,136 @@ button:active {
   color: var(--ink-soft);
 }
 
+/* การ์ดสรุปคำร้อง -- ออกแบบมาเพื่อ "แคปหน้าจอแล้วส่งต่อได้เลย" เวลาลูกค้าโทรมา
+   ตามงาน จึงยกเป็นกล่องพื้นสีอ่อนมีขอบชัด ครอปภาพได้ตรงกรอบโดยไม่ติดของรอบข้าง
+   และมีชื่อประเภทคำร้องกำกับอยู่ในกล่อง เพราะพอภาพหลุดไปอยู่ในแชทแล้ว
+   จะไม่เหลืออะไรบอกว่านี่คือคำร้องประเภทไหน
+
+   เป็นคอลัมน์กลางของ .form-layout ระหว่างฟอร์มกับแผงประวัติ -- ที่ว่างตรงนี้มีอยู่แล้ว
+   บนจอกว้าง เพราะ .request-form ถูกจำกัดไว้ที่ 480px ส่วน .form-main เป็น flex: 1
+   ที่เหลือจึงว่างเปล่ามาแต่ไหนแต่ไร
+
+   sticky เหมือนแผงขวา ไม่ใช่เพื่อความสวย -- ฟอร์มขอขยายเขตฯ ยาวมาก เลื่อนไปสักพัก
+   จะจำไม่ได้ว่ากำลังแก้คำร้องใบไหน การ์ดที่ติดตาไปด้วยจึงทำหน้าที่เป็นป้ายบอกใบงาน */
+.req-summary {
+  width: 340px;
+  flex-shrink: 0;
+  padding: 14px 16px 16px;
+  border: 1px solid var(--volt-100);
+  border-radius: 12px;
+  background: var(--volt-50);
+  position: sticky;
+  top: calc(var(--topbar-h) + 16px);
+}
+
+/* สถานะที่สอง: จอไม่กว้างพอจะมีคอลัมน์กลาง การ์ดถูกย้ายเข้าไปอยู่บนสุดของแผงขวา
+   เหนือประวัติสถานะ (placeSummaryCard ใน app.js เป็นคนย้าย) แยกสองสถานะด้วย
+   "พ่อแม่เป็นใคร" ไม่ต้องสลับคลาสให้มีสองที่ที่ต้องตรงกัน -- ในแผงขวาการ์ดกว้าง
+   เต็มแผงและไม่ sticky ซ้อนอีกชั้น เพราะตัวแผงเองก็ sticky อยู่แล้ว */
+.form-side > .req-summary {
+  width: auto;
+  position: static;
+}
+
+.req-summary[hidden] {
+  display: none;
+}
+
+.req-summary-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.req-summary-head[hidden] {
+  display: none;
+}
+
+.req-summary-title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--volt-700);
+}
+
+/* ปุ่มคัดลอกเป็นเครื่องมือของเจ้าหน้าที่ ไม่ใช่เนื้อหาที่ต้องการให้ติดไปในภาพ
+   จึงทำให้เล็กและจางกว่าปุ่มปกติ ไม่ให้แย่งสายตาในภาพที่แคปไป */
+.req-summary-copy {
+  flex-shrink: 0;
+  padding: 4px 10px;
+  border-radius: 8px;
+  background: var(--white);
+  font-size: 11.5px;
+  color: var(--ink-soft);
+}
+
+.req-summary-type {
+  margin: 3px 0 12px;
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.3;
+  color: var(--volt-900);
+}
+
+/* กริดสองคอลัมน์ ไม่ใช่ flex ทีละแถว -- ค่าทุกบรรทัดจะได้เริ่มตรงกันเป็นแนวเดียว
+   ซึ่งอ่านง่ายกว่ามากในภาพนิ่งที่ผู้อ่านเลื่อนดูหรือกดขยายทีละส่วนไม่ได้ */
+.req-summary-list {
+  display: grid;
+  grid-template-columns: 104px minmax(0, 1fr);
+  gap: 9px 12px;
+  margin: 0;
+  align-items: baseline;
+}
+
+.req-summary-list[hidden] {
+  display: none;
+}
+
+.req-summary-list dt {
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--ink-soft);
+}
+
+.req-summary-list dd {
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: var(--ink);
+  /* ที่อยู่และชื่อลูกค้ายาวได้ไม่จำกัด -- ให้ตัดขึ้นบรรทัดใหม่แทนที่จะดันกล่องกว้างออก */
+  overflow-wrap: anywhere;
+}
+
+.req-summary-list dd .request-badge {
+  font-size: 12.5px;
+  padding: 3px 10px;
+}
+
+/* เลขที่คำร้องและวันที่เป็นค่าที่คนอ่านออกเสียงตามหรือพิมพ์ตาม ฟอนต์โมโนช่วยให้
+   ตัวเลขที่หน้าตาคล้ายกันไม่กลืนกัน -- เหตุผลเดียวกับที่ใช้ที่อื่นในระบบ */
+.req-summary-mono {
+  font-family: var(--font-mono);
+  font-size: 13px;
+}
+
+/* เบอร์โทรกับพิกัดกดได้จริง (tel: / นำทางบน Google Maps) -- ผู้รับผิดชอบมักเปิดการ์ดนี้
+   ตอนอยู่หน้างานบนมือถือ ทำเป็นเส้นใต้จาง ๆ ไม่ใช่ลิงก์สีน้ำเงินเต็มตัว เพราะในภาพที่
+   แคปไปมันควรอ่านเป็นข้อมูลบรรทัดหนึ่งเหมือนบรรทัดอื่น ไม่ใช่ปุ่มที่กดในภาพไม่ได้ */
+.req-summary-link {
+  color: var(--ink);
+  text-decoration: underline;
+  text-decoration-color: var(--border-strong);
+  text-underline-offset: 3px;
+}
+
+.req-summary-link:hover {
+  color: var(--volt-500);
+  text-decoration-color: var(--volt-300);
+}
+
 /* Status trail: oldest at the top, most recent change at the bottom */
 .status-history {
   display: flex;
@@ -1745,14 +1875,13 @@ span.estimate-crumb {
 
 .est-picker-grid {
   display: grid;
-  grid-template-columns: minmax(150px, 1fr) minmax(260px, 2.2fr) 118px repeat(3, 92px);
+  grid-template-columns: minmax(150px, 1fr) 150px minmax(260px, 2.2fr) repeat(3, 92px);
   gap: 12px;
   align-items: end;
 }
 
-/* ดรอปดาวน์กับช่องค้นหาซ้อนตำแหน่งเดียวกัน สลับกันตามว่าเลือกกลุ่มไว้หรือไม่ */
-.est-picker-item select,
-.est-picker-item input {
+.est-picker-item input,
+.est-picker-key input {
   width: 100%;
 }
 

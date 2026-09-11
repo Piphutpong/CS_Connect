@@ -25,7 +25,7 @@
 <title>CS Connect</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=Sarabun:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=20260910c">
+<link rel="stylesheet" href="style.css?v=20260911f">
 </head>
 <body>
 
@@ -461,7 +461,7 @@
               </div>
               <div class="field">
                 <label for="reqMoo">หมู่</label>
-                <input type="text" id="reqMoo" placeholder="หมู่ที่" inputmode="numeric" required autocomplete="off">
+                <input type="text" id="reqMoo" placeholder="หมู่ที่ (ถ้ามี)" inputmode="numeric" autocomplete="off">
               </div>
             </div>
 
@@ -666,16 +666,23 @@
 
             <div class="field-row">
               <div class="field">
+                <label for="extDeed">โฉนด</label>
+                <input type="text" id="extDeed" placeholder="เลขที่โฉนด (ถ้ามี)" autocomplete="off">
+              </div>
+              <div class="field">
                 <label for="extHouseNo">บ้านเลขที่</label>
                 <input type="text" id="extHouseNo" placeholder="บ้านเลขที่ (ถ้ามี)" autocomplete="off">
+              </div>
+            </div>
+
+            <div class="field-row">
+              <div class="field">
+                <label for="extVillage">หมู่บ้าน</label>
+                <input type="text" id="extVillage" placeholder="ชื่อหมู่บ้าน (ถ้ามี)" autocomplete="off">
               </div>
               <div class="field">
                 <label for="extMoo">หมู่</label>
                 <input type="text" id="extMoo" placeholder="หมู่ที่ (ถ้ามี)" inputmode="numeric" autocomplete="off">
-              </div>
-              <div class="field">
-                <label for="extVillage">หมู่บ้าน</label>
-                <input type="text" id="extVillage" placeholder="ชื่อหมู่บ้าน (ถ้ามี)" autocomplete="off">
               </div>
             </div>
 
@@ -713,11 +720,6 @@
             <!-- งานขยายเขตฯ หลายงานอยู่นอกบ้านเลขที่ (กลางทุ่ง ริมถนน ท้ายซอย)
                  ช่องนี้จึงยังต้องมี และเป็นที่เก็บของคำร้องเก่าที่บันทึกสถานที่
                  เป็นข้อความล้วนไว้ก่อนมีดรอปดาวน์ -->
-            <div class="field">
-              <label for="extDeed">โฉนด</label>
-              <input type="text" id="extDeed" placeholder="เลขที่โฉนด (ถ้ามี)" autocomplete="off">
-            </div>
-
             <div class="field">
               <label for="extLocation">รายละเอียดสถานที่เพิ่มเติม</label>
               <textarea id="extLocation" rows="2" placeholder="จุดสังเกต / รายละเอียดเพิ่มเติม (ถ้ามี)"></textarea>
@@ -837,6 +839,21 @@
           <p class="placeholder-note">แบบฟอร์มสำหรับคำร้องประเภทนี้อยู่ระหว่างการพัฒนา เร็ว ๆ นี้จะสามารถกรอกคำร้องประเภทนี้ได้จากหน้านี้</p>
         </div>
         </div>
+
+          <!-- การ์ดสรุป -- อยู่เป็นคอลัมน์กลางของตัวเอง ไม่ได้อยู่ในแผงประวัติ เพราะสองอย่างนี้
+               ตอบคนละคำถาม: แผงขวาคือ "งานนี้เดินมาถึงไหนแล้ว" ส่วนการ์ดนี้คือ "งานนี้คืองานอะไร
+               ของใคร" ซึ่งเป็นสิ่งที่ต้องส่งต่อให้ผู้รับผิดชอบตอนลูกค้าโทรมาตามงาน
+               ที่ว่างตรงนี้มีอยู่แล้วบนจอกว้าง (.request-form ถูกจำกัดที่ 480px) จึงไม่ได้เบียดอะไร
+               และไม่ไปดันช่องคอมเมนต์ในแผงขวาให้ตกใต้ขอบจอ -- ดู .req-summary ใน style.css
+               ว่าจอที่แคบเกินไปจะสลับไปวางไว้เหนือฟอร์มแทน -->
+          <section id="requestFormSummary" class="req-summary" hidden>
+            <div class="req-summary-head">
+              <p class="req-summary-title">สรุปคำร้อง</p>
+              <button type="button" id="requestSummaryCopyBtn" class="btn btn-ghost req-summary-copy">คัดลอกข้อความ</button>
+            </div>
+            <p id="requestSummaryType" class="req-summary-type"></p>
+            <dl id="requestSummaryList" class="req-summary-list"></dl>
+          </section>
 
           <aside id="requestFormMeta" class="form-side" hidden>
             <div id="requestFormStatusHistory" class="status-history"></div>
@@ -1152,20 +1169,20 @@
             </select>
           </div>
 
-          <div class="field est-picker-item">
-            <label for="estPickItem">รายการพัสดุ</label>
-            <!-- สองช่องซ้อนที่เดียวกัน: เลือกกลุ่มแล้วใช้ดรอปดาวน์ (เหลือไม่กี่สิบ
-                 รายการ) ไม่เลือกกลุ่มก็พิมพ์ค้นหาจากทั้งแค็ตตาล็อกได้ -->
-            <select id="estPickItem">
-              <option value="">-- เลือกรายการพัสดุ --</option>
-            </select>
-            <input type="text" id="estPickSearch" list="estPickSearchList" placeholder="พิมพ์เพื่อค้นหารายการพัสดุ" autocomplete="off" hidden>
-            <datalist id="estPickSearchList"></datalist>
-          </div>
-
+          <!-- KeyCode มาก่อนชื่อรายการ เพราะเป็นตัวระบุจริงของพัสดุ และคนที่จำรหัสได้
+               จะเริ่มจากช่องนี้ -- ทั้งสองช่องเป็นช่องพิมพ์ที่เสนอตัวเลือกระหว่างพิมพ์
+               (datalist) เหมือนกัน ต่างแค่ค้นคนละคอลัมน์ พิมพ์ช่องไหนอีกช่องเติมให้เอง
+               เมื่อตรงกับรายการในแค็ตตาล็อกจริง ถ้าเลือกกลุ่มไว้ ทั้งคู่จะค้นเฉพาะในกลุ่มนั้น -->
           <div class="field est-picker-key">
             <label for="estPickKeyCode">KeyCode</label>
-            <input type="text" id="estPickKeyCode" readonly tabindex="-1" placeholder="&mdash;">
+            <input type="text" id="estPickKeyCode" list="estPickKeyList" placeholder="พิมพ์รหัสพัสดุ" autocomplete="off">
+            <datalist id="estPickKeyList"></datalist>
+          </div>
+
+          <div class="field est-picker-item">
+            <label for="estPickItem">รายการพัสดุ</label>
+            <input type="text" id="estPickItem" list="estPickItemList" placeholder="พิมพ์ชื่อรายการพัสดุ" autocomplete="off">
+            <datalist id="estPickItemList"></datalist>
           </div>
 
           <div class="field est-picker-qty">
@@ -1242,6 +1259,6 @@
      ที่หาสาเหตุยากมาก
      **ต้องเปลี่ยนเลขนี้ทุกครั้งที่แก้ app.js / style.css / track.js / qr.js**
      ไม่งั้นผู้ใช้บางคนจะยังได้ไฟล์เก่าไปอีกพักใหญ่ -->
-<script src="app.js?v=20260910c"></script>
+<script src="app.js?v=20260911f"></script>
 </body>
 </html>
