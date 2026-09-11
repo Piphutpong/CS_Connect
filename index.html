@@ -25,7 +25,7 @@
 <title>CS Connect</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=Sarabun:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=20260911f">
+<link rel="stylesheet" href="style.css?v=20260911g">
 </head>
 <body>
 
@@ -1156,6 +1156,44 @@
 
       <p id="estCatalogNote" class="field-hint"></p>
 
+      <!-- ชุดเซ็ตพัสดุ -- งานแบบเดิม ๆ (เช่น ติดตั้งหม้อแปลงสปอตโหลด 3-P 50 kVA)
+           ใช้พัสดุชุดเดิมสิบกว่ารายการทุกครั้ง เลือกทีละตัวสิบสี่รอบคือการพิมพ์ซ้ำ
+           ของที่รู้อยู่แล้ว แผงนี้จึงอยู่ "เหนือ" แผงเลือกทีละตัว เพราะเป็นทางที่ควร
+           ลองก่อน แล้วค่อยเก็บรายละเอียดที่เหลือทีละตัวด้านล่าง
+           สร้าง/ลบชุดเซ็ตเป็นสิทธิ์ของผู้ดูแลระบบ ปุ่มจึงซ่อนไว้กับคนอื่น (ของจริง
+           กันที่ฝั่งเซิร์ฟเวอร์ -- ดู saveEstimateKit_ / deleteEstimateKit_) -->
+      <div class="est-kits">
+        <div class="est-kits-row">
+          <div class="field est-kits-pick">
+            <label for="estKitSelect">ชุดเซ็ตพัสดุ</label>
+            <select id="estKitSelect">
+              <option value="">-- เลือกชุดเซ็ต --</option>
+            </select>
+          </div>
+          <button type="button" id="estKitAddBtn" class="btn btn-primary">+ เพิ่มทั้งชุด</button>
+          <button type="button" id="estKitSaveBtn" class="btn btn-ghost" hidden>บันทึกงานย่อยนี้เป็นชุดเซ็ต</button>
+          <button type="button" id="estKitDeleteBtn" class="btn btn-danger-ghost" hidden>ลบชุดเซ็ต</button>
+        </div>
+
+        <p id="estKitHint" class="field-hint"></p>
+        <p id="estKitError" class="form-error" hidden></p>
+
+        <div id="estKitSaveForm" class="est-kit-save" hidden>
+          <div class="field">
+            <label for="estKitName">ชื่อชุดเซ็ต</label>
+            <input type="text" id="estKitName" placeholder="เช่น ติดตั้งหม้อแปลงสปอตโหลด 3-P, 50 kVA" autocomplete="off">
+          </div>
+          <div class="field">
+            <label for="estKitNote">หมายเหตุ (ถ้ามี)</label>
+            <input type="text" id="estKitNote" placeholder="คำอธิบายสั้น ๆ" autocomplete="off">
+          </div>
+          <div class="batch-toolbar">
+            <button type="button" id="estKitSaveConfirmBtn" class="btn btn-primary">บันทึกชุดเซ็ต</button>
+            <button type="button" id="estKitSaveCancelBtn" class="btn btn-ghost">ยกเลิก</button>
+          </div>
+        </div>
+      </div>
+
       <!-- แผงเลือกพัสดุ: เลือกกลุ่ม -> เลือกรายการ -> ป้อนจำนวน -> กดเพิ่ม
            รายการจะลงตารางด้านล่างก็ต่อเมื่อกดเพิ่มแล้วเท่านั้น -->
       <div class="est-picker">
@@ -1259,6 +1297,6 @@
      ที่หาสาเหตุยากมาก
      **ต้องเปลี่ยนเลขนี้ทุกครั้งที่แก้ app.js / style.css / track.js / qr.js**
      ไม่งั้นผู้ใช้บางคนจะยังได้ไฟล์เก่าไปอีกพักใหญ่ -->
-<script src="app.js?v=20260911f"></script>
+<script src="app.js?v=20260911g"></script>
 </body>
 </html>

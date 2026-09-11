@@ -262,6 +262,14 @@
 
     async listEstimateItems() {
       throw new Error("โหมดออฟไลน์ไม่รองรับรายการประมาณการ");
+    },
+
+    async saveEstimateKit() {
+      throw new Error("โหมดออฟไลน์ไม่รองรับชุดเซ็ตพัสดุ");
+    },
+
+    async deleteEstimateKit() {
+      throw new Error("โหมดออฟไลน์ไม่รองรับชุดเซ็ตพัสดุ");
     }
 
     // track()/uploadSlip() live in track.js now -- the public tracking page
@@ -506,6 +514,14 @@
       // แค็ตตาล็อกรายการประมาณการ -- ข้อมูลตั้งต้น ดึงครั้งเดียวต่อการเปิดเว็บ
       async listEstimateItems() {
         return callAsUser({ action: "listEstimateItems" });
+      },
+
+      async saveEstimateKit(kit) {
+        return callAsUser({ action: "saveEstimateKit", kit });
+      },
+
+      async deleteEstimateKit(id) {
+        return callAsUser({ action: "deleteEstimateKit", id });
       },
 
       // แนบไฟล์ของงานขอขยายเขตฯ (แผนผัง / ภาพสถานที่ / ภาพเส้นทาง) -- ฝั่ง
@@ -1588,6 +1604,11 @@
 
     document.getElementById("batchRows").innerHTML = "";
     document.getElementById("batchResult").hidden = true;
+
+    // แค็ตตาล็อกและชุดเซ็ตเป็นข้อมูลที่ดึงมาด้วย token ของคนที่เพิ่งออกจากระบบ
+    // และชุดเซ็ตยังติดชื่อคนสร้างมาด้วย -- ทิ้งไปให้คนถัดไปดึงใหม่ด้วย token ของตัวเอง
+    estimateCatalog = null;
+    estimateKits = [];
 
     document.getElementById("extendWorkList").innerHTML = "";
     document.getElementById("extendWorkChips").innerHTML = "";
@@ -4788,6 +4809,17 @@
     pickRm: document.getElementById("estPickRm"),
     pickRp: document.getElementById("estPickRp"),
     pickError: document.getElementById("estPickError"),
+    kitSelect: document.getElementById("estKitSelect"),
+    kitAddBtn: document.getElementById("estKitAddBtn"),
+    kitSaveBtn: document.getElementById("estKitSaveBtn"),
+    kitDeleteBtn: document.getElementById("estKitDeleteBtn"),
+    kitHint: document.getElementById("estKitHint"),
+    kitError: document.getElementById("estKitError"),
+    kitSaveForm: document.getElementById("estKitSaveForm"),
+    kitName: document.getElementById("estKitName"),
+    kitNote: document.getElementById("estKitNote"),
+    kitSaveConfirmBtn: document.getElementById("estKitSaveConfirmBtn"),
+    kitSaveCancelBtn: document.getElementById("estKitSaveCancelBtn"),
     jobName: document.getElementById("estJobName"),
     investment: document.getElementById("estInvestment"),
     catalogNote: document.getElementById("estCatalogNote"),
@@ -4804,6 +4836,7 @@
   let estimateJobIndex = -1;
   let estimateDirty = false;
   let estimateCatalog = null;   // [{ keyCode, description }]
+  let estimateKits = [];        // [{ id, name, note, items: [...] }]
   let estimateLists = null;     // { section: [], group: [], investment: [] }
 
   function markEstimateDirty() {
@@ -4823,6 +4856,7 @@
     const data = await backend.listEstimateItems();
     estimateCatalog = data.items || [];
     estimateLists = data.lists || { section: [], group: [], investment: [] };
+    estimateKits = Array.isArray(data.kits) ? data.kits : [];
 
     estimateView.catalogNote.textContent = estimateCatalog.length
       ? `รายการตั้งต้นในระบบ ${estimateCatalog.length} รายการ (ใช้ร่วมกันทุกแผนก) · พิมพ์ค้นได้ทั้งช่อง KeyCode และช่องชื่อรายการ พิมพ์ช่องไหนอีกช่องเติมให้เอง · เลือกกลุ่มไว้จะค้นเฉพาะในกลุ่มนั้น`
@@ -5071,6 +5105,9 @@
 
     renderEstimateRows();
     resetItemPicker();
+    estimateView.kitSaveForm.hidden = true;
+    hideError(estimateView.kitError);
+    refreshKitControls();
   }
 
   /**
@@ -5441,6 +5478,298 @@
   // แทนที่ดรอปดาวน์เดิมที่เคยไล่ดูได้ -- ไม่งั้นความสามารถ "ดูว่ากลุ่มนี้มีอะไรบ้าง" จะหายไป
   estimateView.pickItem.addEventListener("focus", suggestDescriptions);
   estimateView.pickKeyCode.addEventListener("focus", suggestKeyCodes);
+
+  /* ---------- ชุดเซ็ตพัสดุ ---------- */
+
+  /** ชุดเซ็ตที่เลือกค้างอยู่ในดรอปดาวน์ (null = ยังไม่ได้เลือก) */
+  function currentKit() {
+    const id = estimateView.kitSelect.value;
+    if (!id) return null;
+    return estimateKits.find(kit => String(kit.id) === id) || null;
+  }
+
+  /**
+   * เทียบว่าพัสดุสองรายการคือ "ตัวเดียวกัน" หรือไม่
+   *
+   * เทียบด้วย KeyCode ก่อนเสมอ เพราะเป็นรหัสจริงของพัสดุ ส่วนชื่อรายการเป็นแค่
+   * คำอธิบายที่ กฟภ. แก้เมื่อไหร่ก็ได้ -- กติกาเดียวกับตอนเพิ่มพัสดุทีละตัว
+   * ถ้าไม่มีรหัส (แค็ตตาล็อกบางแถวไม่มี) จึงค่อยถอยไปเทียบชื่อ
+   */
+  function sameMaterial(a, b) {
+    if (a.keyCode && b.keyCode) return a.keyCode === b.keyCode;
+    if (a.keyCode || b.keyCode) return false;
+    return a.description === b.description;
+  }
+
+  function refreshKitControls() {
+    const previous = estimateView.kitSelect.value;
+
+    fillSelect(
+      estimateView.kitSelect,
+      estimateKits.map(kit => String(kit.id)),
+      estimateKits.some(kit => String(kit.id) === previous) ? previous : "",
+      estimateKits.length ? "-- เลือกชุดเซ็ต --" : "-- ยังไม่มีชุดเซ็ตในระบบ --"
+    );
+
+    // fillSelect ใส่ value เป็น id ซึ่งคนอ่านไม่รู้เรื่อง -- เขียนทับข้อความที่แสดงด้วยชื่อจริง
+    Array.from(estimateView.kitSelect.options).forEach(option => {
+      const kit = estimateKits.find(k => String(k.id) === option.value);
+      if (kit) option.textContent = `${kit.name} (${(kit.items || []).length} รายการ)`;
+    });
+
+    // ปุ่มสร้าง/ลบซ่อนไว้กับคนที่ไม่ใช่ผู้ดูแลระบบ -- เป็นแค่การจัดหน้าจอ ของจริง
+    // กันที่ requireAdmin_ ฝั่งเซิร์ฟเวอร์ ซึ่งใครแก้ flag ในเบราว์เซอร์ก็ผ่านไม่ได้
+    const admin = Boolean((getSession() || {}).isAdmin);
+    estimateView.kitSaveBtn.hidden = !admin;
+    estimateView.kitDeleteBtn.hidden = !admin;
+
+    updateKitHint();
+  }
+
+  function updateKitHint() {
+    const kit = currentKit();
+    if (!kit) {
+      estimateView.kitHint.textContent = estimateKits.length
+        ? "เลือกชุดเซ็ตแล้วกด “เพิ่มทั้งชุด” พัสดุทุกรายการในชุดจะลงตารางให้พร้อมจำนวนตั้งต้น"
+        : "ยังไม่มีชุดเซ็ต — ผู้ดูแลระบบสร้างได้จากงานย่อยที่ทำเสร็จแล้ว ด้วยปุ่มบันทึกเป็นชุดเซ็ต";
+      return;
+    }
+
+    const parts = [`${(kit.items || []).length} รายการ`];
+    if (kit.note) parts.push(kit.note);
+    if (kit.createdByName) parts.push(`สร้างโดย ${kit.createdByName}`);
+    estimateView.kitHint.textContent = parts.join(" · ");
+  }
+
+  /**
+   * ไฮไลต์แถวที่เพิ่งเปลี่ยนจากการเพิ่มชุดเซ็ต แล้วจางหายเอง
+   *
+   * เพิ่มทีเดียวสิบสี่รายการ แล้วบางตัวถูกบวกรวมเข้ากับแถวเดิมที่อยู่กลางตาราง คือ
+   * กรณีที่หน้าจอ "ดูเหมือนไม่มีอะไรเกิดขึ้น" ได้ง่ายมาก แล้วคนจะกดซ้ำ จำนวนก็เบิ้ล
+   * โดยไม่รู้ตัว ข้อความสรุปอย่างเดียวไม่พอ เพราะมันไม่ได้บอกว่าไปโดนแถวไหน
+   */
+  function flashKitRows(marks) {
+    const rows = Array.from(estimateView.rows.children);
+
+    marks.forEach((kind, index) => {
+      const row = rows[index];
+      if (!row || !kind) return;
+      row.classList.add(kind === "merged" ? "is-kit-merged" : "is-kit-new");
+    });
+
+    const first = marks.findIndex(Boolean);
+    if (first !== -1 && rows[first]) {
+      rows[first].scrollIntoView({ block: "nearest", behavior: "smooth" });
+    }
+
+    setTimeout(() => {
+      rows.forEach(row => row.classList.remove("is-kit-new", "is-kit-merged"));
+    }, 2600);
+  }
+
+  estimateView.kitSelect.addEventListener("change", () => {
+    hideError(estimateView.kitError);
+    updateKitHint();
+  });
+
+  estimateView.kitAddBtn.addEventListener("click", () => {
+    const job = currentJob();
+    if (!job) return;
+    if (!Array.isArray(job.items)) job.items = [];
+
+    hideError(estimateView.kitError);
+
+    const kit = currentKit();
+    if (!kit) {
+      showError(estimateView.kitError, "กรุณาเลือกชุดเซ็ตก่อน");
+      return;
+    }
+
+    const kitItems = kit.items || [];
+    if (!kitItems.length) {
+      showError(estimateView.kitError, "ชุดเซ็ตนี้ไม่มีพัสดุอยู่เลย");
+      return;
+    }
+
+    // เกินครึ่งของชุดมีอยู่ในใบแล้ว = สัญญาณว่าน่าจะกดชุดเดิมซ้ำ ถามก่อนดีกว่าบวกเงียบ ๆ
+    const already = kitItems.filter(kitItem =>
+      job.items.some(item => sameMaterial(item, kitItem))).length;
+
+    if (already > kitItems.length / 2) {
+      const ok = window.confirm(
+        `พัสดุในชุดนี้ ${already} จาก ${kitItems.length} รายการมีอยู่ในงานย่อยนี้แล้ว\n`
+        + "กดตกลงเพื่อบวกจำนวนเพิ่มเข้าไปในรายการเดิม"
+      );
+      if (!ok) return;
+    }
+
+    let added = 0;
+    let missing = 0;
+    // เก็บ "ตัวออบเจกต์" ของแถวที่ถูกบวกรวม ไม่ใช่เลขลำดับ -- ลำดับของแถวเดิมไม่ขยับ
+    // ก็จริง แต่การอ้างด้วยตัวออบเจกต์ตรง ๆ ไม่ต้องไปพึ่งข้อสมมตินั้นเลย
+    const mergedItems = new Set();
+
+    kitItems.forEach(kitItem => {
+      // แค็ตตาล็อกวันนี้ไม่มีรายการนี้แล้ว -- ยังเพิ่มให้ตามปกติ แต่ต้องบอกให้รู้
+      // ชุดเซ็ตเก็บชื่อและกลุ่มไว้ในตัวเอง จึงประกอบกลับได้แม้ กฟภ. ถอดพัสดุออกไปแล้ว
+      if (!catalogRows().some(row => sameMaterial(row, kitItem))) missing += 1;
+
+      const existing = job.items.find(item => sameMaterial(item, kitItem));
+
+      if (existing) {
+        ["in", "rm", "rp"].forEach(key => {
+          const total = (Number(existing[key]) || 0) + (Number(kitItem[key]) || 0);
+          existing[key] = total ? String(total) : "";
+        });
+        mergedItems.add(existing);
+        return;
+      }
+
+      job.items.push({
+        group: kitItem.group || "",
+        description: kitItem.description,
+        keyCode: kitItem.keyCode || "",
+        in: kitItem.in || "",
+        rm: kitItem.rm || "",
+        rp: kitItem.rp || ""
+      });
+      added += 1;
+    });
+
+    // แถวที่เพิ่มใหม่ถูกต่อท้ายเสมอ ทุกแถวตั้งแต่ตำแหน่งนี้ไปคือของใหม่
+    const firstNew = job.items.length - added;
+    const marks = job.items.map((item, index) => {
+      if (index >= firstNew) return "new";
+      return mergedItems.has(item) ? "merged" : "";
+    });
+
+    renderEstimateRows();
+    markEstimateDirty();
+    flashKitRows(marks);
+
+    const summary = [`เพิ่มชุด “${kit.name}” · ${kitItems.length} รายการ`];
+    if (added) summary.push(`ใหม่ ${added}`);
+    if (mergedItems.size) summary.push(`รวมกับรายการเดิม ${mergedItems.size}`);
+    if (missing) summary.push(`ไม่พบในแค็ตตาล็อกปัจจุบัน ${missing} (เพิ่มให้แล้ว)`);
+
+    showError(estimateView.kitError, summary.join(" · "));
+    estimateView.kitError.classList.add("is-notice");
+  });
+
+  /* ---------- สร้าง / ลบ ชุดเซ็ต (ผู้ดูแลระบบ) ---------- */
+
+  estimateView.kitSaveBtn.addEventListener("click", () => {
+    hideError(estimateView.kitError);
+
+    const job = currentJob();
+    if (!job || !(job.items || []).length) {
+      showError(estimateView.kitError, "งานย่อยนี้ยังไม่มีพัสดุให้บันทึกเป็นชุดเซ็ต");
+      return;
+    }
+
+    // เลือกชุดไว้ = ตั้งใจเขียนทับชุดนั้น ไม่ได้เลือก = สร้างชุดใหม่
+    const kit = currentKit();
+    estimateView.kitName.value = kit ? kit.name : (job.name || "");
+    estimateView.kitNote.value = kit ? kit.note : "";
+    estimateView.kitSaveForm.hidden = false;
+    estimateView.kitName.focus();
+  });
+
+  estimateView.kitSaveCancelBtn.addEventListener("click", () => {
+    estimateView.kitSaveForm.hidden = true;
+    hideError(estimateView.kitError);
+  });
+
+  estimateView.kitSaveConfirmBtn.addEventListener("click", async () => {
+    const job = currentJob();
+    if (!job) return;
+
+    hideError(estimateView.kitError);
+
+    const name = estimateView.kitName.value.trim();
+    if (!name) {
+      showError(estimateView.kitError, "กรุณาตั้งชื่อชุดเซ็ต");
+      return;
+    }
+
+    const items = (job.items || [])
+      .filter(item => item.description)
+      .map(item => ({
+        keyCode: item.keyCode || "",
+        description: item.description,
+        group: item.group || "",
+        in: item.in || "",
+        rm: item.rm || "",
+        rp: item.rp || ""
+      }));
+
+    if (!items.length) {
+      showError(estimateView.kitError, "งานย่อยนี้ยังไม่มีพัสดุให้บันทึกเป็นชุดเซ็ต");
+      return;
+    }
+
+    const existing = currentKit();
+    if (existing) {
+      const ok = window.confirm(`เขียนทับชุดเซ็ต “${existing.name}” ด้วยพัสดุ ${items.length} รายการนี้?`);
+      if (!ok) return;
+    }
+
+    try {
+      setBusy(estimateView.kitSaveConfirmBtn, true, "กำลังบันทึก...");
+
+      const result = await backend.saveEstimateKit({
+        id: existing ? existing.id : "",
+        name,
+        note: estimateView.kitNote.value.trim(),
+        items
+      });
+
+      estimateKits = result.kits || [];
+      estimateView.kitSaveForm.hidden = true;
+      refreshKitControls();
+
+      showError(estimateView.kitError, `บันทึกชุดเซ็ต “${name}” แล้ว (${items.length} รายการ)`);
+      estimateView.kitError.classList.add("is-notice");
+    } catch (err) {
+      console.error("CS Connect save kit error:", err);
+      showError(estimateView.kitError, friendlyError(err, "บันทึกชุดเซ็ตไม่สำเร็จ กรุณาลองใหม่อีกครั้ง"));
+    } finally {
+      setBusy(estimateView.kitSaveConfirmBtn, false);
+    }
+  });
+
+  estimateView.kitDeleteBtn.addEventListener("click", async () => {
+    hideError(estimateView.kitError);
+
+    const kit = currentKit();
+    if (!kit) {
+      showError(estimateView.kitError, "กรุณาเลือกชุดเซ็ตที่ต้องการลบ");
+      return;
+    }
+
+    const ok = window.confirm(
+      `ลบชุดเซ็ต “${kit.name}”?\n`
+      + "ใบประมาณการที่เคยใช้ชุดนี้ไปแล้วไม่ได้รับผลกระทบ"
+    );
+    if (!ok) return;
+
+    try {
+      setBusy(estimateView.kitDeleteBtn, true, "กำลังลบ...");
+
+      const result = await backend.deleteEstimateKit(kit.id);
+      estimateKits = result.kits || [];
+      estimateView.kitSelect.value = "";
+      refreshKitControls();
+
+      showError(estimateView.kitError, `ลบชุดเซ็ต “${kit.name}” แล้ว`);
+      estimateView.kitError.classList.add("is-notice");
+    } catch (err) {
+      console.error("CS Connect delete kit error:", err);
+      showError(estimateView.kitError, friendlyError(err, "ลบชุดเซ็ตไม่สำเร็จ กรุณาลองใหม่อีกครั้ง"));
+    } finally {
+      setBusy(estimateView.kitDeleteBtn, false);
+    }
+  });
 
   /** อ่านจำนวนจากช่อง -- ว่าง = 0, อ่านไม่ออก = null (ให้ผู้เรียกทักท้วง) */
   function readQty(input) {
