@@ -5,15 +5,24 @@
   const SESSION_KEY = "csconnect_currentUser";
   const REQUESTS_KEY = "csconnect_requests";
   const DISPATCHES_KEY = "csconnect_meterDispatches";
+  const GENERAL_DISPATCHES_KEY = "csconnect_generalDispatches";
   const MIGRATED_KEY = "csconnect_migratedToBackend";
 
   const REQUEST_TYPES = {
     power: "ขอใช้ไฟฟ้า",
     deposit: "ขอเงินประกันคืน",
     extend: "ขอขยายเขตระบบจำหน่ายไฟฟ้า",
-    general: "คำร้องทั่วไป",
+    // แท็บฐาน (เก็บ/แก้ไขคำร้องได้ทุกสถานะ) -- ป้ายชื่อไม่ใช่ "คำร้องทั่วไป" อีก
+    // ต่อไปโดยตั้งใจ ต่างจากแท็บฐานอื่นทุกแท็บที่ป้ายตรงกับชื่อประเภท: แท็บนี้ถูก
+    // แยกออกจากแท็บ "คุมคำร้องส่งแผนกสนับสนุน" (generalDispatch ด้านล่าง) แล้ว
+    // "รายละเอียดคำร้อง" จึงสื่อกว่าว่าเป็นที่ดูคำร้องทุกใบทุกสถานะ ไม่ใช่คิวงาน
+    // ป้ายเดียวกับที่ extendDetailTitle ใช้อยู่แล้วสำหรับความหมายเดียวกัน
+    general: "รายละเอียดคำร้อง",
     payment: "แจ้งเตือนการรับชำระเงิน",
-    meter: "คุมคำร้องส่งแผนกมิเตอร์"
+    meter: "คุมคำร้องส่งแผนกมิเตอร์",
+    // Derived tab เหมือน payment/meter ข้างบน -- คำร้องทั่วไป (type: general)
+    // ที่ยังไม่ได้ส่ง กรองจาก jobStatus ไม่ใช่ประเภทแยก ดู isGeneralDispatch
+    generalDispatch: "คุมคำร้องส่งแผนกสนับสนุน"
   };
 
   // Maps each ขอใช้ไฟฟ้า job status to a highlight tone so the card badge
@@ -47,7 +56,10 @@
     "ส่ง ผกส.": "info",
     "ส่งหนังสือแจ้ง ทต./อบต. แล้ว": "success",
     "อื่นๆ (หมายเหตุเพิ่มเติม)": "info",
-    "หมดกำหนดยืนราคา": "danger"
+    "หมดกำหนดยืนราคา": "danger",
+    // คำร้องทั่วไป -- สองสถานะเท่านั้น: ยังไม่ส่ง (warning) กับส่งแล้ว (success)
+    "รอส่ง ผสน.": "warning",
+    "ส่ง ผสน. แล้ว": "success"
   };
 
   // Service area currently covers only these Chiang Mai districts;
@@ -143,6 +155,7 @@
   let memorySession = null;
   let memoryRequests = [];
   let memoryDispatches = [];
+  let memoryGeneralDispatches = [];
 
   function readLocal(key, fallback) {
     if (!storageAvailable) return fallback;
@@ -160,7 +173,8 @@
     async load() {
       return {
         requests: readLocal(REQUESTS_KEY, memoryRequests),
-        dispatches: readLocal(DISPATCHES_KEY, memoryDispatches)
+        dispatches: readLocal(DISPATCHES_KEY, memoryDispatches),
+        generalDispatches: readLocal(GENERAL_DISPATCHES_KEY, memoryGeneralDispatches)
       };
     },
 
@@ -179,6 +193,15 @@
         return;
       }
       localStorage.setItem(DISPATCHES_KEY, JSON.stringify(all));
+    },
+
+    async saveGeneralDispatch(dispatch) {
+      const all = readLocal(GENERAL_DISPATCHES_KEY, memoryGeneralDispatches).concat([dispatch]);
+      if (!storageAvailable) {
+        memoryGeneralDispatches = all;
+        return;
+      }
+      localStorage.setItem(GENERAL_DISPATCHES_KEY, JSON.stringify(all));
     },
 
     async register(user) {
@@ -401,6 +424,7 @@
           }
           requestsCache = [];
           dispatchesCache = [];
+          generalDispatchesCache = [];
           document.getElementById("bootOverlay").hidden = true;
           openAccountView(true);
         }
@@ -419,7 +443,11 @@
         const data = await callAsUser({ action: "loadRequests" });
         const requests = data.requests || [];
         savedRequests = snapshot(requests);
-        return { requests, dispatches: data.dispatches || [] };
+        return {
+          requests,
+          dispatches: data.dispatches || [],
+          generalDispatches: data.generalDispatches || []
+        };
       },
 
       async saveRequests(requests) {
@@ -432,6 +460,10 @@
 
       async saveMeterDispatch(dispatch) {
         await callAsUser({ action: "saveMeterDispatch", record: dispatch });
+      },
+
+      async saveGeneralDispatch(dispatch) {
+        await callAsUser({ action: "saveGeneralDispatch", record: dispatch });
       },
 
       // Passwords never leave the browser except over the wire to the script,
@@ -574,6 +606,7 @@
   // backend instead of being answered from local data.
   let requestsCache = [];
   let dispatchesCache = [];
+  let generalDispatchesCache = [];
 
   // Returns a shallow copy: callers routinely build up an edited array
   // (`requests[idx] = {...}`, `requests.push(...)`) and only commit it via
@@ -588,10 +621,16 @@
     return dispatchesCache.slice();
   }
 
+  /** เหมือน getDispatches ด้านบน แต่ของสมุดคุมคำร้องทั่วไป (ส่ง ผสน.) */
+  function getGeneralDispatches() {
+    return generalDispatchesCache.slice();
+  }
+
   async function refreshAll() {
     const data = await backend.load();
     requestsCache = data.requests || [];
     dispatchesCache = data.dispatches || [];
+    generalDispatchesCache = data.generalDispatches || [];
   }
 
   /**
@@ -890,24 +929,91 @@
   }
 
   /**
-   * Writes the สมุดคุมคำร้องส่งแผนกมิเตอร์ document into an already-opened
-   * window. Shared by a first print and by a reprint from the history, so
-   * the two can never drift apart in layout -- the only differences are
-   * whether the fields are editable and what the action button does.
+   * เหมือน markRecordsDispatchedToMeter ด้านบนทุกกลไก แต่ปลายทางเป็น
+   * "ส่ง ผสน. แล้ว" และต้องเติม sentDate ให้ด้วยตามที่สั่ง -- เก็บเป็นวันที่ล้วน
+   * (YYYY-MM-DD) ให้ตรงชนิดกับที่ฟอร์มคำร้องทั่วไปใช้เอง ไม่ใช่ printedAt ซึ่งเป็น
+   * ms timestamp มีเวลาปนอยู่ด้วย
+   */
+  async function markRecordsSentGeneral(ids, book) {
+    const { byName, byEmail } = actingStaff();
+    const now = book.printedAt;
+    const idSet = new Set(ids);
+    const sentDate = todayDateString(new Date(now));
+
+    const updated = getRequests().map(r => {
+      if (!idSet.has(r.id) || r.jobStatus === "ส่ง ผสน. แล้ว") return r;
+      const statusHistory = (r.statusHistory || []).concat([
+        { status: "ส่ง ผสน. แล้ว", byName, byEmail, at: now }
+      ]);
+      return {
+        ...r,
+        jobStatus: "ส่ง ผสน. แล้ว",
+        sentDate,
+        statusHistory,
+        updatedByName: byName,
+        updatedByEmail: byEmail,
+        updatedAt: now
+      };
+    });
+
+    await saveRequests(updated);
+
+    const dispatch = {
+      id: newRequestId(),
+      printedAt: now,
+      printedByName: byName,
+      printedByEmail: byEmail,
+      senderName: book.sender.name,
+      senderPosition: book.sender.position,
+      receiverName: book.receiver.name,
+      receiverPosition: book.receiver.position,
+      rows: book.rows
+    };
+    await backend.saveGeneralDispatch(dispatch);
+    generalDispatchesCache = [dispatch].concat(generalDispatchesCache);
+
+    generalSelection.clear();
+    renderRequestsList();
+  }
+
+  /**
+   * รูปแบบคอลัมน์กลางของสมุดคุม -- ใช้ร่วมกันระหว่างมิเตอร์กับคำร้องทั่วไป
+   *
+   * ลำดับที่/หมายเหตุ เป็นคอลัมน์ตายตัวสองข้าง (เพิ่มเองใน writeDispatchDocument)
+   * ส่วนกลางเป็นค่าที่ต่างกันจริงตามชนิดของสมุด: มิเตอร์อ้างอิงคำร้องด้วยเลขที่
+   * คำร้อง+ประเภทคำร้อง ส่วนคำร้องทั่วไปไม่มีทั้งสองอย่างนั้น ใช้เรื่องแทน
+   */
+  const METER_DISPATCH_PRINT_COLUMNS = [
+    { label: "เลขที่คำร้อง", className: "col-number", cell: row => row.requestNumber || row.trackingNumber || "-" },
+    { label: "ชื่อลูกค้า", cell: row => row.customerName || "-" },
+    { label: "ประเภทคำร้อง", cell: row => row.purpose || "-" }
+  ];
+
+  // ไม่มีคอลัมน์แผนกที่รับผิดชอบโดยตั้งใจ -- ตามที่สั่งไว้ว่าสมุดเล่มนี้ไม่ต้อง
+  // ดึงข้อมูลนั้นมาแสดง (ยังกรอกไว้ในคำร้องเองได้ตามปกติ แค่ไม่ขึ้นบนกระดาษที่พิมพ์)
+  const GENERAL_DISPATCH_PRINT_COLUMNS = [
+    { label: "เรื่อง", cell: row => row.subject || "-" },
+    { label: "ชื่อลูกค้า", cell: row => row.customerName || "-" }
+  ];
+
+  /**
+   * Writes a สมุดคุม document into an already-opened window. Shared by every
+   * kind of dispatch book (มิเตอร์, คำร้องทั่วไป) and by both a first print
+   * and a reprint from history, so none of them can drift apart in layout --
+   * the differences are `title`/`columns` (what this book is a log of) and
+   * whether the fields are editable / what the action button does.
    *
    * `rows` is the snapshot shape stored on a dispatch record, not live
    * request objects, so a reprint renders exactly what was signed for even
    * if the underlying requests have been edited since.
    */
-  function writeDispatchDocument(printWindow, { rows, printedAt, sender, receiver, editable, actionLabel, actionNote }) {
+  function writeDispatchDocument(printWindow, { title, columns, rows, printedAt, sender, senderOptions, receiver, editable, actionLabel, actionNote }) {
     const editAttr = editable ? ' contenteditable="true"' : "";
 
     const bodyRows = rows.map((row, i) => `
       <tr>
         <td class="col-index">${i + 1}</td>
-        <td>${escapeForPrint(row.requestNumber || row.trackingNumber || "-")}</td>
-        <td>${escapeForPrint(row.customerName || "-")}</td>
-        <td>${escapeForPrint(row.purpose || "-")}</td>
+        ${columns.map(col => `<td${col.className ? ` class="${col.className}"` : ""}>${escapeForPrint(col.cell(row))}</td>`).join("")}
         <td${editAttr}>${escapeForPrint(row.note || "")}</td>
       </tr>
     `).join("");
@@ -916,10 +1022,31 @@
       new Date(printedAt).toLocaleDateString("th-TH", { day: "numeric", month: "short", year: "numeric" })
     );
 
-    function signatureBlock(role, person) {
+    /**
+     * `pickerOptions` มีเฉพาะฝั่งผู้ส่ง (ไม่ใช่ผู้รับ) -- ผู้ส่งเป็นเจ้าหน้าที่
+     * ในระบบนี้เสมอ จึงมีชื่อ+ตำแหน่งในรายชื่อเจ้าหน้าที่ให้เลือกได้ ส่วนผู้รับ
+     * มักเป็นคนนอกระบบ (พนักงานแผนกมิเตอร์/ผสน.) ไม่มีบัญชีให้เลือกจาก
+     *
+     * ดรอปดาวน์เป็นแค่ตัวช่วยกรอก ไม่ใช่แหล่งข้อมูลจริง -- เลือกแล้วเขียนชื่อ/
+     * ตำแหน่งลงช่อง .js-name/.js-position ที่ readDispatchDocument() อ่านอยู่
+     * แล้วเหมือนเดิมทุกประการ (ดู listener ที่ผูกจากฝั่ง opener หลัง document.write
+     * เพราะ CSP ของหน้าต่างนี้บล็อก inline script) ช่องยังแก้มือทับได้ต่อ เผื่อ
+     * ตำแหน่งในระบบไม่ตรงกับที่ต้องเซ็นจริง ๆ
+     */
+    function signatureBlock(role, person, pickerOptions) {
+      const picker = (editable && pickerOptions && pickerOptions.length)
+        ? `
+          <select class="sig-picker">
+            <option value="">-- เลือก${role} --</option>
+            ${pickerOptions.map(p => `<option value="${escapeForPrint(p.email)}"${p.email === person.email ? " selected" : ""}>${escapeForPrint(p.name)}${p.position ? ` (${escapeForPrint(p.position)})` : ""}</option>`).join("")}
+          </select>
+        `
+        : "";
+
       return `
         <div class="sig-block">
           <p class="sig-line">ลงชื่อ ....................................... ${role}</p>
+          ${picker}
           <p>(<span${editAttr} class="sig-fill js-name">${escapeForPrint(person.name || "")}</span>)</p>
           <p${editAttr} class="sig-fill sig-position js-position">${escapeForPrint(person.position || (editable ? "ตำแหน่ง" : ""))}</p>
           <p>${signedDate}</p>
@@ -930,7 +1057,7 @@
     printWindow.document.write(`
       <html>
         <head>
-          <title>สมุดคุมคำร้องส่งแผนกมิเตอร์</title>
+          <title>${escapeForPrint(title)}</title>
           <link rel="preconnect" href="https://fonts.googleapis.com">
           <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;700&display=swap" rel="stylesheet">
           <style>
@@ -949,6 +1076,20 @@
             .sig-block { flex: 1; text-align: center; font-size: 14px; line-height: 1.9; }
             .sig-line { white-space: nowrap; }
             .sig-fill { display: inline-block; min-width: 3em; }
+            /* ดรอปดาวน์เลือกผู้ส่ง -- เครื่องมือกรอกฝั่งจอเท่านั้น ไม่ใช่ส่วนของ
+               เอกสารที่พิมพ์ออกมา (ชื่อ/ตำแหน่งที่มันกรอกให้ต่างหากคือของจริง) */
+            .sig-picker {
+              display: block;
+              width: 100%;
+              max-width: 260px;
+              margin: 2px auto 6px;
+              font: inherit;
+              font-size: 13px;
+              padding: 5px 8px;
+              border-radius: 6px;
+              border: 1px solid #cdb9ea;
+              background: #fff;
+            }
             .actions { text-align: center; margin-top: 40px; }
             .actions button {
               font: inherit; font-size: 15px; font-weight: 600; padding: 12px 28px;
@@ -957,6 +1098,7 @@
             .actions p { color: #6b5c82; font-size: 13px; margin-top: 12px; }
             @media print {
               [contenteditable="true"] { outline: none; }
+              .sig-picker { display: none; }
               .actions { display: none; }
               /* The on-screen padding would stack on top of the @page margins
                  and make the printed edges measure wider than specified. */
@@ -965,22 +1107,20 @@
           </style>
         </head>
         <body>
-          <h1>สมุดคุมคำร้องส่งแผนกมิเตอร์</h1>
+          <h1>${escapeForPrint(title)}</h1>
           <p class="printed-at">วันที่และเวลาพิมพ์: ${escapeForPrint(formatThaiDateTime(printedAt))}</p>
           <table>
             <thead>
               <tr>
                 <th class="col-index">ลำดับที่</th>
-                <th class="col-number">เลขที่คำร้อง</th>
-                <th>ชื่อลูกค้า</th>
-                <th>ประเภทคำร้อง</th>
+                ${columns.map(col => `<th${col.className ? ` class="${col.className}"` : ""}>${escapeForPrint(col.label)}</th>`).join("")}
                 <th>หมายเหตุ</th>
               </tr>
             </thead>
             <tbody>${bodyRows}</tbody>
           </table>
           <div class="signatures">
-            ${signatureBlock("ผู้ส่ง", sender)}
+            ${signatureBlock("ผู้ส่ง", sender, senderOptions)}
             ${signatureBlock("ผู้รับ", receiver)}
           </div>
           <div class="actions">
@@ -1016,6 +1156,51 @@
   }
 
   /**
+   * ผู้ส่งเริ่มต้น + รายชื่อทั้งหมดสำหรับดรอปดาวน์ผู้ส่งในเอกสารสมุดคุม -- ใช้
+   * ร่วมกันทั้งสมุดมิเตอร์และสมุดคำร้องทั่วไป โหลดรายชื่อเจ้าหน้าที่ไม่สำเร็จก็ยัง
+   * เปิดพิมพ์ได้ตามปกติ แค่ไม่มีดรอปดาวน์/ตำแหน่งอัตโนมัติให้ (สอดคล้องกับที่อื่น
+   * ในแอปนี้ที่ยอมให้ข้อมูลเสริมหายไปเงียบ ๆ ดีกว่าบล็อกงานหลัก)
+   */
+  async function resolveSenderInfo() {
+    const staff = actingStaff();
+    let options = [];
+    try {
+      await refreshStaffRoster();
+      options = staffRoster;
+    } catch (err) {
+      console.warn("CS Connect: โหลดรายชื่อเจ้าหน้าที่ไม่สำเร็จ, ดรอปดาวน์ผู้ส่งจะไม่ขึ้น", err);
+    }
+
+    const match = options.find(p => p.email === staff.byEmail);
+    return {
+      sender: {
+        name: match ? match.name : staff.byName,
+        position: match ? (match.position || "") : "",
+        email: staff.byEmail
+      },
+      senderOptions: options
+    };
+  }
+
+  /**
+   * ผูก listener ให้ดรอปดาวน์ผู้ส่ง (ถ้ามี) -- ต้องผูกจากฝั่งนี้ ไม่ใช่ inline
+   * handler ในเอกสารที่พิมพ์ เพราะ CSP ของหน้าต่างที่เปิดด้วย window.open สืบทอด
+   * นโยบายของหน้าที่เปิดมัน ซึ่งบล็อกสคริปต์ inline ทุกตัว เลือกแล้วเขียนชื่อ/
+   * ตำแหน่งลงช่อง .js-name/.js-position ตรง ๆ -- readDispatchDocument() อ่านจาก
+   * ช่องนั้นอยู่แล้วไม่ต้องแก้อะไรเพิ่ม และยังพิมพ์ทับเองได้ถ้าตำแหน่งในระบบไม่ตรง
+   */
+  function wireSenderPicker(printWindow, senderOptions) {
+    const picker = printWindow.document.querySelector(".sig-picker");
+    if (!picker) return;
+    picker.addEventListener("change", () => {
+      const block = picker.closest(".sig-block");
+      const person = senderOptions.find(p => p.email === picker.value);
+      block.querySelector(".js-name").textContent = person ? person.name : "";
+      block.querySelector(".js-position").textContent = person ? (person.position || "") : "";
+    });
+  }
+
+  /**
    * Opens a dispatch sheet for the checked records in a new tab -- editable in
    * place (contenteditable, not a separate form) so staff can fix a note or
    * fill in a name before it goes to a physical printer. Confirming prints
@@ -1024,7 +1209,7 @@
    * printing" path, since the point of this list is to hand it to the meter
    * department for signature, not to just record data.
    */
-  function openMeterDispatchPrint(records) {
+  async function openMeterDispatchPrint(records) {
     const printWindow = window.open("", "_blank");
     if (!printWindow) return;
 
@@ -1034,7 +1219,6 @@
     });
 
     const printedAt = Date.now();
-    const staff = actingStaff();
     const rows = sorted.map((r, i) => ({
       position: i + 1,
       requestId: r.id,
@@ -1045,15 +1229,22 @@
       note: r.note || ""
     }));
 
+    const { sender, senderOptions } = await resolveSenderInfo();
+
     writeDispatchDocument(printWindow, {
+      title: "สมุดคุมคำร้องส่งแผนกมิเตอร์",
+      columns: METER_DISPATCH_PRINT_COLUMNS,
       rows,
       printedAt,
-      sender: { name: staff.byName, position: "" },
+      sender,
+      senderOptions,
       receiver: { name: "", position: "" },
       editable: true,
       actionLabel: "พิมพ์และยืนยันส่งแผนกมิเตอร์",
       actionNote: 'แก้ไขข้อความในตารางหรือช่องเซ็นชื่อได้ก่อนกดปุ่มนี้ -- กดแล้วจะเปลี่ยนสถานะคำร้องทั้งหมดด้านบนเป็น "ส่งแผนกมิเตอร์แล้ว" บันทึกสมุดเล่มนี้ไว้ให้ย้อนดูภายหลัง และเปิดหน้าต่างพิมพ์ทันที'
     });
+
+    wireSenderPicker(printWindow, senderOptions);
 
     const confirmBtn = printWindow.document.getElementById("confirmBtn");
     const confirmNote = printWindow.document.querySelector(".actions p");
@@ -1104,6 +1295,101 @@
     if (!printWindow) return;
 
     writeDispatchDocument(printWindow, {
+      title: "สมุดคุมคำร้องส่งแผนกมิเตอร์",
+      columns: METER_DISPATCH_PRINT_COLUMNS,
+      rows: Array.isArray(dispatch.rows) ? dispatch.rows : [],
+      printedAt: dispatch.printedAt,
+      sender: { name: dispatch.senderName, position: dispatch.senderPosition },
+      receiver: { name: dispatch.receiverName, position: dispatch.receiverPosition },
+      editable: false,
+      actionLabel: "พิมพ์ซ้ำ",
+      actionNote: "นี่คือสำเนาของสมุดที่พิมพ์ไปแล้ว จึงแก้ไขไม่ได้ เพื่อให้ตรงกับฉบับที่เซ็นรับไว้"
+    });
+
+    const reprintBtn = printWindow.document.getElementById("confirmBtn");
+    reprintBtn.addEventListener("click", () => printWindow.print());
+  }
+
+  /**
+   * เหมือน openMeterDispatchPrint/markRecordsDispatchedToMeter/openDispatchReprint
+   * ด้านบนทุกกลไก (เลือกคำร้อง -> เปิดเอกสารแก้ไขได้ -> กดยืนยัน -> เปลี่ยนสถานะ +
+   * เก็บสมุด + พิมพ์) เพียงแต่เป็นของคำร้องทั่วไปที่ต้องส่ง ผสน. ใช้เอกสารร่วม
+   * (writeDispatchDocument/readDispatchDocument) ตัวเดียวกับมิเตอร์ เพราะส่วนที่
+   * ต่างกันจริง ๆ มีแค่ title/columns/สถานะปลายทาง/ช่องพิเศษที่ต้องเติม (sentDate)
+   */
+  async function openGeneralDispatchPrint(records) {
+    const printWindow = window.open("", "_blank");
+    if (!printWindow) return;
+
+    const sorted = records.slice().sort((a, b) => {
+      return String(a.receivedDate || "").localeCompare(String(b.receivedDate || "")) ||
+        String(a.subject || "").localeCompare(String(b.subject || ""));
+    });
+
+    const printedAt = Date.now();
+    // ไม่เก็บ department ในสแนปช็อตแถว -- ไม่ได้ใช้ที่ไหนแล้วตั้งแต่ตัดคอลัมน์
+    // แผนกที่รับผิดชอบออกจากตารางที่พิมพ์ (GENERAL_DISPATCH_PRINT_COLUMNS)
+    const rows = sorted.map((r, i) => ({
+      position: i + 1,
+      requestId: r.id,
+      subject: r.subject || "",
+      customerName: r.customerName || "",
+      note: r.note || ""
+    }));
+
+    const { sender, senderOptions } = await resolveSenderInfo();
+
+    writeDispatchDocument(printWindow, {
+      title: "สมุดคุมคำร้องทั่วไป",
+      columns: GENERAL_DISPATCH_PRINT_COLUMNS,
+      rows,
+      printedAt,
+      sender,
+      senderOptions,
+      receiver: { name: "", position: "" },
+      editable: true,
+      actionLabel: "พิมพ์และยืนยันส่ง ผสน.",
+      actionNote: 'แก้ไขข้อความในตารางหรือช่องเซ็นชื่อได้ก่อนกดปุ่มนี้ -- กดแล้วจะเปลี่ยนสถานะคำร้องทั้งหมดด้านบนเป็น "ส่ง ผสน. แล้ว" พร้อมบันทึกวันที่ส่ง เก็บสมุดเล่มนี้ไว้ให้ย้อนดูภายหลัง และเปิดหน้าต่างพิมพ์ทันที'
+    });
+
+    wireSenderPicker(printWindow, senderOptions);
+
+    const confirmBtn = printWindow.document.getElementById("confirmBtn");
+    const confirmNote = printWindow.document.querySelector(".actions p");
+    confirmBtn.addEventListener("click", async () => {
+      confirmBtn.disabled = true;
+      confirmBtn.textContent = "กำลังบันทึก...";
+      try {
+        const edited = readDispatchDocument(printWindow);
+        const finalRows = rows.map((row, i) => ({ ...row, note: edited.notes[i] ?? row.note }));
+
+        await markRecordsSentGeneral(sorted.map(r => r.id), {
+          printedAt,
+          rows: finalRows,
+          sender: edited.sender,
+          receiver: edited.receiver
+        });
+
+        confirmBtn.textContent = "บันทึกแล้ว กำลังเปิดหน้าต่างพิมพ์...";
+        printWindow.print();
+        confirmBtn.textContent = "บันทึกและพิมพ์เรียบร้อย";
+        confirmNote.textContent = 'เปลี่ยนสถานะเป็น "ส่ง ผสน. แล้ว" และเก็บสมุดเล่มนี้ไว้ในประวัติแล้ว ปิดหน้าต่างนี้ได้เลย';
+      } catch (err) {
+        console.error("CS Connect: บันทึกการส่ง ผสน. ไม่สำเร็จ", err);
+        confirmBtn.disabled = false;
+        confirmBtn.textContent = "เกิดข้อผิดพลาด ลองใหม่อีกครั้ง";
+      }
+    });
+  }
+
+  /** เหมือน openDispatchReprint ด้านบน แต่ของสมุดคุมคำร้องทั่วไป */
+  function openGeneralDispatchReprint(dispatch) {
+    const printWindow = window.open("", "_blank");
+    if (!printWindow) return;
+
+    writeDispatchDocument(printWindow, {
+      title: "สมุดคุมคำร้องทั่วไป",
+      columns: GENERAL_DISPATCH_PRINT_COLUMNS,
       rows: Array.isArray(dispatch.rows) ? dispatch.rows : [],
       printedAt: dispatch.printedAt,
       sender: { name: dispatch.senderName, position: dispatch.senderPosition },
@@ -1300,6 +1586,7 @@
     clearSession();
     requestsCache = [];
     dispatchesCache = [];
+    generalDispatchesCache = [];
     clearSensitiveScreens();
 
     document.getElementById("bootOverlay").hidden = true;
@@ -1601,6 +1888,12 @@
     document.getElementById("requestSummaryType").textContent = "";
     document.getElementById("requestSummaryList").innerHTML = "";
     document.getElementById("requestCommentInput").value = "";
+    // #extendForm/#generalForm เก็บข้อมูลลูกค้าได้เหมือน #requestForm ข้างบน
+    // ทุกประการ แต่ไม่เคยถูกล้างตรงนี้มาก่อน -- ค่าที่พิมพ์ค้างไว้จะยังอยู่ใน DOM
+    // ทั้งที่จอกลับไปเป็นหน้า login แล้ว อ่านได้ทันทีผ่านเครื่องมือพัฒนาของ
+    // เบราว์เซอร์โดยไม่ต้องล็อกอินเลยด้วยซ้ำ (ดูหมายเหตุที่ resetExtendFormState)
+    resetExtendFormState();
+    resetGeneralFormState();
 
     document.getElementById("batchRows").innerHTML = "";
     document.getElementById("batchResult").hidden = true;
@@ -1623,6 +1916,7 @@
     formReturnTo = "requests";
     currentSearchQuery = "";
     meterSelection.clear();
+    generalSelection.clear();
     extendSelection.clear();
     extendSearchQuery = "";
     extendFilter = EXTEND_FILTER_ALL;
@@ -1645,6 +1939,7 @@
     clearSession();
     requestsCache = [];
     dispatchesCache = [];
+    generalDispatchesCache = [];
     clearSensitiveScreens();
     showView("login");
   }
@@ -2128,6 +2423,7 @@
       clearSession();
       requestsCache = [];
       dispatchesCache = [];
+      generalDispatchesCache = [];
       clearSensitiveScreens();
       showView("login");
       showError(
@@ -2228,6 +2524,10 @@
   const meterPrintBtn = document.getElementById("meterPrintBtn");
   const meterModes = document.getElementById("meterModes");
   const meterModeBtns = meterModes.querySelectorAll(".requests-mode-btn");
+
+  const generalPrintBtn = document.getElementById("generalPrintBtn");
+  const generalModes = document.getElementById("generalModes");
+  const generalModeBtns = generalModes.querySelectorAll(".requests-mode-btn");
   const requestsSearchInput = document.getElementById("requestsSearchInput");
   const navBadges = document.querySelectorAll(".nav-badge");
 
@@ -2260,12 +2560,35 @@
     return r.type === "power" && METER_DISPATCH_STATUSES.includes(r.jobStatus);
   }
 
+  /**
+   * เหมือน isMeterDispatch ด้านบน แต่ของคำร้องทั่วไป -- ต่างกันตรงที่ metrics
+   * มีสามสถานะรวมกันเป็นคิว ส่วนนี่มีสถานะเดียวคือ "รอส่ง ผสน." (ยังไม่มีสถานะ
+   * เทียบเท่า "ผมต. ตีกลับ" สำหรับคำร้องทั่วไป จึงไม่มีสถานะที่สองต้องรวม)
+   * "ส่ง ผสน. แล้ว" หลุดจากคิวนี้ไปเองทันทีที่ markRecordsSentGeneral() เปลี่ยน
+   * jobStatus ให้ -- ไม่มีขั้น "ย้าย" แยกต่างหาก เหมือนกลไกเดิมของ meter ทุกประการ
+   */
+  function isGeneralDispatch(r) {
+    return r.type === "general" && r.jobStatus === "รอส่ง ผสน.";
+  }
+
   // Tabs that filter existing records instead of holding their own type --
   // they have no add form, so the "+ เพิ่มคำร้อง" button is hidden on them.
   const DERIVED_TAB_FILTERS = {
     payment: isPaymentNotice,
-    meter: isMeterDispatch
+    meter: isMeterDispatch,
+    generalDispatch: isGeneralDispatch
   };
+
+  /**
+   * ชื่อประเภทที่ใช้บอกว่า "คำร้องใบนี้คือประเภทอะไร" (หัวฟอร์ม, การ์ดสรุป,
+   * ข้อความคัดลอก) -- ต่างจาก REQUEST_TYPES[type] ตรง type "general" เท่านั้น
+   * เพราะป้ายในแท็บของมันถูกเปลี่ยนเป็น "รายละเอียดคำร้อง" แล้ว (เหมาะกับหัวข้อ
+   * แท็บที่แยกจากแท็บ "คุมคำร้องส่งแผนกสนับสนุน" แต่ไม่เหมาะจะบอกประเภทคำร้อง)
+   * ที่เหลือทุก type อ่านจาก REQUEST_TYPES ตรง ๆ เหมือนเดิม
+   */
+  function recordTypeLabel(type) {
+    return type === "general" ? "คำร้องทั่วไป" : REQUEST_TYPES[type];
+  }
 
   // Each derived tab's sidebar button carries a `.nav-badge` tagged with
   // data-badge-for="<tab key>"; the count is just how many records its own
@@ -2343,15 +2666,25 @@
   const extMapBtn = document.getElementById("extMapBtn");
   const extNavBtn = document.getElementById("extNavBtn");
 
-  // "power" and "extend" have built forms (#requestForm and #extendForm --
-  // two separate <form> elements, since their field sets don't overlap
-  // enough to share one template the way batch rows share #requestForm's).
-  // The แจ้งเตือนการรับชำระเงิน tab isn't a separate type with its own data --
-  // it's power records filtered down to ones with a paymentSlip (see
-  // isPaymentNotice below), so those cards are already power records and
-  // click-to-edit "just works" for them too. deposit/general still show a
-  // placeholder until their own field sets are defined (see openRequestForm).
-  const FORM_SUPPORTED_TYPES = new Set(["power", "extend"]);
+  // ---------- คำร้องทั่วไป (แยกฟอร์มจาก #requestForm/#extendForm ด้านบน) ----------
+  // เอกสารที่ต้องส่งต่อให้แผนกอื่น ไม่ใช่งานภาคสนามที่ลูกค้าติดตามสถานะเอง จึง
+  // ไม่มีเลขที่คำร้อง (ระบบ)/QR/ที่อยู่แบบโครงสร้างเหมือนสองฟอร์มข้างต้นเลย
+  const generalForm = document.getElementById("generalForm");
+  const generalFormError = document.getElementById("generalFormError");
+  const generalFormSubmitBtn = document.getElementById("generalFormSubmitBtn");
+  const genDate = document.getElementById("genDate");
+  const genJobStatus = document.getElementById("genJobStatus");
+
+  // "power", "extend" and "general" have built forms (#requestForm,
+  // #extendForm and #generalForm -- three separate <form> elements, since
+  // their field sets don't overlap enough to share one template the way
+  // batch rows share #requestForm's). The แจ้งเตือนการรับชำระเงิน tab isn't a
+  // separate type with its own data -- it's power records filtered down to
+  // ones with a paymentSlip (see isPaymentNotice below), so those cards are
+  // already power records and click-to-edit "just works" for them too.
+  // deposit still shows a placeholder until its own field set is defined
+  // (see openRequestForm).
+  const FORM_SUPPORTED_TYPES = new Set(["power", "extend", "general"]);
 
   let currentRequestFilter = "power";
   let currentAddType = "power";
@@ -2382,6 +2715,9 @@
   // Resets to pending on every tab switch -- the pending list is what the tab
   // is for day to day; the history is something you go looking for.
   let meterMode = "pending";
+
+  // เหมือน meterMode ด้านบนทุกประการ แต่ของแท็บ "คุมคำร้องส่งแผนกสนับสนุน"
+  let generalMode = "pending";
 
   // True while the request form is being used to enter a whole batch at once.
   // The form itself is unchanged -- it just doubles as the shared values for
@@ -2553,12 +2889,16 @@
   // a successful dispatch.
   let meterSelection = new Set();
 
+  /** เหมือน meterSelection ด้านบน แต่ของคำร้องทั่วไปที่เลือกไว้เพื่อพิมพ์ส่ง ผสน. */
+  let generalSelection = new Set();
+
   function matchesSearch(r, query) {
     if (!query) return true;
     const haystack = [
       r.trackingNumber, r.requestNumber, r.customerName, r.requesterName,
       r.phonePrimary, r.phoneSecondary, r.phone, r.bp, r.ca,
-      r.houseNo, r.deed, r.jobStatus, r.location, r.assignee
+      r.houseNo, r.deed, r.jobStatus, r.location, r.assignee,
+      r.subject, r.department
     ].filter(Boolean).join(" ").toLowerCase();
     return haystack.includes(query.toLowerCase());
   }
@@ -2577,20 +2917,30 @@
     extZipcode.value = "";
   }
 
+  /**
+   * วันที่วันนี้เป็น "YYYY-MM-DD" ล้วน -- ใช้ทั้งเติมช่องวันที่ตั้งต้นของฟอร์ม
+   * และตอนประทับ sentDate ให้คำร้องทั่วไปที่เพิ่งกดส่ง ผสน. (ดู markRecordsSentGeneral)
+   * รับ Date เข้ามาได้ตรง ๆ แทนที่จะเรียก new Date() เองเสมอ เพราะที่หลังต้อง
+   * แปลงจาก printedAt (เวลาที่พิมพ์จริง) ไม่ใช่เวลาที่ฟังก์ชันถูกเรียก
+   */
+  function todayDateString(date) {
+    const d = date || new Date();
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, "0");
+    const dd = String(d.getDate()).padStart(2, "0");
+    return `${yyyy}-${mm}-${dd}`;
+  }
+
   function setDefaultRequestDate() {
-    const now = new Date();
-    const yyyy = now.getFullYear();
-    const mm = String(now.getMonth() + 1).padStart(2, "0");
-    const dd = String(now.getDate()).padStart(2, "0");
-    reqDate.value = `${yyyy}-${mm}-${dd}`;
+    reqDate.value = todayDateString();
   }
 
   function setDefaultExtendDate() {
-    const now = new Date();
-    const yyyy = now.getFullYear();
-    const mm = String(now.getMonth() + 1).padStart(2, "0");
-    const dd = String(now.getDate()).padStart(2, "0");
-    extDate.value = `${yyyy}-${mm}-${dd}`;
+    extDate.value = todayDateString();
+  }
+
+  function setDefaultGeneralDate() {
+    genDate.value = todayDateString();
   }
 
   function resetPurposeFields() {
@@ -2750,6 +3100,9 @@
     update();
     return update;
   }
+
+  const updateGenPhoneCall = wireCallButton(
+    document.getElementById("genPhone"), document.getElementById("genPhoneCallBtn"));
 
   const updateReqPhonePrimaryCall = wireCallButton(
     document.getElementById("reqPhonePrimary"), document.getElementById("reqPhonePrimaryCallBtn"));
@@ -2979,6 +3332,29 @@
       meterPrintBtn.disabled = meterSelection.size === 0;
     }
 
+    // เหมือน isMeterTab ข้างบนทุกประการตอนนี้ -- "คุมคำร้องส่งแผนกสนับสนุน" เป็น
+    // derived tab แยกจาก "รายละเอียดคำร้อง" แล้ว (isGeneralDispatch ใน
+    // DERIVED_TAB_FILTERS) filtered ด้านบนจึงถูกกรองเหลือเฉพาะคำร้องที่ยังเป็น
+    // "รอส่ง ผสน." อยู่แล้วโดยอัตโนมัติ ไม่ต้องกรองซ้ำที่นี่
+    const isGeneralTab = currentRequestFilter === "generalDispatch";
+    generalModes.hidden = !isGeneralTab;
+
+    if (isGeneralTab && generalMode === "history") {
+      renderGeneralDispatchHistory();
+      return;
+    }
+
+    generalPrintBtn.hidden = !isGeneralTab;
+    if (isGeneralTab) {
+      // A record can only leave this tab by having its jobStatus changed
+      // elsewhere (another tab, another staff member) -- drop any selected
+      // id that's no longer actually on this list rather than letting a
+      // stale selection silently include something no longer eligible.
+      const visibleIds = new Set(filtered.map(r => r.id));
+      generalSelection.forEach(id => { if (!visibleIds.has(id)) generalSelection.delete(id); });
+      generalPrintBtn.disabled = generalSelection.size === 0;
+    }
+
     requestsList.innerHTML = "";
 
     if (filtered.length === 0) {
@@ -3031,9 +3407,12 @@
         idEl.remove();
       }
 
+      // คำร้องทั่วไปไม่มี "ความประสงค์" แบบดรอปดาวน์ -- ใช้ "เรื่อง" ที่ยื่นมาแทน
+      // ในตำแหน่งเดียวกัน (ทั้งสองเป็นหัวข้อสั้น ๆ ที่บอกว่าคำร้องนี้คืออะไร)
       const purposeEl = card.querySelector(".request-badge-purpose");
-      if (r.purpose) {
-        purposeEl.textContent = r.purpose;
+      const purposeText = r.purpose || r.subject;
+      if (purposeText) {
+        purposeEl.textContent = purposeText;
       } else {
         purposeEl.remove();
       }
@@ -3064,7 +3443,15 @@
         phoneEl.remove();
       }
 
-      card.querySelector(".request-meta-location").textContent = `สถานที่: ${buildLocationText(r)}`;
+      // คำร้องทั่วไปไม่มีที่อยู่/สถานที่เลย -- buildLocationText คืนค่าว่างให้
+      // ต่างจากขอใช้ไฟฟ้า/ขอขยายเขตฯ ที่บังคับกรอกอำเภอ+ตำบลเสมอ จึงไม่เคยว่าง
+      const locationEl = card.querySelector(".request-meta-location");
+      const locationText = buildLocationText(r);
+      if (locationText) {
+        locationEl.textContent = `สถานที่: ${locationText}`;
+      } else {
+        locationEl.remove();
+      }
 
       const noteEl = card.querySelector(".request-meta-note");
       if (r.note) {
@@ -3095,6 +3482,29 @@
           if (checkbox.checked) meterSelection.add(r.id);
           else meterSelection.delete(r.id);
           meterPrintBtn.disabled = meterSelection.size === 0;
+        });
+        selectWrap.appendChild(checkbox);
+        card.appendChild(selectWrap);
+      }
+
+      // เหมือน checkbox ของแท็บ meter ด้านบนทุกกลไก -- ไม่ต้องเช็ก jobStatus ซ้ำ
+      // อีกแล้ว เพราะ filtered เหลือเฉพาะคำร้อง "รอส่ง ผสน." อยู่แล้วจาก
+      // isGeneralDispatch (derived tab)
+      if (isGeneralTab) {
+        card.classList.add("has-card-select");
+        const selectWrap = document.createElement("label");
+        selectWrap.className = "request-card-select";
+        const checkbox = document.createElement("input");
+        checkbox.type = "checkbox";
+        checkbox.checked = generalSelection.has(r.id);
+        checkbox.setAttribute("aria-label", `เลือกคำร้อง ${r.subject || r.customerName || ""} เพื่อส่ง ผสน.`);
+        checkbox.addEventListener("click", (e) => {
+          e.stopPropagation();
+        });
+        checkbox.addEventListener("change", () => {
+          if (checkbox.checked) generalSelection.add(r.id);
+          else generalSelection.delete(r.id);
+          generalPrintBtn.disabled = generalSelection.size === 0;
         });
         selectWrap.appendChild(checkbox);
         card.appendChild(selectWrap);
@@ -3194,11 +3604,33 @@
     line.appendChild(link);
   }
 
+  /** เหมือน renderDispatchInfo ด้านบน แต่ของสมุดคุมคำร้องทั่วไป (ส่ง ผสน.) */
+  function renderGeneralDispatchInfo(record) {
+    const line = document.getElementById("requestFormGeneralDispatchInfo");
+    const dispatch = getGeneralDispatches().find(d =>
+      Array.isArray(d.rows) && d.rows.some(row => row.requestId === record.id)
+    );
+
+    line.innerHTML = "";
+    line.hidden = !dispatch;
+    if (!dispatch) return;
+
+    line.append(`ส่ง ผสน.: ${formatThaiDateTime(dispatch.printedAt)} · `);
+    const link = document.createElement("button");
+    link.type = "button";
+    link.className = "link-btn";
+    link.textContent = "ดูสมุดคุม";
+    link.addEventListener("click", () => openGeneralDispatchReprint(dispatch));
+    line.appendChild(link);
+  }
+
   /**
    * Does this book mention `query` anywhere a staff member would search by?
    * Both request numbers are matched, because staff have two of them (the
    * system's เลขที่คำร้อง (ระบบ) and the one they type by hand) and either is a
    * reasonable thing to paste in when a customer asks "when was mine sent?".
+   * `row.subject` is the คำร้องทั่วไป equivalent -- harmless to include for
+   * meter rows too, since they simply never carry that key.
    */
   function dispatchMatchesSearch(dispatch, query) {
     if (!query) return true;
@@ -3206,7 +3638,7 @@
     const haystack = [
       dispatch.printedByName, dispatch.senderName, dispatch.receiverName,
       formatThaiDateTime(dispatch.printedAt),
-      ...rows.flatMap(row => [row.requestNumber, row.trackingNumber, row.customerName])
+      ...rows.flatMap(row => [row.requestNumber, row.trackingNumber, row.customerName, row.subject])
     ].filter(Boolean).join(" ").toLowerCase();
     return haystack.includes(query.toLowerCase());
   }
@@ -3287,6 +3719,80 @@
     });
   }
 
+  /** เหมือน renderDispatchHistory ด้านบน แต่ของแท็บคำร้องทั่วไป (สมุดที่พิมพ์ส่ง ผสน. ไปแล้ว) */
+  function renderGeneralDispatchHistory() {
+    requestsAddBtn.hidden = true;
+    generalPrintBtn.hidden = true;
+
+    const matches = getGeneralDispatches()
+      .filter(d => dispatchMatchesSearch(d, currentSearchQuery))
+      .sort((a, b) => (b.printedAt || 0) - (a.printedAt || 0));
+
+    requestsListTitle.textContent = REQUEST_TYPES.generalDispatch;
+    requestsListCount.textContent = `พิมพ์ไปแล้ว ${matches.length} เล่ม`;
+    requestsList.innerHTML = "";
+
+    if (!matches.length) {
+      const empty = document.createElement("div");
+      empty.className = "request-empty";
+      empty.textContent = currentSearchQuery
+        ? "ไม่พบสมุดคุมที่ตรงกับคำค้น"
+        : "ยังไม่มีสมุดคุมที่พิมพ์ไว้ (ประวัติจะเริ่มบันทึกตั้งแต่ครั้งถัดไปที่กดพิมพ์)";
+      requestsList.appendChild(empty);
+      return;
+    }
+
+    matches.forEach(dispatch => {
+      const rows = Array.isArray(dispatch.rows) ? dispatch.rows : [];
+      const card = document.createElement("div");
+      card.className = "request-card request-card-clickable";
+
+      card.innerHTML = `
+        <div class="request-card-top">
+          <div class="request-badges">
+            <span class="request-badge request-badge-id"></span>
+            <span class="request-badge request-badge-purpose"></span>
+          </div>
+          <span class="request-date"></span>
+        </div>
+        <div class="request-name"></div>
+        <div class="request-meta dispatch-meta-people"></div>
+      `;
+
+      card.querySelector(".request-badge-id").textContent = `${rows.length} รายการ`;
+
+      const printedByEl = card.querySelector(".request-badge-purpose");
+      if (dispatch.printedByName) {
+        printedByEl.textContent = `พิมพ์โดย ${dispatch.printedByName}`;
+      } else {
+        printedByEl.remove();
+      }
+
+      card.querySelector(".request-date").textContent = formatThaiDateTime(dispatch.printedAt);
+      card.querySelector(".request-name").textContent =
+        rows.map(row => row.customerName).filter(Boolean).join(", ") || "-";
+      card.querySelector(".dispatch-meta-people").textContent =
+        `ผู้ส่ง: ${dispatch.senderName || "-"} · ผู้รับ: ${dispatch.receiverName || "-"}`;
+
+      card.classList.add("has-card-actions");
+      const actions = document.createElement("div");
+      actions.className = "request-card-actions";
+      const reprintBtn = document.createElement("button");
+      reprintBtn.type = "button";
+      reprintBtn.className = "btn btn-ghost request-card-action-btn";
+      reprintBtn.textContent = "พิมพ์ซ้ำ";
+      reprintBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        openGeneralDispatchReprint(dispatch);
+      });
+      actions.appendChild(reprintBtn);
+      card.appendChild(actions);
+
+      card.addEventListener("click", () => openGeneralDispatchReprint(dispatch));
+      requestsList.appendChild(card);
+    });
+  }
+
   /**
    * Pulls matches for `query` from the full sheet (bypassing the recency
    * window loadRequests applies) and folds any not already cached into
@@ -3323,6 +3829,8 @@
     requestsSearchInput.value = "";
     meterSelection.clear();
     setMeterMode("pending");
+    generalSelection.clear();
+    setGeneralMode("pending");
     renderRequestsList();
     showView("requests");
   }
@@ -3335,6 +3843,8 @@
       requestsSearchInput.value = "";
       meterSelection.clear();
       setMeterMode("pending");
+      generalSelection.clear();
+      setGeneralMode("pending");
       renderRequestsList();
     });
   });
@@ -3359,15 +3869,41 @@
     });
   });
 
+  /** เหมือน setMeterMode ด้านบน แต่ของแท็บคำร้องทั่วไป */
+  function setGeneralMode(mode) {
+    generalMode = mode;
+    generalModeBtns.forEach(btn => btn.classList.toggle("active", btn.dataset.generalMode === mode));
+    requestsSearchInput.placeholder = mode === "history"
+      ? "ค้นหาสมุดคุมด้วยเรื่อง, ชื่อลูกค้า, ชื่อผู้ส่ง/ผู้รับ..."
+      : "ค้นหาด้วยเลขที่คำร้อง, ชื่อลูกค้า, เบอร์โทร, บ้านเลขที่, เลขที่โฉนด...";
+  }
+
+  generalModeBtns.forEach(btn => {
+    btn.addEventListener("click", () => {
+      if (generalMode === btn.dataset.generalMode) return;
+      setGeneralMode(btn.dataset.generalMode);
+      currentSearchQuery = "";
+      requestsSearchInput.value = "";
+      generalSelection.clear();
+      renderRequestsList();
+    });
+  });
+
   requestsSearchInput.addEventListener("input", () => {
     currentSearchQuery = requestsSearchInput.value.trim();
     renderRequestsList();
   });
 
-  meterPrintBtn.addEventListener("click", () => {
+  meterPrintBtn.addEventListener("click", async () => {
     const selected = getRequests().filter(r => meterSelection.has(r.id));
     if (!selected.length) return;
-    openMeterDispatchPrint(selected);
+    await openMeterDispatchPrint(selected);
+  });
+
+  generalPrintBtn.addEventListener("click", async () => {
+    const selected = getRequests().filter(r => generalSelection.has(r.id));
+    if (!selected.length) return;
+    await openGeneralDispatchPrint(selected);
   });
 
   function fillRequestForm(r) {
@@ -3459,6 +3995,19 @@
     fillingForm = false;
   }
 
+  /** เหมือน fillRequestForm/fillExtendForm ด้านบน แต่ของ #generalForm -- ชุดฟิลด์เล็กกว่ามาก */
+  function fillGeneralForm(r) {
+    document.getElementById("genSubject").value = r.subject || "";
+    genDate.value = r.receivedDate || "";
+    document.getElementById("genCustomerName").value = r.customerName || "";
+    document.getElementById("genPhone").value = r.phonePrimary || "";
+    genJobStatus.value = r.jobStatus || "รอส่ง ผสน.";
+    document.getElementById("genSentDate").value = r.sentDate || "";
+    document.getElementById("genDepartment").value = r.department || "";
+    document.getElementById("genNote").value = r.note || "";
+    updateGenPhoneCall();
+  }
+
   // คำร้องที่การ์ดสรุปกำลังอธิบายอยู่ -- เก็บไว้เพื่อให้ปุ่มคัดลอกอ่านจากข้อมูลชุดเดียวกับที่วาดบนจอ
   let summaryRecord = null;
 
@@ -3472,6 +4021,29 @@
    * (ผู้รับผิดชอบต้องโทรและต้องนำทางจากหน้างานได้) บรรทัดที่จะเพิ่มทีหลังควรผ่านเกณฑ์เดียวกัน
    */
   function summaryLines(record) {
+    // คำร้องทั่วไปไม่มีเลขที่คำร้อง/เลขระบบ/ความประสงค์/ที่อยู่/พิกัด/ผู้รับผิดชอบ
+    // เลยสักอย่าง -- แทนที่จะพยายามยัดชุดเดียวกันแล้วขึ้น "-" เต็มไปหมด แยกชุด
+    // บรรทัดของตัวเองไปเลย อ่านตรงกับสิ่งที่ฟอร์มนี้เก็บจริง
+    if (record.type === "general") {
+      return [
+        { label: "เรื่อง", value: record.subject || "-" },
+        { label: "วันที่ยื่นเรื่อง", value: formatThaiDate(record.receivedDate), mono: true },
+        { label: "ชื่อลูกค้า", value: record.customerName || "-" },
+        {
+          label: "เบอร์โทรศัพท์",
+          value: record.phonePrimary || "-",
+          href: record.phonePrimary ? `tel:${record.phonePrimary}` : ""
+        },
+        { label: "สถานะ", value: record.jobStatus || "-", status: true },
+        {
+          label: "วันที่ส่ง ผสน.",
+          value: record.sentDate ? formatThaiDate(record.sentDate) : "-",
+          mono: true
+        },
+        { label: "แผนกที่รับผิดชอบ", value: record.department || "-" }
+      ];
+    }
+
     const lines = [
       { label: "เลขที่คำร้อง", value: record.requestNumber || "-", mono: true },
       { label: "เลขที่คำร้อง (ระบบ)", value: record.trackingNumber || "-", mono: true },
@@ -3516,7 +4088,7 @@
 
   function renderRequestSummary(record) {
     summaryRecord = record;
-    requestSummaryType.textContent = REQUEST_TYPES[record.type] || "คำร้อง";
+    requestSummaryType.textContent = recordTypeLabel(record.type) || "คำร้อง";
     requestSummaryList.innerHTML = "";
 
     summaryLines(record).forEach(line => {
@@ -3553,7 +4125,7 @@
   requestSummaryCopyBtn.addEventListener("click", async () => {
     if (!summaryRecord) return;
 
-    const text = [REQUEST_TYPES[summaryRecord.type] || "คำร้อง"]
+    const text = [recordTypeLabel(summaryRecord.type) || "คำร้อง"]
       .concat(summaryLines(summaryRecord).map(line => `${line.label}: ${line.value}`))
       .join("\n");
 
@@ -3937,29 +4509,27 @@
     document.getElementById("batchResultDoneBtn").onclick = () => renderRequestsList();
   }
 
-  function openRequestForm(type, record, options = {}) {
-    currentAddType = type;
-    editingId = record ? record.id : null;
-    pendingNewId = null;
-    formReturnTo = options.returnTo || "requests";
-    // เพิ่มหลายคำร้องมีเฉพาะขอใช้ไฟฟ้า -- ปุ่มที่ส่ง { batch: true } มา ก็ถูก
-    // ซ่อนไว้แล้วสำหรับแท็บอื่น (ดู renderRequestsList) การ์ดนี้กันไว้อีกชั้น
-    batchMode = Boolean(options.batch) && type === "power";
-    hideError(requestFormError);
+  /**
+   * ล้าง #extendForm ให้กลับไปเป็นฟอร์มเปล่าทุกสถานะ ไม่ใช่แค่ .reset() ธรรมดา --
+   * ฟอร์มนี้มีสถานะที่ซ่อนอยู่นอกตัว <form> เองด้วย (รายการแผนผังที่แนบไว้,
+   * รูปหน้างานสองรูป, สรุปใบประมาณการ, ป้ายผู้รับผิดชอบ) ซึ่งถ้าไม่ล้างพร้อมกัน
+   * คำร้องใบก่อนจะยังค้างอยู่ในองค์ประกอบเหล่านั้นแม้ตัว <form> เองจะว่างแล้ว
+   *
+   * แยกออกมาเป็นฟังก์ชันเดียว เรียกได้ทั้งตอนเปิดฟอร์มใหม่ (openRequestForm)
+   * และตอนออกจากระบบ (clearWorkspaceScreens) -- ทำให้สองจุดนี้ล้างเหมือนกัน
+   * เป๊ะเสมอโดยไม่ต้องคอยจำแก้คู่กัน ก่อนหน้านี้ clearWorkspaceScreens ไม่เคย
+   * เรียกส่วนนี้เลย ทำให้ข้อมูลลูกค้าที่พิมพ์ค้างไว้ในฟอร์มขยายเขตฯ ยังอยู่ใน DOM
+   * ต่อ แม้จอจะกลับไปเป็นหน้า login แล้วก็ตาม -- อ่านได้ทันทีผ่านเครื่องมือ
+   * พัฒนาของเบราว์เซอร์ โดยไม่ต้องล็อกอินเลยด้วยซ้ำ
+   */
+  function resetExtendFormState() {
     hideError(extendFormError);
-    requestForm.reset();
-    resetLocationFields();
-    resetPurposeFields();
-    setDefaultRequestDate();
     extendForm.reset();
     resetExtendLocationFields();
     setDefaultExtendDate();
     // .reset() ล้างค่าในช่อง แต่ไม่ยิง input event -- ปุ่มเปิดแผนที่/นำทาง/โทรออก
     // ต้องสั่งคำนวณใหม่เองไม่งั้นจะค้างสถานะของคำร้องก่อนหน้า
-    updateReqCoords();
     updateExtCoords();
-    updateReqPhonePrimaryCall();
-    updateReqPhoneSecondaryCall();
     updateExtPhonePrimaryCall();
     updateExtPhoneSecondaryCall();
     // คำร้องใหม่เริ่มที่ "รอจ่ายงาน" -- ยังไม่มีทั้งผู้รับผิดชอบ WBS และแผนผัง
@@ -3975,17 +4545,51 @@
     document.getElementById("extRoutePhotoFile").value = "";
     extEstimateSection.hidden = true;
     extPlanCurrent.textContent = "";
+    extPlanList.innerHTML = "";
     extPlanFile.value = "";
     hideError(extPlanError);
     extPlanSuccess.hidden = true;
+    // ใช้เส้นทางเดียวกับตอนแสดงรูปของคำร้องจริง -- record ว่าง = ทุกฟิลด์เป็น
+    // undefined เท่ากับ "ไม่มีรูป" ในทุกกิ่งของฟังก์ชัน จึงซ่อน preview, โชว์
+    // สถานะว่าง และล้าง src ทิ้งให้ครบเหมือนกันทั้งสองจุดโดยไม่ต้องเขียนซ้ำ
+    renderExtendPhotos({});
+  }
+
+  /** เหมือน resetExtendFormState ด้านบน แต่ของ #generalForm -- สถานะซ่อนน้อยกว่ามาก */
+  function resetGeneralFormState() {
+    hideError(generalFormError);
+    generalForm.reset();
+    setDefaultGeneralDate();
+    updateGenPhoneCall();
+  }
+
+  function openRequestForm(type, record, options = {}) {
+    currentAddType = type;
+    editingId = record ? record.id : null;
+    pendingNewId = null;
+    formReturnTo = options.returnTo || "requests";
+    // เพิ่มหลายคำร้องมีเฉพาะขอใช้ไฟฟ้า -- ปุ่มที่ส่ง { batch: true } มา ก็ถูก
+    // ซ่อนไว้แล้วสำหรับแท็บอื่น (ดู renderRequestsList) การ์ดนี้กันไว้อีกชั้น
+    batchMode = Boolean(options.batch) && type === "power";
+    hideError(requestFormError);
+    requestForm.reset();
+    resetLocationFields();
+    resetPurposeFields();
+    setDefaultRequestDate();
+    updateReqCoords();
+    updateReqPhonePrimaryCall();
+    updateReqPhoneSecondaryCall();
+    resetExtendFormState();
+    resetGeneralFormState();
 
     const isSupported = FORM_SUPPORTED_TYPES.has(type);
     const isPower = type === "power";
     const isExtend = type === "extend";
+    const isGeneral = type === "general";
 
     requestFormTitle.textContent = batchMode
-      ? `เพิ่มหลายคำร้อง: ${REQUEST_TYPES[type]}`
-      : `${record ? "แก้ไขคำร้อง" : "เพิ่มคำร้อง"}: ${REQUEST_TYPES[type]}`;
+      ? `เพิ่มหลายคำร้อง: ${recordTypeLabel(type)}`
+      : `${record ? "แก้ไขคำร้อง" : "เพิ่มคำร้อง"}: ${recordTypeLabel(type)}`;
     requestFormSubtitle.textContent = !isSupported
       ? "แบบฟอร์มสำหรับประเภทนี้อยู่ระหว่างการพัฒนา"
       : batchMode
@@ -3994,11 +4598,13 @@
     requestFormSubmitBtn.textContent = batchMode
       ? "บันทึกทั้งกลุ่ม"
       : (record ? "บันทึกการแก้ไข" : "บันทึกคำร้อง");
-    // ขอขยายเขตฯ ไม่มีโหมดกลุ่ม ปุ่มของมันจึงมีแค่สองข้อความ
+    // ขอขยายเขตฯ และคำร้องทั่วไปไม่มีโหมดกลุ่ม ปุ่มของมันจึงมีแค่สองข้อความ
     extendFormSubmitBtn.textContent = record ? "บันทึกการแก้ไข" : "บันทึกคำร้อง";
+    generalFormSubmitBtn.textContent = record ? "บันทึกการแก้ไข" : "บันทึกคำร้อง";
 
     requestForm.hidden = !(isSupported && isPower);
     extendForm.hidden = !(isSupported && isExtend);
+    generalForm.hidden = !(isSupported && isGeneral);
     requestFormPlaceholder.hidden = isSupported;
 
     batchResult.hidden = true;
@@ -4032,6 +4638,9 @@
       extendFormRecord = record;
       fillExtendForm(record);
       syncExtendStageFields(record);
+    }
+    if (isSupported && isGeneral && record) {
+      fillGeneralForm(record);
     }
 
     // คำร้องขอขยายเขตฯ ทำงานจบในโมดูลของตัวเอง ไม่ใช่ในหน้างานรับคำร้อง --
@@ -4067,6 +4676,7 @@
       renderComments(record);
       renderBatchInfo(record);
       renderDispatchInfo(record);
+      renderGeneralDispatchInfo(record);
 
       document.getElementById("requestFormEditedBy").textContent = record.updatedByName
         ? `ผู้แก้ไขล่าสุด: ${record.updatedByName} · ${formatThaiDateTime(record.updatedAt)}`
@@ -4530,6 +5140,111 @@
       );
     } finally {
       setBusy(extendFormSubmitBtn, false);
+    }
+  });
+
+  /**
+   * คำร้องทั่วไป -- เหมือนโครงของ #extendForm ด้านบน (editingId เดิม/ใหม่,
+   * appendStatusHistoryIfChanged, actingStaff, saveRequests) แต่ตัดทุกอย่างที่
+   * เป็นของขอขยายเขตฯ ล้วน ๆ ออก (ที่อยู่, พิกัด, WBS, การจ่ายงาน) เพราะฟอร์มนี้
+   * ไม่มีสิ่งเหล่านั้นเลยสักอย่าง
+   */
+  generalForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    hideError(generalFormError);
+
+    try {
+      const subject = document.getElementById("genSubject").value.trim();
+      const receivedDate = genDate.value;
+      const customerName = document.getElementById("genCustomerName").value.trim();
+      const phonePrimary = document.getElementById("genPhone").value.trim();
+      const jobStatus = genJobStatus.value;
+      const sentDate = document.getElementById("genSentDate").value;
+      const department = document.getElementById("genDepartment").value.trim();
+      const note = document.getElementById("genNote").value.trim();
+
+      if (!subject) {
+        showError(generalFormError, "กรุณากรอกเรื่อง");
+        return;
+      }
+      if (!receivedDate) {
+        showError(generalFormError, "กรุณาเลือกวันที่ยื่นเรื่อง");
+        return;
+      }
+      if (!customerName) {
+        showError(generalFormError, "กรุณากรอกชื่อลูกค้า");
+        return;
+      }
+      if (!phonePrimary) {
+        showError(generalFormError, "กรุณากรอกเบอร์โทรศัพท์");
+        return;
+      }
+      if (!jobStatus) {
+        showError(generalFormError, "กรุณาเลือกสถานะ");
+        return;
+      }
+
+      const recordData = {
+        type: "general",
+        subject,
+        receivedDate,
+        customerName,
+        phonePrimary,
+        jobStatus,
+        sentDate,
+        department,
+        note
+      };
+
+      const { byName: savedByName, byEmail: savedByEmail } = actingStaff();
+      const now = Date.now();
+
+      const requests = getRequests();
+      if (editingId) {
+        const idx = requests.findIndex(req => req.id === editingId);
+        if (idx !== -1) {
+          const prev = requests[idx];
+          const statusHistory = appendStatusHistoryIfChanged(
+            prev.statusHistory, prev.jobStatus, jobStatus, savedByName, savedByEmail, now);
+
+          requests[idx] = {
+            ...prev,
+            ...recordData,
+            statusHistory,
+            updatedByName: savedByName,
+            updatedByEmail: savedByEmail,
+            updatedAt: now
+          };
+        }
+      } else {
+        if (!pendingNewId) pendingNewId = newRequestId();
+        requests.push({
+          id: pendingNewId,
+          ...recordData,
+          statusHistory: [{ status: jobStatus, byName: savedByName, byEmail: savedByEmail, at: now }],
+          createdByName: savedByName,
+          createdByEmail: savedByEmail,
+          createdAt: now
+        });
+      }
+
+      setBusy(generalFormSubmitBtn, true, "กำลังบันทึกคำร้อง...");
+      await saveRequests(requests);
+
+      editingId = null;
+      pendingNewId = null;
+      generalForm.reset();
+      setDefaultGeneralDate();
+      updateGenPhoneCall();
+      leaveRequestForm();
+    } catch (err) {
+      console.error("CS Connect general form error:", err);
+      showError(
+        generalFormError,
+        friendlyError(err, "เกิดข้อผิดพลาด ไม่สามารถบันทึกคำร้องได้ กรุณาลองใหม่อีกครั้ง")
+      );
+    } finally {
+      setBusy(generalFormSubmitBtn, false);
     }
   });
 
@@ -6189,9 +6904,12 @@ ${sheetHtml}
   // หน้ารายคนของหัวหน้า: กำลังดูงานของใครอยู่ (ว่าง = ยังอยู่หน้ารายชื่อ)
   let extendPersonEmail = "";
 
-  // รายชื่อเจ้าหน้าที่ -- ดึงมาเฉพาะตอนที่หัวหน้างานเปิดหน้านี้ (หรือผู้ดูแลระบบ
-  // เปิดหน้าตั้งสิทธิ์) พนักงานทั่วไปไม่เคยได้รับรายชื่อนี้เลย เพราะไม่มีอะไรใน
-  // หน้าจอของเขาที่ต้องใช้ -- ข้อมูลที่ไม่ได้ส่งออกไปคือข้อมูลที่รั่วไม่ได้
+  // รายชื่อเจ้าหน้าที่ -- เดิมดึงมาเฉพาะตอนหัวหน้างานเปิดหน้าจ่ายงาน (หรือ
+  // ผู้ดูแลระบบเปิดหน้าตั้งสิทธิ์) พนักงานทั่วไปไม่เคยได้รับเลย แต่ตอนนี้ดรอปดาวน์
+  // เลือกผู้ส่งบนสมุดคุม (ทั้งมิเตอร์และคำร้องทั่วไป -- ดู resolveSenderInfo)
+  // ก็ดึงรายชื่อนี้ด้วยเหมือนกัน ซึ่งพนักงานทั่วไปเข้าถึงหน้าพิมพ์สมุดคุมได้อยู่
+  // แล้ว จึงไม่ใช่การเปิดสิทธิ์ใหม่ -- action listStaff เองก็เป็น requireAuth_
+  // ธรรมดา ไม่ได้ล็อกไว้เฉพาะหัวหน้างานตั้งแต่แรก แค่ front end ไม่เคยเรียกก็เท่านั้น
   let staffRoster = [];
 
   /**
