@@ -25,7 +25,7 @@
 <title>CS Connect</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=Sarabun:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=20260912b">
+<link rel="stylesheet" href="style.css?v=20260912e">
 </head>
 <body>
 
@@ -329,27 +329,13 @@
         <svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.6"/><path d="M12 7v10M9.5 9.3c0-1.3 1.1-2.3 2.5-2.3s2.5 1 2.5 2.1c0 1.5-1.8 1.8-2.5 2-1 .3-2.5.9-2.5 2.4s1.1 2.5 2.5 2.5 2.5-.6 2.5-1.9" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
         ขอเงินประกันคืน
       </button>
+      <button class="requests-nav-item" data-filter="general">
+        <svg viewBox="0 0 24 24" fill="none"><path d="M7 3h8l4 4v14H7V3Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M15 3v4h4M9 12h6M9 16h6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+        คำร้องทั่วไป
+      </button>
       <button class="requests-nav-item" data-filter="extend">
         <svg viewBox="0 0 24 24" fill="none"><path d="M4 20V10m0 10h16M4 20 12 4l8 16M9 20v-6h6v6" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"/></svg>
         ขอขยายเขตฯ
-      </button>
-      <!-- ป้าย "รายละเอียดคำร้อง" ไม่ใช่ "คำร้องทั่วไป" โดยตั้งใจ -- ตั้งแต่แยก
-           แท็บ "คุมคำร้องส่งแผนกสนับสนุน" ออกไปต่างหากด้านล่าง แท็บนี้จึงเหลือ
-           หน้าที่เดียวคือดู/แก้คำร้องทั่วไปทุกใบทุกสถานะ ชื่อจึงสื่อกว่า (ป้าย
-           เดียวกับที่ใช้ในหน้ารายละเอียดของโมดูลขยายเขตฯ อยู่แล้ว) -- ตัวประเภท
-           คำร้อง ("คำร้องทั่วไป") ยังใช้ชื่อเดิมอยู่ทุกที่ที่บอกว่าใบนี้คือ
-           ประเภทอะไร (หัวฟอร์ม, การ์ดสรุป) ดู recordTypeLabel() ใน app.js -->
-      <button class="requests-nav-item" data-filter="general">
-        <svg viewBox="0 0 24 24" fill="none"><path d="M7 3h8l4 4v14H7V3Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M15 3v4h4M9 12h6M9 16h6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
-        รายละเอียดคำร้อง
-      </button>
-      <!-- Derived tab เหมือน payment/meter ด้านล่าง -- คำร้องทั่วไปที่ยังไม่ได้
-           ส่ง (jobStatus = "รอส่ง ผสน.") กรองจาก requestsCache เหมือนกัน ไม่ใช่
-           ข้อมูลชุดแยก ดู isGeneralDispatch ใน app.js -->
-      <button class="requests-nav-item" data-filter="generalDispatch">
-        <svg viewBox="0 0 24 24" fill="none"><path d="M3 12h13M11 6l6 6-6 6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M14 5h6v14h-6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
-        คุมคำร้องส่งแผนกสนับสนุน
-        <span class="nav-badge" data-badge-for="generalDispatch" hidden></span>
       </button>
       <button class="requests-nav-item" data-filter="payment">
         <svg viewBox="0 0 24 24" fill="none"><path d="M12 3a5 5 0 0 0-5 5v3.2c0 .6-.2 1.2-.6 1.7L5 15h14l-1.4-2.1c-.4-.5-.6-1.1-.6-1.7V8a5 5 0 0 0-5-5Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M9.5 18a2.5 2.5 0 0 0 5 0" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
@@ -360,6 +346,14 @@
         <svg viewBox="0 0 24 24" fill="none"><path d="M4 18a8 8 0 1 1 16 0" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><path d="M12 18l4.5-5.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><circle cx="12" cy="18" r="1.3" fill="currentColor"/></svg>
         คุมคำร้องส่งแผนกมิเตอร์
         <span class="nav-badge" data-badge-for="meter" hidden></span>
+      </button>
+      <!-- Derived tab เหมือน payment/meter ด้านล่าง -- คำร้องทั่วไปที่ยังไม่ได้
+           ส่ง (jobStatus = "รอส่ง ผสน.") กรองจาก requestsCache เหมือนกัน ไม่ใช่
+           ข้อมูลชุดแยก ดู isGeneralDispatch ใน app.js -->
+      <button class="requests-nav-item" data-filter="generalDispatch">
+        <svg viewBox="0 0 24 24" fill="none"><path d="M3 12h13M11 6l6 6-6 6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M14 5h6v14h-6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        คุมคำร้องส่งแผนกสนับสนุน
+        <span class="nav-badge" data-badge-for="generalDispatch" hidden></span>
       </button>
     </nav>
 
@@ -379,8 +373,8 @@
               <!-- เหมือน meterPrintBtn ข้างบนทุกกลไก (เลือกด้วย checkbox บนการ์ด
                    -> เปิดเอกสารแก้ไขได้ -> ยืนยัน -> เปลี่ยนสถานะ+เก็บสมุด+พิมพ์)
                    แต่อยู่ในแท็บ "คุมคำร้องส่งแผนกสนับสนุน" (data-filter=
-                   "generalDispatch") แยกจากแท็บ "รายละเอียดคำร้อง" ต่างหาก
-                   ดู openGeneralDispatchPrint ใน app.js -->
+                   "generalDispatch") ซึ่งเป็นแท็บล่างสุดในแถบซ้าย แยกจากแท็บ
+                   "คำร้องทั่วไป" ต่างหาก ดู openGeneralDispatchPrint ใน app.js -->
               <button type="button" id="generalPrintBtn" class="btn btn-primary" hidden disabled>พิมพ์สมุดคุมคำร้องทั่วไป</button>
             </div>
           </div>
@@ -1390,6 +1384,6 @@
      ที่หาสาเหตุยากมาก
      **ต้องเปลี่ยนเลขนี้ทุกครั้งที่แก้ app.js / style.css / track.js / qr.js**
      ไม่งั้นผู้ใช้บางคนจะยังได้ไฟล์เก่าไปอีกพักใหญ่ -->
-<script src="app.js?v=20260912b"></script>
+<script src="app.js?v=20260912e"></script>
 </body>
 </html>

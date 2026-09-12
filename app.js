@@ -11,17 +11,14 @@
   const REQUEST_TYPES = {
     power: "ขอใช้ไฟฟ้า",
     deposit: "ขอเงินประกันคืน",
+    general: "คำร้องทั่วไป",
     extend: "ขอขยายเขตระบบจำหน่ายไฟฟ้า",
-    // แท็บฐาน (เก็บ/แก้ไขคำร้องได้ทุกสถานะ) -- ป้ายชื่อไม่ใช่ "คำร้องทั่วไป" อีก
-    // ต่อไปโดยตั้งใจ ต่างจากแท็บฐานอื่นทุกแท็บที่ป้ายตรงกับชื่อประเภท: แท็บนี้ถูก
-    // แยกออกจากแท็บ "คุมคำร้องส่งแผนกสนับสนุน" (generalDispatch ด้านล่าง) แล้ว
-    // "รายละเอียดคำร้อง" จึงสื่อกว่าว่าเป็นที่ดูคำร้องทุกใบทุกสถานะ ไม่ใช่คิวงาน
-    // ป้ายเดียวกับที่ extendDetailTitle ใช้อยู่แล้วสำหรับความหมายเดียวกัน
-    general: "รายละเอียดคำร้อง",
     payment: "แจ้งเตือนการรับชำระเงิน",
     meter: "คุมคำร้องส่งแผนกมิเตอร์",
     // Derived tab เหมือน payment/meter ข้างบน -- คำร้องทั่วไป (type: general)
     // ที่ยังไม่ได้ส่ง กรองจาก jobStatus ไม่ใช่ประเภทแยก ดู isGeneralDispatch
+    // อยู่ล่างสุดในแถบซ้าย ต่อจากแท็บคุมคำร้องส่งแผนกมิเตอร์ -- แท็บ "คุมงาน"
+    // สองตัวอยู่ติดกัน
     generalDispatch: "คุมคำร้องส่งแผนกสนับสนุน"
   };
 
@@ -2579,17 +2576,6 @@
     generalDispatch: isGeneralDispatch
   };
 
-  /**
-   * ชื่อประเภทที่ใช้บอกว่า "คำร้องใบนี้คือประเภทอะไร" (หัวฟอร์ม, การ์ดสรุป,
-   * ข้อความคัดลอก) -- ต่างจาก REQUEST_TYPES[type] ตรง type "general" เท่านั้น
-   * เพราะป้ายในแท็บของมันถูกเปลี่ยนเป็น "รายละเอียดคำร้อง" แล้ว (เหมาะกับหัวข้อ
-   * แท็บที่แยกจากแท็บ "คุมคำร้องส่งแผนกสนับสนุน" แต่ไม่เหมาะจะบอกประเภทคำร้อง)
-   * ที่เหลือทุก type อ่านจาก REQUEST_TYPES ตรง ๆ เหมือนเดิม
-   */
-  function recordTypeLabel(type) {
-    return type === "general" ? "คำร้องทั่วไป" : REQUEST_TYPES[type];
-  }
-
   // Each derived tab's sidebar button carries a `.nav-badge` tagged with
   // data-badge-for="<tab key>"; the count is just how many records its own
   // filter currently matches, so it shrinks as staff move records along.
@@ -2622,7 +2608,20 @@
   const requestFormComments = document.getElementById("requestFormComments");
   const requestCommentInput = document.getElementById("requestCommentInput");
   const requestCommentError = document.getElementById("requestCommentError");
-  const requestsNavItems = document.querySelectorAll(".requests-nav-item");
+  /**
+   * แท็บของหน้ารายการคำร้องเท่านั้น -- ต้องกรองด้วย [data-filter] ไม่ใช่ .requests-nav-item เปล่า ๆ
+   *
+   * แถบซ้ายของหน้ารายละเอียดขอขยายเขตฯ (#extendDetailMode) ใช้ทั้ง .requests-sidebar
+   * และ .requests-nav-item คลาสเดียวกันเป๊ะ ตัวเลือกที่ไม่กรองจึงกวาดปุ่มแนบแผนผัง/
+   * ภาพหน้างาน/ประมาณการ ติดมาด้วย แล้วผูก handler สลับแท็บให้มันทั้งที่ไม่มี
+   * data-filter -- กดทีหนึ่ง currentRequestFilter กลายเป็น undefined ลิสต์คำร้องว่าง
+   * ไฮไลต์แท็บหลุด และ setActiveNavItem ยังไปลบคลาส active ของปุ่ม pane ที่
+   * showExtendPane เป็นคนคุมอยู่ด้วย
+   *
+   * กรองด้วย [data-filter] ตรงกับสิ่งที่ผู้ใช้ทั้งสองจุดต้องการพอดี (อ่าน
+   * item.dataset.filter ทั้งคู่) จำกัดด้วย parent ไม่ได้เพราะคลาสซ้ำกันทั้งคู่
+   */
+  const requestsNavItems = document.querySelectorAll(".requests-nav-item[data-filter]");
   const reqDistrict = document.getElementById("reqDistrict");
   const reqSubdistrict = document.getElementById("reqSubdistrict");
   const reqZipcode = document.getElementById("reqZipcode");
@@ -3333,7 +3332,7 @@
     }
 
     // เหมือน isMeterTab ข้างบนทุกประการตอนนี้ -- "คุมคำร้องส่งแผนกสนับสนุน" เป็น
-    // derived tab แยกจาก "รายละเอียดคำร้อง" แล้ว (isGeneralDispatch ใน
+    // derived tab แยกจากแท็บ "คำร้องทั่วไป" (isGeneralDispatch ใน
     // DERIVED_TAB_FILTERS) filtered ด้านบนจึงถูกกรองเหลือเฉพาะคำร้องที่ยังเป็น
     // "รอส่ง ผสน." อยู่แล้วโดยอัตโนมัติ ไม่ต้องกรองซ้ำที่นี่
     const isGeneralTab = currentRequestFilter === "generalDispatch";
@@ -4088,7 +4087,7 @@
 
   function renderRequestSummary(record) {
     summaryRecord = record;
-    requestSummaryType.textContent = recordTypeLabel(record.type) || "คำร้อง";
+    requestSummaryType.textContent = REQUEST_TYPES[record.type] || "คำร้อง";
     requestSummaryList.innerHTML = "";
 
     summaryLines(record).forEach(line => {
@@ -4125,7 +4124,7 @@
   requestSummaryCopyBtn.addEventListener("click", async () => {
     if (!summaryRecord) return;
 
-    const text = [recordTypeLabel(summaryRecord.type) || "คำร้อง"]
+    const text = [REQUEST_TYPES[summaryRecord.type] || "คำร้อง"]
       .concat(summaryLines(summaryRecord).map(line => `${line.label}: ${line.value}`))
       .join("\n");
 
@@ -4588,8 +4587,8 @@
     const isGeneral = type === "general";
 
     requestFormTitle.textContent = batchMode
-      ? `เพิ่มหลายคำร้อง: ${recordTypeLabel(type)}`
-      : `${record ? "แก้ไขคำร้อง" : "เพิ่มคำร้อง"}: ${recordTypeLabel(type)}`;
+      ? `เพิ่มหลายคำร้อง: ${REQUEST_TYPES[type]}`
+      : `${record ? "แก้ไขคำร้อง" : "เพิ่มคำร้อง"}: ${REQUEST_TYPES[type]}`;
     requestFormSubtitle.textContent = !isSupported
       ? "แบบฟอร์มสำหรับประเภทนี้อยู่ระหว่างการพัฒนา"
       : batchMode
