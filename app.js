@@ -2171,6 +2171,8 @@
     extendSelection.clear();
     extendSearchQuery = "";
     extendFilter = EXTEND_FILTER_ALL;
+    workKind = "extend";
+    document.getElementById("reqAssigneeField").hidden = true;
     // รายชื่อเจ้าหน้าที่เป็นข้อมูลส่วนบุคคลของคนอื่น ไม่ควรค้างอยู่ในหน้าที่
     // ตอนนี้อ่านว่าออกจากระบบไปแล้ว
     staffRoster = [];
@@ -2705,9 +2707,9 @@
         return;
       }
 
-      // การ์ดนี้เคยเป็นหน้าว่างรอพัฒนา ตอนนี้เป็นคิวงานจริงของแผนก
-      if (key === "extend") {
-        openExtendWorkView();
+      // สองการ์ดนี้ใช้หน้าคิวงานชุดเดียวกัน ต่างกันแค่ประเภทคำร้อง (workKind)
+      if (key === "extend" || key === "power") {
+        openExtendWorkView({ kind: key });
         return;
       }
 
@@ -2761,8 +2763,9 @@
 
       const power = getRequests().find(r => r.id === back.powerId);
       if (power) {
-        showView("requests");
-        openRequestForm("power", power);
+        // ไม่ต้อง showView เอง -- คำร้องขอใช้ไฟฟ้าที่บันทึกแล้วเปิดในหน้างานขอใช้ไฟฟ้า
+        // (openRequestForm สลับหน้าให้) และคืนปลายทางย้อนกลับเดิมของใบนั้นด้วย
+        openRequestForm("power", power, { returnTo: back.returnTo });
         restoreRequestForm(back.draft);
         syncExtendLinkButton();
 
@@ -4120,13 +4123,9 @@
    * และสลับ view ด้วยตัวเอง
    */
   function openLinkedRequest(record) {
-    if (record.type !== "extend") {
-      extendDetailMode.hidden = true;
-      extendWorkListMode.hidden = false;
-      showView("requests");
-    }
-
-    openRequestForm(record.type, record);
+    // ทั้งสองประเภทเปิดในหน้าคิวงานแล้ว openRequestForm สลับหน้าให้เอง
+    // ส่งปลายทางย้อนกลับเดิมต่อไปด้วย ไม่งั้นกดย้อนกลับจะเด้งไปหน้ารับคำร้อง
+    openRequestForm(record.type, record, { returnTo: formReturnTo });
   }
 
   /** ค่าทุกช่องในฟอร์มขอใช้ไฟฟ้าตอนนี้ -- ใช้คู่กับ restoreRequestForm */
@@ -4587,6 +4586,7 @@
 
   function fillRequestForm(r) {
     fillingForm = true;
+    document.getElementById("reqAssignee").value = r.assignee || "";
     document.getElementById("reqNumber").value = r.requestNumber || "";
     document.getElementById("reqDate").value = r.receivedDate || "";
     document.getElementById("reqBP").value = r.bp || "";
@@ -5385,12 +5385,31 @@
 
     // คำร้องขอขยายเขตฯ ทำงานจบในโมดูลของตัวเอง ไม่ใช่ในหน้างานรับคำร้อง --
     // ย้ายฟอร์มไปไว้ในหน้ารายละเอียดของโมดูลนั้น แล้วสลับหน้าไปที่นั่น
-    if (isSupported && isExtend) {
-      mountExtendDetail();
-      extendDetailTitle.textContent = record ? "รายละเอียดคำร้อง" : "เพิ่มคำร้องขอขยายเขตฯ";
+    // ขอใช้ไฟฟ้าที่ "บันทึกแล้ว" เปิดในหน้างานขอใช้ไฟฟ้า ส่วนใบใหม่และโหมดเพิ่มหลาย
+    // คำร้องยังอยู่ในหน้ารับคำร้อง -- การรับเรื่องเข้าระบบเป็นงานของหน้านั้น และโหมด
+    // หลายคำร้องต้องใช้พื้นที่ของหน้ารับคำร้องทั้งหมด
+    const openInWork = isSupported && (isExtend || (isPower && record && !batchMode));
+    document.getElementById("reqAssigneeField").hidden =
+      !(isPower && record && (WORK_KIND_ASSIGNABLE.power || record.assignee));
+
+    if (openInWork) {
+      setWorkKind(type);
+      mountExtendDetail(isExtend ? extendForm : requestForm);
+      extendDetailTitle.textContent = record
+        ? "รายละเอียดคำร้อง"
+        : "เพิ่มคำร้องขอขยายเขตฯ";
       extendDetailSubtitle.textContent = record
-        ? [record.requestNumber, record.customerName, record.wbs].filter(Boolean).join(" · ")
+        ? (isExtend
+          ? [record.requestNumber, record.customerName, record.wbs]
+          : [record.requestNumber, record.customerName, record.trackingNumber]
+        ).filter(Boolean).join(" · ")
         : "กรอกรายละเอียดคำร้องใหม่";
+      if (!isExtend) {
+        // ขอใช้ไฟฟ้าไม่มีขั้นแผนผัง/ภาพหน้างาน/ประมาณการ
+        extendStage.plan = false;
+        extendStage.photo = false;
+        extendStage.estimate = false;
+      }
       extendWorkListMode.hidden = true;
       extendDetailMode.hidden = false;
       showView("extendWork");
@@ -5530,7 +5549,13 @@
       // เก็บค่าที่ค้างอยู่ในฟอร์มไว้ก่อนเดินออกไปอีกโมดูล แล้วค่อยคืนตอนวกกลับมา
       // (ดู leaveRequestForm) -- เก็บหลังบันทึกสำเร็จเท่านั้น ถ้าบันทึกล้มจะได้ไม่
       // มีที่หมายการวกกลับค้างอยู่ทั้งที่ยังไม่ได้ไปไหน
-      linkedReturn = { powerId: source.id, draft: snapshotRequestForm() };
+      linkedReturn = {
+        powerId: source.id,
+        draft: snapshotRequestForm(),
+        // จำว่าใบขอใช้ไฟฟ้าเปิดมาจากไหน (รายการรับคำร้อง หรือหน้างานขอใช้ไฟฟ้า)
+        // วกกลับมาแล้วกดย้อนกลับจะได้ไปถูกที่
+        returnTo: formReturnTo
+      };
 
       const savedExtend = getRequests().find(r => r.id === extendId);
       openRequestForm("extend", savedExtend, { returnTo: "linkedPower" });
@@ -5846,7 +5871,11 @@
       requestForm.reset();
       resetLocationFields();
       resetPurposeFields();
-      renderRequestsList();
+      // เดิมเรียก renderRequestsList() ตรง ๆ ซึ่งถูกเฉพาะตอนฟอร์มอยู่ในหน้ารับคำร้อง
+      // ตอนนี้ใบที่บันทึกแล้วเปิดในหน้างานขอใช้ไฟฟ้า การวาดรายการรับคำร้องใหม่จะไม่
+      // พาออกจากฟอร์ม กดบันทึกแล้วค้างอยู่หน้าเดิม -- leaveRequestForm พาไปตาม
+      // formReturnTo เหมือนทุกฟอร์มอื่น
+      leaveRequestForm();
     } catch (err) {
       console.error("CS Connect request form error:", err);
       // ส่งข้อความจริงจากหลังบ้านออกมา เหมือนทุกฟอร์มอื่นในไฟล์นี้ -- เดิมตรงนี้
@@ -8217,6 +8246,21 @@ ${sheetHtml}
   const EXTEND_FILTER_PEOPLE = "people";
   const EXTEND_SURVEY_STATUS = "รอสำรวจ";
 
+  /**
+   * หน้าคิวงานกำลังแสดงงานประเภทไหน -- "extend" หรือ "power"
+   *
+   * หน้างานขยายเขตฯ กับหน้างานขอใช้ไฟฟ้าเป็นหน้าเดียวกันทั้งหน้า (รายการ ชิป
+   * การจ่ายงาน หน้ารายละเอียด) ต่างกันแค่ข้อมูลที่กรอง ชุดสถานะ ชื่อหัวหน้า และแท็บ
+   * ในหน้ารายละเอียด ทำเป็นสองชุดคือโค้ดราว 800 บรรทัดที่ต้องแก้ให้ตรงกันตลอดไป
+   * -- ตัวแปรนี้ตัวเดียวคือจุดที่ตัดสินว่าต่างกันตรงไหน (ดู setWorkKind)
+   */
+  let workKind = "extend";
+
+  const WORK_KIND_TITLES = {
+    extend: "งานขยายเขตระบบจำหน่ายไฟฟ้า",
+    power: "งานขอใช้ไฟฟ้า"
+  };
+
   let extendFilter = EXTEND_FILTER_ALL;
   let extendSearchQuery = "";
   let extendSelection = new Set();
@@ -8241,7 +8285,34 @@ ${sheetHtml}
    * ที่ไม่โผล่ในชิปไหนเลย
    */
   function extendStatuses() {
-    return Array.from(extJobStatus.options).map(o => o.value).filter(Boolean);
+    const select = workKind === "power" ? document.getElementById("reqJobStatus") : extJobStatus;
+    return Array.from(select.options).map(o => o.value).filter(Boolean);
+  }
+
+  /**
+   * สลับหน้าคิวงานไปเป็นงานอีกประเภท
+   *
+   * เปลี่ยนประเภทแล้วต้องล้างมุมมองเดิมทิ้ง -- ชิปที่เลือกค้างไว้ (เช่น "คิวรอสำรวจ"
+   * หรือสถานะของงานขยายเขตฯ) ไม่มีความหมายกับอีกประเภท ปล่อยค้างไว้จะได้หน้าว่าง
+   * ที่ดูเหมือนไม่มีงาน ส่วนการกลับมาประเภทเดิม (keepView) ไม่ผ่านทางนี้ มุมมองจึงคงอยู่
+   */
+  function setWorkKind(kind) {
+    if (kind !== "extend" && kind !== "power") return;
+
+    if (kind !== workKind) {
+      workKind = kind;
+      extendFilter = EXTEND_FILTER_ALL;
+      extendSearchQuery = "";
+      extendWorkSearch.value = "";
+      extendPersonEmail = "";
+      extendSelection.clear();
+    }
+
+    document.getElementById("extendWorkTopTitle").textContent = WORK_KIND_TITLES[workKind];
+    // ขอใช้ไฟฟ้ามีแท็บเดียว -- รายละเอียดคำร้อง
+    extendPaneItems.forEach(item => {
+      item.hidden = workKind !== "extend" && item.dataset.extendPane !== "form";
+    });
   }
 
   /**
@@ -8255,6 +8326,11 @@ ${sheetHtml}
    * ตัวเดียวกัน) จึงต้องย้ายกลับทุกครั้งที่เปิดฟอร์มประเภทอื่น
    */
   const extendFormHome = extendForm.parentElement;
+  // จุดยึดตำแหน่งเดิมของฟอร์มขอใช้ไฟฟ้าในหน้ารับคำร้อง -- ต้องกลับไปที่ "เดิม" จริง
+  // ไม่ใช่ต่อท้าย .form-main เพราะ #batchResult กับฟอร์มอื่นอยู่ในกล่องเดียวกัน
+  // และลำดับของมันมีผลตอนโหมดเพิ่มหลายคำร้อง
+  const requestFormAnchor = document.createComment("requestForm home");
+  requestForm.parentElement.insertBefore(requestFormAnchor, requestForm);
   const requestFormMetaHome = requestFormMeta.parentElement;
   const extendFormLayout = extendPaneMeta.parentElement;
 
@@ -8297,13 +8373,26 @@ ${sheetHtml}
   // ลากขอบหน้าต่างข้ามเกณฑ์แล้วต้องย้ายตาม ไม่ใช่ค้างผิดที่จนกว่าจะเปิดฟอร์มใหม่
   summaryWideLayout.addEventListener("change", placeSummaryCard);
 
-  function mountExtendDetail() {
-    if (extendForm.parentElement !== extendPaneForm) extendPaneForm.appendChild(extendForm);
+  function sendRequestFormHome() {
+    if (requestForm.previousSibling !== requestFormAnchor) {
+      requestFormAnchor.parentNode.insertBefore(requestForm, requestFormAnchor.nextSibling);
+    }
+  }
+
+  /** form = ฟอร์มที่จะวางในหน้ารายละเอียด (ขอขยายเขตฯ หรือขอใช้ไฟฟ้า) อีกฟอร์มกลับบ้าน */
+  function mountExtendDetail(form) {
+    const target = form || extendForm;
+
+    if (target === extendForm) sendRequestFormHome();
+    else if (extendForm.parentElement !== extendFormHome) extendFormHome.appendChild(extendForm);
+
+    if (target.parentElement !== extendPaneForm) extendPaneForm.appendChild(target);
     if (requestFormMeta.parentElement !== extendPaneMeta) extendPaneMeta.appendChild(requestFormMeta);
     placeSummaryCard();
   }
 
   function unmountExtendDetail() {
+    sendRequestFormHome();
     if (extendForm.parentElement !== extendFormHome) extendFormHome.appendChild(extendForm);
     if (requestFormMeta.parentElement !== requestFormMetaHome) {
       requestFormMetaHome.appendChild(requestFormMeta);
@@ -8345,11 +8434,29 @@ ${sheetHtml}
   };
 
   function extendJobs() {
-    return getRequests().filter(r => r.type === "extend");
+    return getRequests().filter(r => r.type === workKind);
+  }
+
+  /**
+   * ประเภทงานไหนเปิดใช้การจ่ายงานอยู่ -- สวิตช์เดียวของทั้งหน้า
+   *
+   * งานขอใช้ไฟฟ้า "ปิดไว้ก่อน" ตามที่เจ้าของงานสั่ง จะเปิดเมื่อบอก -- โค้ดจ่ายงาน
+   * ของประเภทนี้ทำไว้ครบแล้ว เปิดคือเปลี่ยน power เป็น true ที่นี่ และเพิ่ม 'power'
+   * กลับเข้า ASSIGNABLE_TYPES ใน Code.gs (ด่านจริงอยู่ฝั่งนั้น ต้องเปิดคู่กัน)
+   *
+   * ปิดแล้วซ่อนทุกอย่างที่มีความหมายเฉพาะเมื่อมีการจ่ายงาน: ช่องติ๊ก แถบจ่ายงาน
+   * ชิป "งานของฉัน"/"งานในมือแต่ละคน" (ไม่มีใครถูกจ่ายงาน ชิปจะเป็นศูนย์ตลอด)
+   * บรรทัด "ยังไม่ได้จ่ายงาน" บนการ์ด และช่องผู้รับผิดชอบในฟอร์ม
+   */
+  const WORK_KIND_ASSIGNABLE = { extend: true, power: false };
+
+  function workAssignable() {
+    return Boolean(WORK_KIND_ASSIGNABLE[workKind]);
   }
 
   /** หัวหน้างานหรือผู้ดูแลระบบ -- แค่เรื่องการแสดงผล ด่านจริงอยู่ฝั่งเซิร์ฟเวอร์ */
   function canAssignWork() {
+    if (!workAssignable()) return false;
     const session = getSession();
     return Boolean(session && (session.isSupervisor || session.isAdmin));
   }
@@ -8499,14 +8606,19 @@ ${sheetHtml}
       : 0;
 
     const chips = [
-      { key: EXTEND_FILTER_ALL, label: "ทั้งหมด", count: jobs.length },
-      { key: EXTEND_FILTER_MINE, label: "งานของฉัน", count: mine },
-      {
+      { key: EXTEND_FILTER_ALL, label: "ทั้งหมด", count: jobs.length }
+    ].concat(workAssignable()
+      ? [{ key: EXTEND_FILTER_MINE, label: "งานของฉัน", count: mine }]
+      : []
+    ).concat(workKind === "extend"
+      // คิวรอสำรวจเป็นขั้นตอนของงานขยายเขตฯ เท่านั้น ขอใช้ไฟฟ้าไม่มีสถานะนี้
+      ? [{
         key: EXTEND_FILTER_QUEUE,
         label: "คิวรอสำรวจ",
         count: jobs.filter(r => r.jobStatus === EXTEND_SURVEY_STATUS).length
-      }
-    ].concat(canAssignWork()
+      }]
+      : []
+    ).concat(canAssignWork()
       ? [{ key: EXTEND_FILTER_PEOPLE, label: "งานในมือแต่ละคน", count: jobs.length }]
       : []
     ).concat(extendStatuses().map(status => ({
@@ -8698,7 +8810,7 @@ ${sheetHtml}
   function renderExtendCard(record) {
     const card = document.createElement("div");
     card.className = "request-card request-card-clickable";
-    card.dataset.type = "extend";
+    card.dataset.type = record.type;
 
     card.innerHTML = `
       <div class="request-card-top">
@@ -8746,7 +8858,9 @@ ${sheetHtml}
     card.querySelector(".request-meta-location").textContent = `สถานที่: ${buildLocationText(record)}`;
 
     const assigneeEl = card.querySelector(".work-assignee");
-    if (record.assignee) {
+    if (!workAssignable() && !record.assignee) {
+      assigneeEl.remove();
+    } else if (record.assignee) {
       assigneeEl.textContent = `ผู้รับผิดชอบ: ${record.assignee}`;
     } else {
       assigneeEl.textContent = "ยังไม่ได้จ่ายงาน";
@@ -8755,7 +8869,7 @@ ${sheetHtml}
 
     // เปิดคำร้องใบนั้นในฟอร์มเดิม (ฟอร์มเดียวกับหน้ารับคำร้อง) เพื่ออัปเดตสถานะ
     // และคอมเมนต์ -- จำไว้ด้วยว่ามาจากหน้านี้ ปุ่มย้อนกลับจะได้พากลับมาถูกที่
-    card.addEventListener("click", () => openRequestForm("extend", record, { returnTo: "extendWork" }));
+    card.addEventListener("click", () => openRequestForm(record.type, record, { returnTo: "extendWork" }));
 
     const actions = [];
 
@@ -8909,6 +9023,9 @@ ${sheetHtml}
   }
 
   function openExtendWorkView(options = {}) {
+    if (options.kind) setWorkKind(options.kind);
+    else setWorkKind(workKind);
+
     if (!options.keepView) {
       extendFilter = EXTEND_FILTER_ALL;
       extendSearchQuery = "";

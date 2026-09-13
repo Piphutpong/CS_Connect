@@ -891,6 +891,13 @@ button:active {
   transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
 }
 
+/* ต้องมี -- .requests-nav-item ตั้ง display: flex ไว้ ซึ่งชนะกฎ [hidden] ของ
+   เบราว์เซอร์ (ดู Gotcha ใน CLAUDE.md) หน้างานขอใช้ไฟฟ้าซ่อนแท็บแนบแผนผัง/
+   ภาพหน้างาน/ประมาณการ ด้วย hidden ถ้าไม่มีกฎนี้แท็บจะยังโผล่อยู่ครบ */
+.requests-nav-item[hidden] {
+  display: none;
+}
+
 .requests-nav-item svg {
   width: 18px;
   height: 18px;

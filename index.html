@@ -25,7 +25,7 @@
 <title>CS Connect</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=Sarabun:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=20260913l">
+<link rel="stylesheet" href="style.css?v=20260913m">
 </head>
 <body>
 
@@ -285,11 +285,21 @@
         <span class="service-desc">บันทึกและติดตามคำร้องขอใช้ไฟฟ้า / ขอขยายเขตฯ / คำร้องทั่วไป</span>
       </button>
 
+      <!-- งานขอใช้ไฟฟ้า -- คิวงานของคำร้องขอใช้ไฟฟ้า ใช้หน้า extendWorkView ชุดเดียว
+           กับงานขยายเขตฯ (ดู workKind ใน app.js) ไม่ได้มีหน้าแยกอีกชุด -->
+      <button class="service-card" data-service="power">
+        <span class="service-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none"><path d="M9 3v5M15 3v5M6 8h12v3a6 6 0 0 1-12 0V8Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"/><path d="M12 17v4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+        </span>
+        <span class="service-title">งานขอใช้ไฟฟ้า</span>
+        <span class="service-desc">คิวงานคำร้องขอใช้ไฟฟ้า จ่ายงานและติดตามงานในมือ</span>
+      </button>
+
       <button class="service-card" data-service="extend">
         <span class="service-icon" aria-hidden="true">
           <svg viewBox="0 0 24 24" fill="none"><path d="M4 20V10m0 10h16M4 20 12 4l8 16M9 20v-6h6v6" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"/></svg>
         </span>
-        <span class="service-title">ขอขยายเขตระบบจำหน่ายไฟฟ้า</span>
+        <span class="service-title">งานขยายเขตระบบจำหน่ายไฟฟ้า</span>
         <span class="service-desc">คำร้องขอขยายเขตระบบจำหน่ายไฟฟ้า</span>
       </button>
 
@@ -623,6 +633,14 @@
             </button>
             </div>
           </div>
+          <!-- ผู้รับผิดชอบ -- เขียนได้ทางเดียวคือหัวหน้าจ่ายงานจากหน้า "งานขอใช้ไฟฟ้า"
+               (assignRequests ฝั่งเซิร์ฟเวอร์) ช่องนี้แสดงอย่างเดียว และไม่ถูกส่งไปกับ
+               การบันทึกฟอร์ม -- ดู preserveAssignmentFields_ ใน Code.gs -->
+          <div class="field" id="reqAssigneeField" hidden>
+            <label for="reqAssignee">ผู้รับผิดชอบ</label>
+            <input type="text" id="reqAssignee" placeholder="ยังไม่ได้จ่ายงาน" readonly>
+            <p class="field-hint">หัวหน้างานเป็นผู้จ่ายงานจากหน้า “งานขอใช้ไฟฟ้า” ที่หน้าแรก</p>
+          </div>
           <div class="field">
             <label for="reqNote">หมายเหตุ</label>
             <textarea id="reqNote" rows="2" placeholder="หมายเหตุเพิ่มเติม (ถ้ามี)"></textarea>
@@ -827,7 +845,7 @@
           <div class="field" id="extAssigneeField" hidden>
             <label for="extAssignee">ผู้รับผิดชอบ</label>
             <input type="text" id="extAssignee" placeholder="ยังไม่ได้จ่ายงาน" readonly>
-            <p class="field-hint">หัวหน้างานเป็นผู้จ่ายงานจากหน้า “ขอขยายเขตระบบจำหน่ายไฟฟ้า” ที่หน้าแรก</p>
+            <p class="field-hint">หัวหน้างานเป็นผู้จ่ายงานจากหน้า “งานขยายเขตระบบจำหน่ายไฟฟ้า” ที่หน้าแรก</p>
           </div>
           <!-- ขึ้นตั้งแต่สถานะ "รอสำรวจ" เป็นต้นไป (หรือเมื่อคำร้องมีเลข WBS แล้ว)
                ค่าเริ่มต้นคือเลขถัดจาก WBS ล่าสุดของปี พ.ศ. นี้ -- ดู nextWbs -->
@@ -1062,7 +1080,9 @@
   </div>
 </section>
 
-<!-- ===== งานขอขยายเขตระบบจำหน่ายไฟฟ้า (โมดูลปฏิบัติงาน) =====
+<!-- ===== งานขยายเขตระบบจำหน่ายไฟฟ้า / งานขอใช้ไฟฟ้า (โมดูลปฏิบัติงาน) =====
+     หน้าเดียวใช้ร่วมกันสองประเภทงาน -- workKind ใน app.js ตัดสินว่ากำลังแสดงงาน
+     ประเภทไหน งานขอใช้ไฟฟ้ามีแท็บเดียวคือรายละเอียดคำร้อง (ซ่อนแท็บที่เหลือ)
      คนละหน้ากับ "งานรับคำร้อง": ที่นั่นคือการรับเรื่องเข้าระบบ ที่นี่คือคิวงาน
      ของแผนก คำร้องประเภท extend ที่บันทึกไว้ที่โน่นจะโผล่มาที่นี่เอง เพราะทั้ง
      สองหน้าอ่านจากชุดข้อมูลเดียวกัน (requestsCache) ไม่มีการ "ส่งต่อ" ที่ไหน -->
@@ -1072,7 +1092,7 @@
       <button id="extendWorkBackBtn" class="btn btn-ghost btn-icon" aria-label="ย้อนกลับ">
         <svg viewBox="0 0 24 24" fill="none"><path d="M15 18l-6-6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
       </button>
-      <span class="topbar-title">งานขอขยายเขตระบบจำหน่ายไฟฟ้า</span>
+      <span id="extendWorkTopTitle" class="topbar-title">งานขยายเขตระบบจำหน่ายไฟฟ้า</span>
     </div>
     <div class="topbar-user">
       <span id="userGreeting4" class="user-greeting"></span>
@@ -1497,6 +1517,6 @@
      ที่หาสาเหตุยากมาก
      **ต้องเปลี่ยนเลขนี้ทุกครั้งที่แก้ app.js / style.css / track.js / qr.js**
      ไม่งั้นผู้ใช้บางคนจะยังได้ไฟล์เก่าไปอีกพักใหญ่ -->
-<script src="app.js?v=20260913l"></script>
+<script src="app.js?v=20260913m"></script>
 </body>
 </html>
