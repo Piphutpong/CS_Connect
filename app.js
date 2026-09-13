@@ -2150,6 +2150,7 @@
     // แค็ตตาล็อกและชุดเซ็ตเป็นข้อมูลที่ดึงมาด้วย token ของคนที่เพิ่งออกจากระบบ
     // และชุดเซ็ตยังติดชื่อคนสร้างมาด้วย -- ทิ้งไปให้คนถัดไปดึงใหม่ด้วย token ของตัวเอง
     estimateCatalog = null;
+    estimateCatalogFailed = false;
     estimateKits = [];
 
     document.getElementById("extendWorkList").innerHTML = "";
@@ -6603,7 +6604,10 @@
   let estimateDeptIndex = -1;
   let estimateJobIndex = -1;
   let estimateDirty = false;
-  let estimateCatalog = null;   // [{ keyCode, description }]
+  let estimateCatalog = null;   // [{ keyCode, description }] -- null = ยังไม่ได้โหลด
+  // โหลดแค็ตตาล็อกล่าสุดล้มเหลว -- แยกจาก "ยังไม่ได้โหลด" เพื่อให้แผงเลือกบอกได้ว่า
+  // ต้องลองใหม่ ไม่ใช่ขึ้นว่ากำลังโหลดค้างไว้ตลอดไป
+  let estimateCatalogFailed = false;
   let estimateKits = [];        // [{ id, name, note, items: [...] }]
   let estimateLists = null;     // { section: [], group: [], investment: [] }
 
@@ -6628,7 +6632,7 @@
 
     estimateView.catalogNote.textContent = estimateCatalog.length
       ? `รายการตั้งต้นในระบบ ${estimateCatalog.length} รายการ · พิมพ์ค้นได้ทั้งช่องรหัสพัสดุและช่องชื่อรายการ พิมพ์ช่องไหนอีกช่องเติมให้เอง · เลือกกลุ่มไว้จะค้นเฉพาะในกลุ่มนั้น`
-      : "ยังไม่มีรายการตั้งต้นในระบบ — แท็บ EstimateItems ในชีตต้องมีหัวตารางแถวแรกเป็น group · keyCode · description (หรือ กลุ่ม · รหัสพัสดุ · รายการ) แล้วใส่ข้อมูลตั้งแต่แถวที่ 2";
+      : "ยังไม่มีรายการตั้งต้นในระบบ — แท็บ EstimateItems ในชีตต้องมีหัวตารางแถวแรกเป็น keyCode · description · group (หรือ รหัสพัสดุ · รายการ · กลุ่ม) แล้วใส่ข้อมูลตั้งแต่แถวที่ 2";
   }
 
   /**
@@ -7271,6 +7275,11 @@
     showView("estimate");
     showEstimateLevel(0);
 
+    if (estimateCatalog === null) {
+      estimateCatalogFailed = false;
+      estimateView.catalogNote.textContent = "กำลังโหลดรายการพัสดุจากชีต…";
+    }
+
     ensureEstimateCatalog()
       .then(() => {
         // แค็ตตาล็อกมาช้ากว่าการวาดหน้าจอได้ -- ถ้าตอนวาดยังไม่มีข้อมูล ดรอปดาวน์
@@ -7279,8 +7288,11 @@
       })
       .catch(err => {
         console.error("CS Connect estimate catalog error:", err);
+        estimateCatalogFailed = true;
         estimateView.catalogNote.textContent =
           "โหลดรายการตั้งต้นไม่สำเร็จ — ลองเปิดหน้านี้ใหม่อีกครั้ง";
+        // วาดแผงเลือกใหม่ให้ดรอปดาวน์เปลี่ยนจาก "กำลังโหลด" เป็น "โหลดไม่สำเร็จ"
+        if (!estimateView.formPane.hidden) renderEstimateForm();
       });
   }
 
@@ -7396,10 +7408,42 @@
   }
 
   function resetItemPicker() {
-    fillSelect(estimateView.pickGroup, catalogGroups(), "", "-- ทุกกลุ่ม (พิมพ์ค้นหา) --");
+    const placeholder = estimateCatalog !== null
+      ? "-- ทุกกลุ่ม (พิมพ์ค้นหา) --"
+      : estimateCatalogFailed
+        ? "-- โหลดรายการพัสดุไม่สำเร็จ --"
+        : "กำลังโหลดรายการพัสดุ…";
+    fillSelect(estimateView.pickGroup, catalogGroups(), "", placeholder);
     clearItemPick();
     hideError(estimateView.pickError);
     syncItemPickerScope();
+    syncPickerAvailability();
+  }
+
+  /**
+   * ล็อกแผงเลือกพัสดุไว้จนกว่าแค็ตตาล็อกจะโหลดเสร็จ
+   *
+   * แค็ตตาล็อกโหลดตอนเปิดหน้าประมาณการครั้งแรก และมาช้ากว่าการวาดหน้าจอได้ ก่อนมี
+   * ตัวนี้ ดรอปดาวน์กลุ่มจะว่างเปล่าอยู่ช่วงหนึ่งโดยไม่มีอะไรบอก คนจึงเข้าใจว่า
+   * "กลุ่มไม่ขึ้นให้เลือก" (เจ้าของงานเจอจริง) ช่องค้นพัสดุก็ค้นอะไรไม่เจอเหมือน
+   * แค็ตตาล็อกว่าง ระหว่างรอจึงล็อกทุกช่อง และให้ดรอปดาวน์กลุ่มบอกสถานะแทน
+   *
+   * setEstimatePageBusy(false) เรียกตัวนี้ต่อท้ายด้วย -- ไม่งั้นกดบันทึกเสร็จระหว่าง
+   * ที่แค็ตตาล็อกยังโหลดไม่เสร็จ ช่องจะถูกปลดล็อกทั้งที่ยังไม่มีข้อมูล
+   */
+  function syncPickerAvailability() {
+    const locked = estimateCatalog === null;
+    [
+      estimateView.pickGroup,
+      estimateView.pickItem,
+      estimateView.pickKeyCode,
+      estimateView.pickIn,
+      estimateView.pickRm,
+      estimateView.pickRp,
+      estimateView.kitSelect,
+      estimateView.kitAddBtn,
+      document.getElementById("estAddItemBtn")
+    ].forEach(el => { if (el) el.disabled = locked; });
   }
 
   /**
@@ -8066,6 +8110,7 @@ ${sheetHtml}
     document.getElementById("estNewJobInvestment").disabled = busy;
     estimateView.deptList.querySelectorAll("button").forEach(el => { el.disabled = busy; });
     estimateView.jobList.querySelectorAll("button").forEach(el => { el.disabled = busy; });
+    if (!busy) syncPickerAvailability();
   }
 
   document.getElementById("estimateSaveBtn").addEventListener("click", async (e) => {
