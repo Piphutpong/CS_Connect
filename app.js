@@ -6,6 +6,7 @@
   const REQUESTS_KEY = "csconnect_requests";
   const DISPATCHES_KEY = "csconnect_meterDispatches";
   const GENERAL_DISPATCHES_KEY = "csconnect_generalDispatches";
+  const REVENUE_DISPATCHES_KEY = "csconnect_revenueDispatches";
   const MIGRATED_KEY = "csconnect_migratedToBackend";
 
   const REQUEST_TYPES = {
@@ -19,7 +20,10 @@
     // ที่ยังไม่ได้ส่ง กรองจาก jobStatus ไม่ใช่ประเภทแยก ดู isGeneralDispatch
     // อยู่ล่างสุดในแถบซ้าย ต่อจากแท็บคุมคำร้องส่งแผนกมิเตอร์ -- แท็บ "คุมงาน"
     // สองตัวอยู่ติดกัน
-    generalDispatch: "คุมคำร้องส่งแผนกสนับสนุน"
+    generalDispatch: "คุมคำร้องส่งแผนกสนับสนุน",
+    // Derived tab ตัวที่สาม -- ขอเงินประกันคืน (type: deposit) ที่ยังไม่ได้ส่ง
+    // ดู isRevenueDispatch
+    revenueDispatch: "คุมคำร้องส่งแผนกบริหารรายได้ค่าไฟฟ้า"
   };
 
   // Maps each ขอใช้ไฟฟ้า job status to a highlight tone so the card badge
@@ -56,7 +60,14 @@
     "หมดกำหนดยืนราคา": "danger",
     // คำร้องทั่วไป -- สองสถานะเท่านั้น: ยังไม่ส่ง (warning) กับส่งแล้ว (success)
     "รอส่ง ผสน.": "warning",
-    "ส่ง ผสน. แล้ว": "success"
+    "ส่ง ผสน. แล้ว": "success",
+    // ขอเงินประกันคืน -- "ส่ง ผบร." ไม่ต้องเพิ่ม เพราะเป็นสตริงเดียวกันเป๊ะกับ
+    // สถานะของขอขยายเขตฯ ที่มีอยู่แล้วด้านบน (info) แผนที่นี้ไม่มีมิติประเภทคำร้อง
+    // จึงแยกสองความหมายไม่ได้ ปล่อยเป็น info ดีกว่าไปเปลี่ยนสีของอีกประเภทหนึ่ง
+    // โดยที่ไม่มีใครขอ -- และ info ก็ยังอ่านได้ว่า "ไม่ได้อยู่กับเราแล้ว" ซึ่งจริงทั้งคู่
+    "รอยกเลิกมิเตอร์": "warning",
+    "รอเปลี่ยนประเภทการใช้ไฟฟ้า": "warning",
+    "รอส่ง ผบร.": "warning"
   };
 
   // Service area currently covers only these Chiang Mai districts;
@@ -153,6 +164,7 @@
   let memoryRequests = [];
   let memoryDispatches = [];
   let memoryGeneralDispatches = [];
+  let memoryRevenueDispatches = [];
 
   function readLocal(key, fallback) {
     if (!storageAvailable) return fallback;
@@ -171,7 +183,8 @@
       return {
         requests: readLocal(REQUESTS_KEY, memoryRequests),
         dispatches: readLocal(DISPATCHES_KEY, memoryDispatches),
-        generalDispatches: readLocal(GENERAL_DISPATCHES_KEY, memoryGeneralDispatches)
+        generalDispatches: readLocal(GENERAL_DISPATCHES_KEY, memoryGeneralDispatches),
+        revenueDispatches: readLocal(REVENUE_DISPATCHES_KEY, memoryRevenueDispatches)
       };
     },
 
@@ -200,6 +213,15 @@
         return;
       }
       localStorage.setItem(GENERAL_DISPATCHES_KEY, JSON.stringify(all));
+    },
+
+    async saveRevenueDispatch(dispatch) {
+      const all = readLocal(REVENUE_DISPATCHES_KEY, memoryRevenueDispatches).concat([dispatch]);
+      if (!storageAvailable) {
+        memoryRevenueDispatches = all;
+        return;
+      }
+      localStorage.setItem(REVENUE_DISPATCHES_KEY, JSON.stringify(all));
     },
 
     async register(user) {
@@ -444,7 +466,8 @@
         return {
           requests,
           dispatches: data.dispatches || [],
-          generalDispatches: data.generalDispatches || []
+          generalDispatches: data.generalDispatches || [],
+          revenueDispatches: data.revenueDispatches || []
         };
       },
 
@@ -472,6 +495,10 @@
 
       async saveMeterDispatch(dispatch) {
         await callAsUser({ action: "saveMeterDispatch", record: dispatch });
+      },
+
+      async saveRevenueDispatch(dispatch) {
+        await callAsUser({ action: "saveRevenueDispatch", record: dispatch });
       },
 
       async saveGeneralDispatch(dispatch) {
@@ -619,6 +646,7 @@
   let requestsCache = [];
   let dispatchesCache = [];
   let generalDispatchesCache = [];
+  let revenueDispatchesCache = [];
 
   // Returns a shallow copy: callers routinely build up an edited array
   // (`requests[idx] = {...}`, `requests.push(...)`) and only commit it via
@@ -638,11 +666,16 @@
     return generalDispatchesCache.slice();
   }
 
+  function getRevenueDispatches() {
+    return revenueDispatchesCache.slice();
+  }
+
   async function refreshAll() {
     const data = await backend.load();
     requestsCache = data.requests || [];
     dispatchesCache = data.dispatches || [];
     generalDispatchesCache = data.generalDispatches || [];
+    revenueDispatchesCache = data.revenueDispatches || [];
   }
 
   /**
@@ -997,6 +1030,47 @@
     renderRequestsList();
   }
 
+  /** เหมือน markRecordsSentGeneral ด้านบน แต่ของการส่งแผนกบริหารรายได้ค่าไฟฟ้า */
+  async function markRecordsSentRevenue(ids, book) {
+    const { byName, byEmail } = actingStaff();
+    const now = book.printedAt;
+    const idSet = new Set(ids);
+
+    const updated = getRequests().map(r => {
+      if (!idSet.has(r.id) || r.jobStatus === "ส่ง ผบร.") return r;
+      const statusHistory = (r.statusHistory || []).concat([
+        { status: "ส่ง ผบร.", byName, byEmail, at: now }
+      ]);
+      return {
+        ...r,
+        jobStatus: "ส่ง ผบร.",
+        statusHistory,
+        updatedByName: byName,
+        updatedByEmail: byEmail,
+        updatedAt: now
+      };
+    });
+
+    await saveRequests(updated);
+
+    const dispatch = {
+      id: newRequestId(),
+      printedAt: now,
+      printedByName: byName,
+      printedByEmail: byEmail,
+      senderName: book.sender.name,
+      senderPosition: book.sender.position,
+      receiverName: book.receiver.name,
+      receiverPosition: book.receiver.position,
+      rows: book.rows
+    };
+    await backend.saveRevenueDispatch(dispatch);
+    revenueDispatchesCache = [dispatch].concat(revenueDispatchesCache);
+
+    revenueSelection.clear();
+    renderRequestsList();
+  }
+
   /**
    * รูปแบบคอลัมน์กลางของสมุดคุม -- ใช้ร่วมกันระหว่างมิเตอร์กับคำร้องทั่วไป
    *
@@ -1012,6 +1086,14 @@
 
   // ไม่มีคอลัมน์แผนกที่รับผิดชอบโดยตั้งใจ -- ตามที่สั่งไว้ว่าสมุดเล่มนี้ไม่ต้อง
   // ดึงข้อมูลนั้นมาแสดง (ยังกรอกไว้ในคำร้องเองได้ตามปกติ แค่ไม่ขึ้นบนกระดาษที่พิมพ์)
+  // ขอเงินประกันคืน -- CA เป็นเลขที่แผนกบริหารรายได้ค่าไฟฟ้าใช้หาบัญชีลูกค้า
+  // จึงมีค่ากว่าคอลัมน์ประเภทคำร้องแบบสมุดมิเตอร์ (ทั้งเล่มเป็นประเภทเดียวกันหมด)
+  const REVENUE_DISPATCH_PRINT_COLUMNS = [
+    { label: "เลขที่คำร้อง", className: "col-number", cell: row => row.requestNumber || row.trackingNumber || "-" },
+    { label: "ชื่อลูกค้า", cell: row => row.customerName || "-" },
+    { label: "CA", cell: row => row.ca || "-" }
+  ];
+
   const GENERAL_DISPATCH_PRINT_COLUMNS = [
     { label: "ชื่อลูกค้า", cell: row => row.customerName || "-" },
     { label: "เรื่อง", cell: row => row.subject || "-" }
@@ -1426,6 +1508,93 @@
     });
   }
 
+  /** เหมือน openGeneralDispatchPrint ด้านล่าง แต่ของแผนกบริหารรายได้ค่าไฟฟ้า */
+  async function openRevenueDispatchPrint(records) {
+    const printWindow = window.open("", "_blank");
+    if (!printWindow) return;
+
+    const sorted = records.slice().sort((a, b) => {
+      return String(a.receivedDate || "").localeCompare(String(b.receivedDate || "")) ||
+        String(a.requestNumber || "").localeCompare(String(b.requestNumber || ""));
+    });
+
+    const printedAt = Date.now();
+    const rows = sorted.map((r, i) => ({
+      position: i + 1,
+      requestId: r.id,
+      requestNumber: r.requestNumber || "",
+      trackingNumber: r.trackingNumber || "",
+      customerName: r.customerName || "",
+      ca: r.ca || "",
+      note: r.note || ""
+    }));
+
+    const { sender, senderOptions } = await resolveSenderInfo();
+
+    writeDispatchDocument(printWindow, {
+      title: "สมุดคุมคำร้องส่งแผนกบริหารรายได้ค่าไฟฟ้า",
+      columns: REVENUE_DISPATCH_PRINT_COLUMNS,
+      rows,
+      printedAt,
+      sender,
+      senderOptions,
+      receiver: { name: "", position: "" },
+      editable: true,
+      actionLabel: "พิมพ์และยืนยันส่ง ผบร.",
+      actionNote: 'แก้ไขข้อความในตารางหรือช่องเซ็นชื่อได้ก่อนกดปุ่มนี้ -- กดแล้วจะเปลี่ยนสถานะคำร้องทั้งหมดด้านบนเป็น "ส่ง ผบร." เก็บสมุดเล่มนี้ไว้ให้ย้อนดูภายหลัง และเปิดหน้าต่างพิมพ์ทันที'
+    });
+
+    wireSenderPicker(printWindow, senderOptions);
+
+    const confirmBtn = printWindow.document.getElementById("confirmBtn");
+    const confirmNote = printWindow.document.querySelector(".actions p");
+    confirmBtn.addEventListener("click", async () => {
+      confirmBtn.disabled = true;
+      confirmBtn.textContent = "กำลังบันทึก...";
+      try {
+        const edited = readDispatchDocument(printWindow);
+        const finalRows = rows.map((row, i) => ({ ...row, note: edited.notes[i] ?? row.note }));
+
+        await markRecordsSentRevenue(sorted.map(r => r.id), {
+          printedAt,
+          rows: finalRows,
+          sender: edited.sender,
+          receiver: edited.receiver
+        });
+
+        confirmBtn.textContent = "บันทึกแล้ว กำลังเปิดหน้าต่างพิมพ์...";
+        printWindow.print();
+        confirmBtn.textContent = "บันทึกและพิมพ์เรียบร้อย";
+        confirmNote.textContent = 'เปลี่ยนสถานะเป็น "ส่ง ผบร." และเก็บสมุดเล่มนี้ไว้ในประวัติแล้ว ปิดหน้าต่างนี้ได้เลย';
+      } catch (err) {
+        console.error("CS Connect: บันทึกการส่ง ผบร. ไม่สำเร็จ", err);
+        confirmBtn.disabled = false;
+        confirmBtn.textContent = "เกิดข้อผิดพลาด ลองใหม่อีกครั้ง";
+      }
+    });
+  }
+
+  /** เหมือน openGeneralDispatchReprint ด้านล่าง แต่ของสมุดคุมส่ง ผบร. */
+  function openRevenueDispatchReprint(dispatch) {
+    const printWindow = window.open("", "_blank");
+    if (!printWindow) return;
+
+    writeDispatchDocument(printWindow, {
+      title: "สมุดคุมคำร้องส่งแผนกบริหารรายได้ค่าไฟฟ้า",
+      columns: REVENUE_DISPATCH_PRINT_COLUMNS,
+      rows: Array.isArray(dispatch.rows) ? dispatch.rows : [],
+      printedAt: dispatch.printedAt,
+      sender: { name: dispatch.senderName, position: dispatch.senderPosition },
+      receiver: { name: dispatch.receiverName, position: dispatch.receiverPosition },
+      editable: false,
+      actionLabel: "พิมพ์ซ้ำ",
+      actionNote: "นี่คือสำเนาของสมุดที่พิมพ์ไปแล้ว จึงแก้ไขไม่ได้ เพื่อให้ตรงกับฉบับที่เซ็นรับไว้"
+    });
+
+    const reprintBtn = printWindow.document.getElementById("confirmBtn");
+    reprintBtn.addEventListener("click", () => printWindow.print());
+  }
+
   /** เหมือน openDispatchReprint ด้านบน แต่ของสมุดคุมคำร้องทั่วไป */
   function openGeneralDispatchReprint(dispatch) {
     const printWindow = window.open("", "_blank");
@@ -1500,7 +1669,8 @@
     // กันประเภทนี้ออกจากหน้าติดตามสาธารณะ) แต่ยังต้องมีเลขประเภทของตัวเอง --
     // ถ้าไม่ใส่ generateTrackingNumbers() จะ fallback ไปใช้ "1" ของขอใช้ไฟฟ้า
     // แล้วเลขจะชนกันข้ามประเภท ซึ่งพังการค้นหาด้วยเลขที่คำร้องทั้งระบบ
-    general: "3"
+    general: "3",
+    deposit: "4"
   };
 
   // System-issued tracking number: last 2 digits of the Buddhist Era year, one
@@ -1972,6 +2142,7 @@
     // เบราว์เซอร์โดยไม่ต้องล็อกอินเลยด้วยซ้ำ (ดูหมายเหตุที่ resetExtendFormState)
     resetExtendFormState();
     resetGeneralFormState();
+    resetDepositFormState();
 
     document.getElementById("batchRows").innerHTML = "";
     document.getElementById("batchResult").hidden = true;
@@ -1995,6 +2166,7 @@
     currentSearchQuery = "";
     meterSelection.clear();
     generalSelection.clear();
+    revenueSelection.clear();
     extendSelection.clear();
     extendSearchQuery = "";
     extendFilter = EXTEND_FILTER_ALL;
@@ -2625,6 +2797,9 @@
   const meterModes = document.getElementById("meterModes");
   const meterModeBtns = meterModes.querySelectorAll(".requests-mode-btn");
 
+  const revenuePrintBtn = document.getElementById("revenuePrintBtn");
+  const revenueModes = document.getElementById("revenueModes");
+  const revenueModeBtns = revenueModes.querySelectorAll(".requests-mode-btn");
   const generalPrintBtn = document.getElementById("generalPrintBtn");
   const generalModes = document.getElementById("generalModes");
   const generalModeBtns = generalModes.querySelectorAll(".requests-mode-btn");
@@ -2671,12 +2846,24 @@
     return r.type === "general" && r.jobStatus === "รอส่ง ผสน.";
   }
 
+  /**
+   * เหมือน isGeneralDispatch แต่ของคำร้องขอเงินประกันคืนที่รอส่ง ผบร.
+   *
+   * ต้องเช็ก type ด้วย ไม่ใช่ดูแต่ jobStatus -- "ส่ง ผบร." เป็นสถานะที่คำร้อง
+   * ขอขยายเขตฯ มีอยู่แล้วเหมือนกัน (คนละความหมาย: ที่นั่นแปลว่าส่งต่อให้ ผบร.
+   * ระหว่างทาง ไม่ใช่จบงาน) คิวนี้จึงต้องจำกัดที่ประเภท deposit เท่านั้น
+   */
+  function isRevenueDispatch(r) {
+    return r.type === "deposit" && r.jobStatus === "รอส่ง ผบร.";
+  }
+
   // Tabs that filter existing records instead of holding their own type --
   // they have no add form, so the "+ เพิ่มคำร้อง" button is hidden on them.
   const DERIVED_TAB_FILTERS = {
     payment: isPaymentNotice,
     meter: isMeterDispatch,
-    generalDispatch: isGeneralDispatch
+    generalDispatch: isGeneralDispatch,
+    revenueDispatch: isRevenueDispatch
   };
 
   // Each derived tab's sidebar button carries a `.nav-badge` tagged with
@@ -2775,6 +2962,14 @@
   const generalForm = document.getElementById("generalForm");
   const generalFormError = document.getElementById("generalFormError");
   const generalFormSubmitBtn = document.getElementById("generalFormSubmitBtn");
+  // ---------- ขอเงินประกันคืน ----------
+  const depositForm = document.getElementById("depositForm");
+  const depositFormError = document.getElementById("depositFormError");
+  const depositFormSubmitBtn = document.getElementById("depositFormSubmitBtn");
+  const depTrackingNumber = document.getElementById("depTrackingNumber");
+  const depDate = document.getElementById("depDate");
+  const depJobStatus = document.getElementById("depJobStatus");
+
   const genTrackingNumber = document.getElementById("genTrackingNumber");
   const genDate = document.getElementById("genDate");
   const genJobStatus = document.getElementById("genJobStatus");
@@ -2788,7 +2983,7 @@
   // already power records and click-to-edit "just works" for them too.
   // deposit still shows a placeholder until its own field set is defined
   // (see openRequestForm).
-  const FORM_SUPPORTED_TYPES = new Set(["power", "extend", "general"]);
+  const FORM_SUPPORTED_TYPES = new Set(["power", "extend", "general", "deposit"]);
 
   let currentRequestFilter = "power";
   let currentAddType = "power";
@@ -2832,6 +3027,9 @@
 
   // เหมือน meterMode ด้านบนทุกประการ แต่ของแท็บ "คุมคำร้องส่งแผนกสนับสนุน"
   let generalMode = "pending";
+
+  // เหมือนกันทุกประการ แต่ของแท็บ "คุมคำร้องส่งแผนกบริหารรายได้ค่าไฟฟ้า"
+  let revenueMode = "pending";
 
   // True while the request form is being used to enter a whole batch at once.
   // The form itself is unchanged -- it just doubles as the shared values for
@@ -3005,6 +3203,7 @@
 
   /** เหมือน meterSelection ด้านบน แต่ของคำร้องทั่วไปที่เลือกไว้เพื่อพิมพ์ส่ง ผสน. */
   let generalSelection = new Set();
+  let revenueSelection = new Set();
 
   function matchesSearch(r, query) {
     if (!query) return true;
@@ -3051,6 +3250,10 @@
 
   function setDefaultExtendDate() {
     extDate.value = todayDateString();
+  }
+
+  function setDefaultDepositDate() {
+    depDate.value = todayDateString();
   }
 
   function setDefaultGeneralDate() {
@@ -3265,6 +3468,8 @@
     return update;
   }
 
+  const updateDepPhoneCall = wireCallButton(
+    document.getElementById("depPhone"), document.getElementById("depPhoneCallBtn"));
   const updateGenPhoneCall = wireCallButton(
     document.getElementById("genPhone"), document.getElementById("genPhoneCallBtn"));
 
@@ -3519,6 +3724,22 @@
       generalPrintBtn.disabled = generalSelection.size === 0;
     }
 
+    // เหมือน isGeneralTab ข้างบนทุกประการ แต่ของแท็บคุมคำร้องส่ง ผบร.
+    const isRevenueTab = currentRequestFilter === "revenueDispatch";
+    revenueModes.hidden = !isRevenueTab;
+
+    if (isRevenueTab && revenueMode === "history") {
+      renderRevenueDispatchHistory();
+      return;
+    }
+
+    revenuePrintBtn.hidden = !isRevenueTab;
+    if (isRevenueTab) {
+      const visibleIds = new Set(filtered.map(r => r.id));
+      revenueSelection.forEach(id => { if (!visibleIds.has(id)) revenueSelection.delete(id); });
+      revenuePrintBtn.disabled = revenueSelection.size === 0;
+    }
+
     requestsList.innerHTML = "";
 
     if (filtered.length === 0) {
@@ -3683,6 +3904,27 @@
         card.appendChild(selectWrap);
       }
 
+      // เหมือน checkbox ของแท็บ generalDispatch ด้านบนทุกกลไก
+      if (isRevenueTab) {
+        card.classList.add("has-card-select");
+        const selectWrap = document.createElement("label");
+        selectWrap.className = "request-card-select";
+        const checkbox = document.createElement("input");
+        checkbox.type = "checkbox";
+        checkbox.checked = revenueSelection.has(r.id);
+        checkbox.setAttribute("aria-label", `เลือกคำร้อง ${r.requestNumber || r.customerName || ""} เพื่อส่ง ผบร.`);
+        checkbox.addEventListener("click", (e) => {
+          e.stopPropagation();
+        });
+        checkbox.addEventListener("change", () => {
+          if (checkbox.checked) revenueSelection.add(r.id);
+          else revenueSelection.delete(r.id);
+          revenuePrintBtn.disabled = revenueSelection.size === 0;
+        });
+        selectWrap.appendChild(checkbox);
+        card.appendChild(selectWrap);
+      }
+
       // Bottom-right corner buttons -- QR whenever there's a tracking number
       // to hand the customer (i.e. every power-type record), print whenever
       // a slip has already been attached. Collected into one wrapper so two
@@ -3774,6 +4016,26 @@
     link.className = "link-btn";
     link.textContent = "ดูสมุดคุม";
     link.addEventListener("click", () => openDispatchReprint(dispatch));
+    line.appendChild(link);
+  }
+
+  /** เหมือน renderDispatchInfo ด้านบน แต่ของสมุดคุมส่ง ผบร. */
+  function renderRevenueDispatchInfo(record) {
+    const line = document.getElementById("requestFormRevenueDispatchInfo");
+    const dispatch = getRevenueDispatches().find(d =>
+      Array.isArray(d.rows) && d.rows.some(row => row.requestId === record.id)
+    );
+
+    line.innerHTML = "";
+    line.hidden = !dispatch;
+    if (!dispatch) return;
+
+    line.append(`ส่ง ผบร.: ${formatThaiDateTime(dispatch.printedAt)} · `);
+    const link = document.createElement("button");
+    link.type = "button";
+    link.className = "link-btn";
+    link.textContent = "ดูสมุดคุม";
+    link.addEventListener("click", () => openRevenueDispatchReprint(dispatch));
     line.appendChild(link);
   }
 
@@ -4031,6 +4293,80 @@
     });
   }
 
+  /** เหมือน renderGeneralDispatchHistory ด้านล่าง แต่ของสมุดคุมส่ง ผบร. */
+  function renderRevenueDispatchHistory() {
+    requestsAddBtn.hidden = true;
+    revenuePrintBtn.hidden = true;
+
+    const matches = getRevenueDispatches()
+      .filter(d => dispatchMatchesSearch(d, currentSearchQuery))
+      .sort((a, b) => (b.printedAt || 0) - (a.printedAt || 0));
+
+    requestsListTitle.textContent = REQUEST_TYPES.revenueDispatch;
+    requestsListCount.textContent = `พิมพ์ไปแล้ว ${matches.length} เล่ม`;
+    requestsList.innerHTML = "";
+
+    if (!matches.length) {
+      const empty = document.createElement("div");
+      empty.className = "request-empty";
+      empty.textContent = currentSearchQuery
+        ? "ไม่พบสมุดคุมที่ตรงกับคำค้น"
+        : "ยังไม่มีสมุดคุมที่พิมพ์ไว้ (ประวัติจะเริ่มบันทึกตั้งแต่ครั้งถัดไปที่กดพิมพ์)";
+      requestsList.appendChild(empty);
+      return;
+    }
+
+    matches.forEach(dispatch => {
+      const rows = Array.isArray(dispatch.rows) ? dispatch.rows : [];
+      const card = document.createElement("div");
+      card.className = "request-card request-card-clickable";
+
+      card.innerHTML = `
+        <div class="request-card-top">
+          <div class="request-badges">
+            <span class="request-badge request-badge-id"></span>
+            <span class="request-badge request-badge-purpose"></span>
+          </div>
+          <span class="request-date"></span>
+        </div>
+        <div class="request-name"></div>
+        <div class="request-meta dispatch-meta-people"></div>
+      `;
+
+      card.querySelector(".request-badge-id").textContent = `${rows.length} รายการ`;
+
+      const printedByEl = card.querySelector(".request-badge-purpose");
+      if (dispatch.printedByName) {
+        printedByEl.textContent = `พิมพ์โดย ${dispatch.printedByName}`;
+      } else {
+        printedByEl.remove();
+      }
+
+      card.querySelector(".request-date").textContent = formatThaiDateTime(dispatch.printedAt);
+      card.querySelector(".request-name").textContent =
+        rows.map(row => row.customerName).filter(Boolean).join(", ") || "-";
+      card.querySelector(".dispatch-meta-people").textContent =
+        `ผู้ส่ง: ${dispatch.senderName || "-"} · ผู้รับ: ${dispatch.receiverName || "-"}`;
+
+      card.classList.add("has-card-actions");
+      const actions = document.createElement("div");
+      actions.className = "request-card-actions";
+      const reprintBtn = document.createElement("button");
+      reprintBtn.type = "button";
+      reprintBtn.className = "btn btn-ghost request-card-action-btn";
+      reprintBtn.textContent = "พิมพ์ซ้ำ";
+      reprintBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        openRevenueDispatchReprint(dispatch);
+      });
+      actions.appendChild(reprintBtn);
+      card.appendChild(actions);
+
+      card.addEventListener("click", () => openRevenueDispatchReprint(dispatch));
+      requestsList.appendChild(card);
+    });
+  }
+
   /** เหมือน renderDispatchHistory ด้านบน แต่ของแท็บคำร้องทั่วไป (สมุดที่พิมพ์ส่ง ผสน. ไปแล้ว) */
   function renderGeneralDispatchHistory() {
     requestsAddBtn.hidden = true;
@@ -4143,6 +4479,8 @@
     setMeterMode("pending");
     generalSelection.clear();
     setGeneralMode("pending");
+    revenueSelection.clear();
+    setRevenueMode("pending");
     renderRequestsList();
     showView("requests");
   }
@@ -4157,6 +4495,8 @@
       setMeterMode("pending");
       generalSelection.clear();
       setGeneralMode("pending");
+      revenueSelection.clear();
+      setRevenueMode("pending");
       renderRequestsList();
     });
   });
@@ -4177,6 +4517,26 @@
       currentSearchQuery = "";
       requestsSearchInput.value = "";
       meterSelection.clear();
+      renderRequestsList();
+    });
+  });
+
+  /** เหมือน setMeterMode ด้านบน แต่ของแท็บคุมคำร้องส่ง ผบร. */
+  function setRevenueMode(mode) {
+    revenueMode = mode;
+    revenueModeBtns.forEach(btn => btn.classList.toggle("active", btn.dataset.revenueMode === mode));
+    requestsSearchInput.placeholder = mode === "history"
+      ? "ค้นหาสมุดคุมด้วยเลขที่คำร้อง, ชื่อลูกค้า, ชื่อผู้ส่ง/ผู้รับ..."
+      : "ค้นหาด้วยเลขที่คำร้อง, ชื่อลูกค้า, เบอร์โทร, บ้านเลขที่, เลขที่โฉนด...";
+  }
+
+  revenueModeBtns.forEach(btn => {
+    btn.addEventListener("click", () => {
+      if (revenueMode === btn.dataset.revenueMode) return;
+      setRevenueMode(btn.dataset.revenueMode);
+      currentSearchQuery = "";
+      requestsSearchInput.value = "";
+      revenueSelection.clear();
       renderRequestsList();
     });
   });
@@ -4210,6 +4570,12 @@
     const selected = getRequests().filter(r => meterSelection.has(r.id));
     if (!selected.length) return;
     await openMeterDispatchPrint(selected);
+  });
+
+  revenuePrintBtn.addEventListener("click", async () => {
+    const selected = getRequests().filter(r => revenueSelection.has(r.id));
+    if (!selected.length) return;
+    await openRevenueDispatchPrint(selected);
   });
 
   generalPrintBtn.addEventListener("click", async () => {
@@ -4308,6 +4674,18 @@
   }
 
   /** เหมือน fillRequestForm/fillExtendForm ด้านบน แต่ของ #generalForm -- ชุดฟิลด์เล็กกว่ามาก */
+  function fillDepositForm(r) {
+    document.getElementById("depRequestNumber").value = r.requestNumber || "";
+    depDate.value = r.receivedDate || "";
+    document.getElementById("depBP").value = r.bp || "";
+    document.getElementById("depCA").value = r.ca || "";
+    document.getElementById("depCustomerName").value = r.customerName || "";
+    document.getElementById("depPhone").value = r.phonePrimary || "";
+    depJobStatus.value = r.jobStatus || "รอยกเลิกมิเตอร์";
+    updateDepPhoneCall();
+    document.getElementById("depNote").value = r.note || "";
+  }
+
   function fillGeneralForm(r) {
     document.getElementById("genSubject").value = r.subject || "";
     document.getElementById("genRequestNumber").value = r.requestNumber || "";
@@ -4337,6 +4715,23 @@
     // คำร้องทั่วไปไม่มีเลขที่คำร้อง/เลขระบบ/ความประสงค์/ที่อยู่/พิกัด/ผู้รับผิดชอบ
     // เลยสักอย่าง -- แทนที่จะพยายามยัดชุดเดียวกันแล้วขึ้น "-" เต็มไปหมด แยกชุด
     // บรรทัดของตัวเองไปเลย อ่านตรงกับสิ่งที่ฟอร์มนี้เก็บจริง
+    if (record.type === "deposit") {
+      return [
+        { label: "เลขที่คำร้อง", value: record.requestNumber || "-", mono: true },
+        { label: "เลขที่คำร้อง (ระบบ)", value: record.trackingNumber || "-", mono: true },
+        { label: "วันที่รับคำร้อง", value: formatThaiDate(record.receivedDate), mono: true },
+        { label: "ชื่อลูกค้า", value: record.customerName || "-" },
+        {
+          label: "เบอร์โทรศัพท์",
+          value: record.phonePrimary || "-",
+          href: record.phonePrimary ? `tel:${record.phonePrimary}` : ""
+        },
+        { label: "BP", value: record.bp || "-", mono: true },
+        { label: "CA", value: record.ca || "-", mono: true },
+        { label: "สถานะ", value: record.jobStatus || "-", status: true }
+      ];
+    }
+
     if (record.type === "general") {
       return [
         { label: "เลขที่รับ", value: record.requestNumber || "-", mono: true },
@@ -4870,6 +5265,15 @@
     renderExtendPhotos({});
   }
 
+  /** เหมือน resetGeneralFormState ด้านล่าง แต่ของ #depositForm */
+  function resetDepositFormState() {
+    hideError(depositFormError);
+    depositForm.reset();
+    setDefaultDepositDate();
+    // .reset() ไม่ยิง input event ปุ่มโทรออกจึงต้องสั่งคำนวณใหม่เอง
+    updateDepPhoneCall();
+  }
+
   /** เหมือน resetExtendFormState ด้านบน แต่ของ #generalForm -- สถานะซ่อนน้อยกว่ามาก */
   function resetGeneralFormState() {
     hideError(generalFormError);
@@ -4896,11 +5300,13 @@
     updateReqPhoneSecondaryCall();
     resetExtendFormState();
     resetGeneralFormState();
+    resetDepositFormState();
 
     const isSupported = FORM_SUPPORTED_TYPES.has(type);
     const isPower = type === "power";
     const isExtend = type === "extend";
     const isGeneral = type === "general";
+    const isDeposit = type === "deposit";
 
     requestFormTitle.textContent = batchMode
       ? `เพิ่มหลายคำร้อง: ${REQUEST_TYPES[type]}`
@@ -4916,10 +5322,12 @@
     // ขอขยายเขตฯ และคำร้องทั่วไปไม่มีโหมดกลุ่ม ปุ่มของมันจึงมีแค่สองข้อความ
     extendFormSubmitBtn.textContent = record ? "บันทึกการแก้ไข" : "บันทึกคำร้อง";
     generalFormSubmitBtn.textContent = record ? "บันทึกการแก้ไข" : "บันทึกคำร้อง";
+    depositFormSubmitBtn.textContent = record ? "บันทึกการแก้ไข" : "บันทึกคำร้อง";
 
     requestForm.hidden = !(isSupported && isPower);
     extendForm.hidden = !(isSupported && isExtend);
     generalForm.hidden = !(isSupported && isGeneral);
+    depositForm.hidden = !(isSupported && isDeposit);
     requestFormPlaceholder.hidden = isSupported;
 
     batchResult.hidden = true;
@@ -4953,6 +5361,12 @@
         : generateTrackingNumber("general");
     }
 
+    if (isSupported && isDeposit) {
+      depTrackingNumber.value = record
+        ? (record.trackingNumber || generateTrackingNumber("deposit"))
+        : generateTrackingNumber("deposit");
+    }
+
     if (isSupported && isPower && record) {
       fillRequestForm(record);
     }
@@ -4963,6 +5377,9 @@
     }
     if (isSupported && isGeneral && record) {
       fillGeneralForm(record);
+    }
+    if (isSupported && isDeposit && record) {
+      fillDepositForm(record);
     }
 
     // คำร้องขอขยายเขตฯ ทำงานจบในโมดูลของตัวเอง ไม่ใช่ในหน้างานรับคำร้อง --
@@ -4999,6 +5416,7 @@
       renderBatchInfo(record);
       renderDispatchInfo(record);
       renderGeneralDispatchInfo(record);
+      renderRevenueDispatchInfo(record);
       renderLinkedRequestInfo(record);
 
       document.getElementById("requestFormEditedBy").textContent = record.updatedByName
@@ -5611,6 +6029,115 @@
       );
     } finally {
       setBusy(extendFormSubmitBtn, false);
+    }
+  });
+
+  /**
+   * ขอเงินประกันคืน -- โครงเดียวกับ #generalForm ด้านล่าง (editingId เดิม/ใหม่,
+   * appendStatusHistoryIfChanged, actingStaff, saveRequests)
+   *
+   * ไม่มีเบอร์โทรและไม่มีที่อยู่โดยตั้งใจ ตามชุดข้อมูลที่สั่งไว้ -- ประเภทนี้อ้างอิง
+   * ลูกค้าด้วย BP/CA ซึ่งเป็นเลขที่แผนกบริหารรายได้ค่าไฟฟ้าใช้หาบัญชีอยู่แล้ว
+   * (matchesSearch ก็ค้นสองช่องนี้ให้อยู่แล้วมาแต่เดิม)
+   */
+  depositForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    hideError(depositFormError);
+
+    try {
+      const trackingNumber = depTrackingNumber.value;
+      const requestNumber = document.getElementById("depRequestNumber").value.trim();
+      const receivedDate = depDate.value;
+      const bp = document.getElementById("depBP").value.trim();
+      const ca = document.getElementById("depCA").value.trim();
+      const customerName = document.getElementById("depCustomerName").value.trim();
+      const phoneField = readPhoneField(
+        document.getElementById("depPhone").value, "เบอร์โทรศัพท์", true);
+      const jobStatus = depJobStatus.value;
+      const note = document.getElementById("depNote").value.trim();
+
+      if (!requestNumber) {
+        showError(depositFormError, "กรุณากรอกเลขที่คำร้อง");
+        return;
+      }
+      if (!receivedDate) {
+        showError(depositFormError, "กรุณาเลือกวันที่รับคำร้อง");
+        return;
+      }
+      if (!customerName) {
+        showError(depositFormError, "กรุณากรอกชื่อลูกค้า");
+        return;
+      }
+      if (phoneField.error) {
+        showError(depositFormError, phoneField.error);
+        return;
+      }
+      const phonePrimary = phoneField.value;
+      if (!jobStatus) {
+        showError(depositFormError, "กรุณาเลือกสถานะ");
+        return;
+      }
+
+      const recordData = {
+        type: "deposit",
+        trackingNumber,
+        requestNumber,
+        receivedDate,
+        bp,
+        ca,
+        customerName,
+        phonePrimary,
+        jobStatus,
+        note
+      };
+
+      const { byName: savedByName, byEmail: savedByEmail } = actingStaff();
+      const now = Date.now();
+
+      const requests = getRequests();
+      if (editingId) {
+        const idx = requests.findIndex(req => req.id === editingId);
+        if (idx !== -1) {
+          const prev = requests[idx];
+          const statusHistory = appendStatusHistoryIfChanged(
+            prev.statusHistory, prev.jobStatus, jobStatus, savedByName, savedByEmail, now);
+
+          requests[idx] = {
+            ...prev,
+            ...recordData,
+            statusHistory,
+            updatedByName: savedByName,
+            updatedByEmail: savedByEmail,
+            updatedAt: now
+          };
+        }
+      } else {
+        if (!pendingNewId) pendingNewId = newRequestId();
+        requests.push({
+          id: pendingNewId,
+          ...recordData,
+          statusHistory: [{ status: jobStatus, byName: savedByName, byEmail: savedByEmail, at: now }],
+          createdByName: savedByName,
+          createdByEmail: savedByEmail,
+          createdAt: now
+        });
+      }
+
+      setBusy(depositFormSubmitBtn, true, "กำลังบันทึกคำร้อง...");
+      await saveRequests(requests);
+
+      editingId = null;
+      pendingNewId = null;
+      resetDepositFormState();
+      leaveRequestForm();
+    } catch (err) {
+      console.error("CS Connect deposit form error:", err);
+      showError(
+        depositFormError,
+        friendlyError(err, "เกิดข้อผิดพลาด ไม่สามารถบันทึกคำร้องได้ กรุณาลองใหม่อีกครั้ง")
+      );
+    } finally {
+      setBusy(depositFormSubmitBtn, false);
     }
   });
 

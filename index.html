@@ -25,7 +25,7 @@
 <title>CS Connect</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=Sarabun:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=20260913h">
+<link rel="stylesheet" href="style.css?v=20260913i">
 </head>
 <body>
 
@@ -355,6 +355,13 @@
         คุมคำร้องส่งแผนกสนับสนุน
         <span class="nav-badge" data-badge-for="generalDispatch" hidden></span>
       </button>
+      <!-- Derived tab เหมือน generalDispatch ข้างบน -- ขอเงินประกันคืนที่ยังไม่ได้ส่ง
+           (jobStatus = "รอส่ง ผบร.") ดู isRevenueDispatch ใน app.js -->
+      <button class="requests-nav-item" data-filter="revenueDispatch">
+        <svg viewBox="0 0 24 24" fill="none"><path d="M3 12h13M11 6l6 6-6 6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M14 5h6v14h-6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        คุมคำร้องส่งแผนกบริหารรายได้ค่าไฟฟ้า
+        <span class="nav-badge" data-badge-for="revenueDispatch" hidden></span>
+      </button>
     </nav>
 
     <main class="requests-content">
@@ -376,6 +383,8 @@
                    "generalDispatch") ซึ่งเป็นแท็บล่างสุดในแถบซ้าย แยกจากแท็บ
                    "คำร้องทั่วไป" ต่างหาก ดู openGeneralDispatchPrint ใน app.js -->
               <button type="button" id="generalPrintBtn" class="btn btn-primary" hidden disabled>พิมพ์สมุดคุมคำร้องทั่วไป</button>
+              <!-- เหมือน generalPrintBtn ข้างบนทุกกลไก แต่ของแท็บคุมคำร้องส่ง ผบร. -->
+              <button type="button" id="revenuePrintBtn" class="btn btn-primary" hidden disabled>พิมพ์สมุดคุมส่ง ผบร.</button>
             </div>
           </div>
 
@@ -389,6 +398,11 @@
           <div class="requests-modes" id="generalModes" hidden>
             <button type="button" class="requests-mode-btn active" data-general-mode="pending">รอส่ง</button>
             <button type="button" class="requests-mode-btn" data-general-mode="history">ประวัติการส่ง</button>
+          </div>
+          <!-- เหมือน generalModes ข้างบน แต่ของแท็บ "คุมคำร้องส่งแผนกบริหารรายได้ฯ" -->
+          <div class="requests-modes" id="revenueModes" hidden>
+            <button type="button" class="requests-mode-btn active" data-revenue-mode="pending">รอส่ง</button>
+            <button type="button" class="requests-mode-btn" data-revenue-mode="history">ประวัติการส่ง</button>
           </div>
           <div class="requests-search">
             <input type="search" id="requestsSearchInput" placeholder="ค้นหาด้วยเลขที่คำร้อง, ชื่อลูกค้า, เบอร์โทร, บ้านเลขที่, เลขที่โฉนด...">
@@ -941,6 +955,65 @@
           <button type="submit" id="generalFormSubmitBtn" class="btn btn-primary btn-block">บันทึกคำร้อง</button>
         </form>
 
+        <!-- ขอเงินประกันคืน -- เอกสารที่ต้องส่งต่อให้ ผบร. (แผนกบริหารรายได้ค่าไฟฟ้า)
+             เลขระบบใช้อ้างอิงภายในเหมือนคำร้องทั่วไป ไม่เปิดให้ค้นจากหน้าติดตาม
+             สาธารณะและไม่มีปุ่มพิมพ์ QR -- ดู findRequestFor_ ใน Code.gs -->
+        <form id="depositForm" class="auth-form request-form" novalidate hidden>
+          <div class="field-row">
+            <div class="field">
+              <label for="depTrackingNumber">เลขที่คำร้อง (ระบบ)</label>
+              <input type="text" id="depTrackingNumber" readonly>
+            </div>
+            <div class="field">
+              <label for="depRequestNumber">เลขที่คำร้อง</label>
+              <input type="text" id="depRequestNumber" placeholder="เลขที่คำร้อง" required autocomplete="off">
+            </div>
+          </div>
+          <div class="field">
+            <label for="depDate">วันที่รับคำร้อง</label>
+            <input type="date" id="depDate" required>
+          </div>
+          <div class="field-row">
+            <div class="field">
+              <label for="depBP">BP</label>
+              <input type="text" id="depBP" placeholder="BP (ถ้ามี)" autocomplete="off">
+            </div>
+            <div class="field">
+              <label for="depCA">CA</label>
+              <input type="text" id="depCA" placeholder="CA (ถ้ามี)" autocomplete="off">
+            </div>
+          </div>
+          <div class="field">
+            <label for="depCustomerName">ชื่อลูกค้า</label>
+            <input type="text" id="depCustomerName" placeholder="ชื่อ - นามสกุลลูกค้า" required autocomplete="off">
+          </div>
+          <div class="field">
+            <label for="depPhone">เบอร์โทรศัพท์</label>
+            <div class="field-input-row">
+              <input type="tel" id="depPhone" placeholder="เบอร์โทรศัพท์" required autocomplete="off">
+              <a href="#" id="depPhoneCallBtn" class="btn btn-ghost btn-icon" aria-label="โทรออก" hidden>
+                <svg viewBox="0 0 24 24" fill="none"><path d="M6.6 10.8c1.4 2.8 3.8 5.2 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1C10.9 21 3 13.1 3 3.9c0-.6.4-1 1-1h3.4c.6 0 1 .4 1 1 0 1.3.2 2.5.6 3.6.1.4 0 .8-.2 1L6.6 10.8Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>
+              </a>
+            </div>
+          </div>
+          <div class="field">
+            <label for="depJobStatus">สถานะ</label>
+            <select id="depJobStatus" required>
+              <option value="รอยกเลิกมิเตอร์">รอยกเลิกมิเตอร์</option>
+              <option value="รอเปลี่ยนประเภทการใช้ไฟฟ้า">รอเปลี่ยนประเภทการใช้ไฟฟ้า</option>
+              <option value="รอส่ง ผบร.">รอส่ง ผบร.</option>
+              <option value="ส่ง ผบร.">ส่ง ผบร.</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="depNote">หมายเหตุ</label>
+            <textarea id="depNote" rows="2" placeholder="หมายเหตุเพิ่มเติม (ถ้ามี)"></textarea>
+          </div>
+
+          <p id="depositFormError" class="form-error" hidden></p>
+          <button type="submit" id="depositFormSubmitBtn" class="btn btn-primary btn-block">บันทึกคำร้อง</button>
+        </form>
+
         <div id="requestFormPlaceholder" class="placeholder-card" hidden>
           <p class="placeholder-note">แบบฟอร์มสำหรับคำร้องประเภทนี้อยู่ระหว่างการพัฒนา เร็ว ๆ นี้จะสามารถกรอกคำร้องประเภทนี้ได้จากหน้านี้</p>
         </div>
@@ -978,6 +1051,8 @@
             <p id="requestFormGeneralDispatchInfo" class="form-meta-line" hidden></p>
           <!-- คำร้องอีกใบที่เป็นเรื่องเดียวกัน (ขอใช้ไฟฟ้า <-> ขอขยายเขตฯ) --
                ขึ้นทั้งสองฝั่ง เพราะทั้งสองใบต้องรู้ว่าอีกใบมีอยู่ ดู renderLinkedRequestInfo -->
+          <!-- เหมือน requestFormGeneralDispatchInfo แต่ของสมุดคุมส่ง ผบร. -->
+          <p id="requestFormRevenueDispatchInfo" class="form-meta-line" hidden></p>
           <p id="requestFormLinkedInfo" class="form-meta-line" hidden></p>
             <p id="requestFormEditedBy" class="form-meta-line"></p>
           </aside>
@@ -1411,6 +1486,6 @@
      ที่หาสาเหตุยากมาก
      **ต้องเปลี่ยนเลขนี้ทุกครั้งที่แก้ app.js / style.css / track.js / qr.js**
      ไม่งั้นผู้ใช้บางคนจะยังได้ไฟล์เก่าไปอีกพักใหญ่ -->
-<script src="app.js?v=20260913h"></script>
+<script src="app.js?v=20260913i"></script>
 </body>
 </html>
