@@ -1978,6 +1978,96 @@ span.estimate-crumb {
   width: 100%;
 }
 
+/* ---------- กล่องรายการแนะนำของช่องรหัสพัสดุ/รายการพัสดุ ----------
+   เขียนเองแทน <datalist> ของเบราว์เซอร์ ซึ่งตัดชื่อพัสดุยาวทิ้งและปรับหน้าตาไม่ได้
+   ชื่อที่ต่างกันแค่ท้ายชื่อ (ขนาดสาย ขนาดหม้อแปลง) จึงเลือกผิดตัวได้ง่าย */
+.est-picker-key,
+.est-picker-item {
+  position: relative;
+}
+
+.est-suggest {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 40;
+  width: 100%;
+  /* ช่องรหัสพัสดุแคบแค่ 150px -- กล่องต้องกว้างพอให้อ่านชื่อเต็มได้ จึงลอยทับ
+     คอลัมน์ข้าง ๆ ได้ แต่ห้ามกว้างเกินจอบนมือถือ */
+  min-width: min(480px, calc(100vw - 32px));
+  max-height: 340px;
+  overflow-y: auto;
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  background: var(--white);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 12px 28px rgba(34, 21, 48, 0.16);
+}
+
+/* ใส่ไว้ตามกติกา [hidden] ของโปรเจกต์ (ดู Gotcha ใน CLAUDE.md) -- กล่องนี้สลับ
+   ด้วย hidden ตลอดเวลา ถ้าวันหนึ่งมีคนเติม display ให้มัน จะได้ไม่ค้างเปิด */
+.est-suggest[hidden] {
+  display: none;
+}
+
+.est-suggest-option {
+  display: grid;
+  grid-template-columns: minmax(84px, auto) 1fr;
+  column-gap: 12px;
+  row-gap: 2px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.est-suggest-option.is-active {
+  background: var(--volt-50);
+}
+
+/* ตัวที่เลือกค้างไว้อยู่แล้ว -- เปิดกล่องใหม่เพื่อเปลี่ยนตัว ต้องเห็นว่าตอนนี้เลือกตัวไหน */
+.est-suggest-option.is-picked .est-suggest-desc {
+  font-weight: 600;
+  color: var(--volt-700);
+}
+
+.est-suggest-key {
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--volt-700);
+  white-space: nowrap;
+}
+
+/* ชื่อเต็มเสมอ -- ขึ้นบรรทัดใหม่ได้ ไม่ตัดท้าย ซึ่งคือเหตุผลเดียวที่กล่องนี้มีอยู่ */
+.est-suggest-desc {
+  min-width: 0;
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+
+.est-suggest-group {
+  grid-column: 2;
+  font-size: 12px;
+  color: var(--ink-soft);
+  overflow-wrap: anywhere;
+}
+
+.est-suggest-empty,
+.est-suggest-more {
+  padding: 8px 10px;
+  font-size: 12.5px;
+  color: var(--ink-soft);
+  cursor: default;
+}
+
+.est-suggest-more {
+  border-top: 1px solid var(--border);
+}
+
 /* ฟอนต์โมโนไว้เพราะเป็นรหัส -- แต่สีต้องเหมือนช่องกรอกอื่นทุกช่อง
    พื้นม่วงอ่อน + cursor: default เป็นหน้าตาของช่องอ่านอย่างเดียว (ตอนที่ช่องนี้
    ยังเป็น readonly) พอพิมพ์ค้นได้แล้วยังคงสีนั้นไว้ คนจะเข้าใจว่ากรอกไม่ได้ */

@@ -6570,9 +6570,9 @@
     pickGroup: document.getElementById("estPickGroup"),
     pickItem: document.getElementById("estPickItem"),
     pickFull: document.getElementById("estPickFull"),
-    pickItemList: document.getElementById("estPickItemList"),
+    pickItemSuggest: document.getElementById("estPickItemSuggest"),
     pickKeyCode: document.getElementById("estPickKeyCode"),
-    pickKeyList: document.getElementById("estPickKeyList"),
+    pickKeySuggest: document.getElementById("estPickKeySuggest"),
     pickIn: document.getElementById("estPickIn"),
     pickRm: document.getElementById("estPickRm"),
     pickRp: document.getElementById("estPickRp"),
@@ -6896,10 +6896,11 @@
   }
 
   /**
-   * เพดานจำนวนตัวเลือกที่ยัดลง <datalist> ได้
+   * เพดานจำนวนตัวเลือกที่แสดงในกล่องแนะนำ
    *
-   * แค็ตตาล็อกมีสองพันกว่ารายการ การใส่ทั้งหมดคือโหนดหลายพันตัวที่เบราว์เซอร์ต้อง
-   * วาดใหม่ทุกครั้งที่พิมพ์หนึ่งตัวอักษร และเป็นรายการที่ยาวเกินกว่าจะกวาดตาหาได้อยู่ดี
+   * แค็ตตาล็อกมีสองพันกว่ารายการ การวาดทั้งหมดคือโหนดหลายพันตัวที่ต้องสร้างใหม่
+   * ทุกครั้งที่พิมพ์หนึ่งตัวอักษร และเป็นรายการที่ยาวเกินกว่าจะกวาดตาหาได้อยู่ดี
+   * เกินเพดานเมื่อไร กล่องจะบอกให้พิมพ์เพิ่ม ไม่ตัดทิ้งเงียบ ๆ
    */
   const SEARCH_LIMIT = 50;
 
@@ -6921,38 +6922,45 @@
   }
 
   /**
-   * เติม <datalist> -- ใส่ label ควบคู่กับ value เสมอ
+   * แถวที่ใช้ตอน "เปิดดูเพื่อเลือกใหม่" -- คือตอนคลิกช่องที่มีพัสดุเลือกค้างอยู่แล้ว
    *
-   * ช่อง KeyCode เสนอเป็นรหัสล้วนจะอ่านไม่ออกว่ารหัสไหนคืออะไร เบราว์เซอร์แสดง
-   * label ต่อท้าย value ให้ และเวลาเลือกจะกรอกเฉพาะ value ลงช่อง ซึ่งเป็นสิ่งที่ต้องการ
+   * ถ้าค้นด้วยข้อความในช่องตามปกติ ช่องที่มีชื่อเต็มของตัวที่เลือกไว้จะค้นเจอแต่
+   * ตัวเดิมตัวเดียว คนที่เลือกผิดจึงเปลี่ยนตัวไม่ได้เลยนอกจากลบข้อความทิ้งทั้งหมด
+   * (อาการ "ล็อกไม่ให้เลือกใหม่" ที่เจ้าของงานแจ้งมา) ที่นี่จึงไม่สนข้อความในช่อง:
+   * เลือกกลุ่มไว้ก็แสดงทั้งกลุ่ม ไม่ได้เลือกก็แสดงพัสดุกลุ่มเดียวกับตัวที่เลือกค้างไว้
+   * ซึ่งตรงกับกรณีที่เจอบ่อยที่สุด -- เลือกผิดขนาดสาย/ขนาดหม้อแปลง ตัวที่ถูกมักอยู่
+   * กลุ่มเดียวกัน คืน null เมื่อไม่มีขอบเขตให้เปิดดู (ให้กลับไปค้นตามข้อความตามปกติ)
    */
-  function fillDatalist(list, pairs) {
-    list.innerHTML = "";
-    pairs.forEach(pair => {
-      const option = document.createElement("option");
-      option.value = pair.value;
-      if (pair.label) option.label = pair.label;
-      list.appendChild(option);
-    });
+  function browseRows() {
+    if (estimateView.pickGroup.value) return scopedRows();
+    if (pickedItem && pickedItem.group) return itemsForGroup(pickedItem.group);
+    return null;
   }
 
-  /** เสนอชื่อรายการที่ "มีคำที่พิมพ์อยู่ในนั้น" (ค้นแบบ substring) */
-  function suggestDescriptions() {
-    const q = estimateView.pickItem.value.trim().toLowerCase();
-    if (q.length < suggestMinChars()) {
-      fillDatalist(estimateView.pickItemList, []);
-      return;
-    }
+  /**
+   * ชื่อรายการที่ "มีคำที่พิมพ์อยู่ในนั้น" (ค้นแบบ substring)
+   *
+   * คืน null เมื่อยังพิมพ์ไม่ถึงจำนวนตัวอักษรขั้นต่ำ (กล่องต้องปิด ไม่ใช่ขึ้นว่า
+   * "ไม่พบ") และคืนแถวแค็ตตาล็อกตัวจริง ไม่ใช่แค่ข้อความ -- ชื่อซ้ำกันได้ในแค็ตตาล็อก
+   * การเลือกด้วยตัวแถวจึงได้รหัสที่ถูกตัวเสมอ ต่างจาก datalist เดิมที่ได้กลับมาแค่
+   * ข้อความ แล้วต้องเดาเอาแถวแรกที่ชื่อตรงกัน
+   */
+  function searchDescriptions(browse) {
+    const browsing = browse ? browseRows() : null;
+    const rows = browsing || scopedRows();
+    const q = browsing ? "" : estimateView.pickItem.value.trim().toLowerCase();
+    if (!browsing && q.length < suggestMinChars()) return null;
 
-    const out = [];
-    for (const item of scopedRows()) {
+    const items = [];
+    let more = false;
+    for (const item of rows) {
       if (!item.description) continue;
       if (!q || item.description.toLowerCase().includes(q)) {
-        out.push({ value: item.description, label: item.keyCode || "" });
-        if (out.length >= SEARCH_LIMIT) break;
+        if (items.length >= SEARCH_LIMIT) { more = true; break; }
+        items.push(item);
       }
     }
-    fillDatalist(estimateView.pickItemList, out);
+    return { items, more };
   }
 
   /**
@@ -6962,29 +6970,206 @@
    * มีเลขชุดนั้นอยู่กลางรหัสขึ้นมาปนก่อน จะทำให้ตัวที่กำลังไล่หาถูกดันตกไป -- แต่ก็ยัง
    * เก็บพวกที่ตรงกลางไว้ท้ายรายการ เผื่อคนจำได้แค่ท่อนกลางของรหัส
    */
-  function suggestKeyCodes() {
-    const q = estimateView.pickKeyCode.value.trim().toLowerCase();
-    if (q.length < suggestMinChars()) {
-      fillDatalist(estimateView.pickKeyList, []);
-      return;
-    }
+  function searchKeyCodes(browse) {
+    const browsing = browse ? browseRows() : null;
+    const rows = browsing || scopedRows();
+    const q = browsing ? "" : estimateView.pickKeyCode.value.trim().toLowerCase();
+    if (!browsing && q.length < suggestMinChars()) return null;
 
     const starts = [];
     const inside = [];
-    for (const item of scopedRows()) {
+    let more = false;
+    for (const item of rows) {
       const code = String(item.keyCode || "");
       if (!code) continue;
 
       const lower = code.toLowerCase();
-      const entry = { value: code, label: item.description || "" };
+      if (!q || lower.startsWith(q)) starts.push(item);
+      else if (lower.includes(q)) inside.push(item);
 
-      if (!q || lower.startsWith(q)) starts.push(entry);
-      else if (lower.includes(q)) inside.push(entry);
-
-      if (starts.length >= SEARCH_LIMIT) break;
+      if (starts.length > SEARCH_LIMIT) { more = true; break; }
     }
 
-    fillDatalist(estimateView.pickKeyList, starts.concat(inside).slice(0, SEARCH_LIMIT));
+    const all = starts.concat(inside);
+    if (all.length > SEARCH_LIMIT) more = true;
+    return { items: all.slice(0, SEARCH_LIMIT), more };
+  }
+
+  /**
+   * กล่องรายการแนะนำใต้ช่องพิมพ์ -- ใช้ร่วมกันทั้งช่องรหัสพัสดุและช่องรายการพัสดุ
+   *
+   * มีไว้แทน <datalist> ของเบราว์เซอร์ ซึ่งตัดชื่อพัสดุยาวทิ้งและจัดหน้าตาไม่ได้
+   * ชื่อในแค็ตตาล็อกมักต่างกันแค่ท้ายชื่อ (ขนาดสาย ขนาดหม้อแปลง) เห็นไม่ครบก็เลือก
+   * ผิดตัวได้ง่าย กล่องนี้แสดงรหัส ชื่อเต็ม (ขึ้นบรรทัดใหม่ได้) และกลุ่มของทุกตัวเลือก
+   * การเลือกส่งแถวแค็ตตาล็อกตัวจริงให้ onPick ไม่ใช่ข้อความ
+   *
+   * isPicked บอกว่าช่องนี้กำลังถือพัสดุที่เลือกไว้แล้วหรือไม่ -- ถ้าใช่ การคลิก
+   * ช่องจะเปิดกล่องแบบ "ดูเพื่อเลือกใหม่" (ดู browseRows) และเลือกข้อความทั้งหมด
+   * ไว้ให้ พิมพ์ทับได้ทันที ตัวที่เลือกค้างไว้ถูกไฮไลต์และเลื่อนมาให้เห็นในกล่อง
+   *
+   * รายละเอียดที่แตกง่าย:
+   * - เลือกด้วย mousedown + preventDefault ไม่ใช่ click -- ถ้าใช้ click ช่องพิมพ์จะ
+   *   เสียโฟกัสก่อน blur ปิดกล่องทิ้ง แล้ว click จะไปตกที่ตัวเลือกที่ถูกลบไปแล้ว
+   * - ข้อความทุกชิ้นใส่ด้วย textContent ไม่ใช้ innerHTML -- แค็ตตาล็อกเป็นข้อมูลที่
+   *   วางมือลงชีต ต้องถือว่าเป็นข้อความดิบเสมอ
+   * - คลิกซ้ำในช่องที่โฟกัสอยู่แล้วไม่ยิง focus อีก จึงต้องฟัง mousedown ของช่องด้วย
+   *   ไม่งั้นปิดกล่องด้วย Esc แล้วคลิกช่องเดิมจะเปิดกล่องกลับมาไม่ได้
+   * - ใช้คีย์บอร์ดได้ครบ (ลูกศรขึ้นลง / Enter / Esc) และตั้ง aria-activedescendant
+   *   ให้โปรแกรมอ่านหน้าจอรู้ว่ากำลังชี้ตัวเลือกไหนอยู่
+   */
+  function wireSuggestBox({ input, box, search, isPicked, onPick }) {
+    let items = [];
+    let active = -1;
+
+    function close() {
+      box.hidden = true;
+      box.innerHTML = "";
+      items = [];
+      active = -1;
+      input.setAttribute("aria-expanded", "false");
+      input.removeAttribute("aria-activedescendant");
+    }
+
+    function setActive(index) {
+      const options = box.querySelectorAll(".est-suggest-option");
+      options.forEach((el, i) => {
+        const on = i === index;
+        el.classList.toggle("is-active", on);
+        el.setAttribute("aria-selected", on ? "true" : "false");
+      });
+      active = index;
+      if (index >= 0 && options[index]) {
+        input.setAttribute("aria-activedescendant", options[index].id);
+        options[index].scrollIntoView({ block: "nearest" });
+      } else {
+        input.removeAttribute("aria-activedescendant");
+      }
+    }
+
+    function pick(index) {
+      const item = items[index];
+      if (!item) return;
+      close();
+      onPick(item);
+    }
+
+    function render(browse) {
+      const result = search(Boolean(browse));
+      if (!result) {
+        close();
+        return;
+      }
+
+      items = result.items;
+      active = -1;
+      box.innerHTML = "";
+      input.removeAttribute("aria-activedescendant");
+
+      if (!items.length) {
+        const empty = document.createElement("li");
+        empty.className = "est-suggest-empty";
+        empty.textContent = "ไม่พบรายการที่ตรงกับคำค้น";
+        box.appendChild(empty);
+      }
+
+      items.forEach((item, index) => {
+        const option = document.createElement("li");
+        option.className = "est-suggest-option";
+        if (item === pickedItem) option.classList.add("is-picked");
+        option.id = `${box.id}-opt-${index}`;
+        option.setAttribute("role", "option");
+        option.setAttribute("aria-selected", "false");
+
+        const key = document.createElement("span");
+        key.className = "est-suggest-key";
+        key.textContent = item.keyCode || "—";
+
+        const desc = document.createElement("span");
+        desc.className = "est-suggest-desc";
+        desc.textContent = item.description || "";
+
+        option.append(key, desc);
+
+        if (item.group) {
+          const group = document.createElement("span");
+          group.className = "est-suggest-group";
+          group.textContent = `กลุ่ม ${item.group}`;
+          option.appendChild(group);
+        }
+
+        option.addEventListener("mousedown", (e) => {
+          e.preventDefault();
+          pick(index);
+        });
+        option.addEventListener("mousemove", () => {
+          if (active !== index) setActive(index);
+        });
+
+        box.appendChild(option);
+      });
+
+      if (result.more) {
+        const more = document.createElement("li");
+        more.className = "est-suggest-more";
+        more.textContent = `แสดง ${SEARCH_LIMIT} รายการแรก -- พิมพ์เพิ่มเพื่อค้นให้แคบลง`;
+        box.appendChild(more);
+      }
+
+      box.hidden = false;
+      input.setAttribute("aria-expanded", "true");
+
+      // เปิดดูเพื่อเลือกใหม่ -- ชี้ไว้ที่ตัวที่เลือกค้างอยู่ ให้เห็นทันทีว่าตอนนี้คือตัวไหน
+      const current = items.indexOf(pickedItem);
+      if (current !== -1) setActive(current);
+    }
+
+    /** เปิดกล่องจากการคลิก/โฟกัส -- ช่องที่ถือพัสดุที่เลือกไว้แล้วเปิดแบบดูเพื่อเลือกใหม่ */
+    function openFromPointer() {
+      if (isPicked()) {
+        // setTimeout เพราะ mouseup หลังคลิกจะวางเคอร์เซอร์ทับการเลือกข้อความทันที
+        setTimeout(() => input.select(), 0);
+        render(true);
+      } else {
+        render(false);
+      }
+    }
+
+    input.addEventListener("focus", openFromPointer);
+    input.addEventListener("mousedown", () => {
+      if (document.activeElement === input && box.hidden) openFromPointer();
+    });
+
+    input.addEventListener("keydown", (e) => {
+      if (box.hidden) {
+        if (e.key === "ArrowDown") {
+          e.preventDefault();
+          render(isPicked());
+        }
+        return;
+      }
+
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        if (items.length) setActive(Math.min(active + 1, items.length - 1));
+      } else if (e.key === "ArrowUp") {
+        e.preventDefault();
+        if (items.length) setActive(Math.max(active - 1, 0));
+      } else if (e.key === "Enter") {
+        if (active >= 0) {
+          e.preventDefault();
+          pick(active);
+        }
+      } else if (e.key === "Escape") {
+        e.preventDefault();
+        close();
+      } else if (e.key === "Tab") {
+        close();
+      }
+    });
+
+    input.addEventListener("blur", close);
+
+    return { render, close };
   }
 
   /**
@@ -7226,8 +7411,10 @@
    */
   function syncItemPickerScope() {
     setPickedItem(null);
-    suggestDescriptions();
-    suggestKeyCodes();
+    // ไม่เปิดกล่องให้เองตอนเปลี่ยนกลุ่ม -- กล่องที่เด้งขึ้นมาทั้งที่ไม่ได้คลิกช่องไหน
+    // จะบังแผงด้านล่าง กล่องเปิดเองเมื่อคลิกหรือพิมพ์ในช่อง
+    itemSuggest.close();
+    keySuggest.close();
   }
 
   estimateView.pickGroup.addEventListener("change", () => {
@@ -7235,10 +7422,34 @@
     syncItemPickerScope();
   });
 
-  // input ครอบคลุมทั้งการพิมพ์เองและการเลือกจากรายการที่ datalist เสนอ
+  // เลือกจากกล่องแนะนำ = ได้แถวแค็ตตาล็อกตัวจริง เติมทั้งสองช่องให้พร้อมกัน
+  // (ไม่ส่ง typedField เพราะไม่มีช่องไหนที่กำลังพิมพ์ค้างอยู่แล้ว)
+  const itemSuggest = wireSuggestBox({
+    input: estimateView.pickItem,
+    box: estimateView.pickItemSuggest,
+    search: searchDescriptions,
+    isPicked: () => Boolean(pickedItem) && estimateView.pickItem.value === pickedItem.description,
+    onPick: (item) => {
+      hideError(estimateView.pickError);
+      setPickedItem(item);
+    }
+  });
+
+  const keySuggest = wireSuggestBox({
+    input: estimateView.pickKeyCode,
+    box: estimateView.pickKeySuggest,
+    search: searchKeyCodes,
+    isPicked: () => Boolean(pickedItem) && estimateView.pickKeyCode.value === (pickedItem.keyCode || ""),
+    onPick: (item) => {
+      hideError(estimateView.pickError);
+      setPickedItem(item);
+    }
+  });
+
+  // input คือการพิมพ์เอง -- การเลือกจากกล่องแนะนำไปทาง onPick ข้างบน
   estimateView.pickItem.addEventListener("input", () => {
     hideError(estimateView.pickError);
-    suggestDescriptions();
+    itemSuggest.render(false);
 
     // ตรงกับชื่อในแค็ตตาล็อกพอดีเท่านั้นจึงนับว่าเลือกแล้ว -- พิมพ์ค้างครึ่งทางยังไม่ใช่
     const typed = estimateView.pickItem.value;
@@ -7248,17 +7459,15 @@
 
   estimateView.pickKeyCode.addEventListener("input", () => {
     hideError(estimateView.pickError);
-    suggestKeyCodes();
+    keySuggest.render(false);
 
     const typed = estimateView.pickKeyCode.value.trim();
     const exact = typed ? scopedRows().find(i => (i.keyCode || "") === typed) : null;
     setPickedItem(exact, "key");
   });
 
-  // คลิกช่องว่าง ๆ ตอนเลือกกลุ่มไว้ ต้องเห็นรายการทั้งกลุ่มเลย (suggestMinChars = 0)
-  // แทนที่ดรอปดาวน์เดิมที่เคยไล่ดูได้ -- ไม่งั้นความสามารถ "ดูว่ากลุ่มนี้มีอะไรบ้าง" จะหายไป
-  estimateView.pickItem.addEventListener("focus", suggestDescriptions);
-  estimateView.pickKeyCode.addEventListener("focus", suggestKeyCodes);
+  // การเปิดกล่องตอนคลิก/โฟกัสอยู่ใน wireSuggestBox แล้ว -- คลิกช่องว่าง ๆ ตอนเลือก
+  // กลุ่มไว้ยังเห็นรายการทั้งกลุ่มเหมือนเดิม (suggestMinChars = 0)
 
   /* ---------- ชุดเซ็ตพัสดุ ---------- */
 

@@ -25,7 +25,7 @@
 <title>CS Connect</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=Sarabun:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=20260913j">
+<link rel="stylesheet" href="style.css?v=20260913k">
 </head>
 <body>
 
@@ -1398,18 +1398,23 @@
 
           <!-- KeyCode มาก่อนชื่อรายการ เพราะเป็นตัวระบุจริงของพัสดุ และคนที่จำรหัสได้
                จะเริ่มจากช่องนี้ -- ทั้งสองช่องเป็นช่องพิมพ์ที่เสนอตัวเลือกระหว่างพิมพ์
-               (datalist) เหมือนกัน ต่างแค่ค้นคนละคอลัมน์ พิมพ์ช่องไหนอีกช่องเติมให้เอง
-               เมื่อตรงกับรายการในแค็ตตาล็อกจริง ถ้าเลือกกลุ่มไว้ ทั้งคู่จะค้นเฉพาะในกลุ่มนั้น -->
+               เหมือนกัน ต่างแค่ค้นคนละคอลัมน์ พิมพ์ช่องไหนอีกช่องเติมให้เอง เมื่อตรงกับ
+               รายการในแค็ตตาล็อกจริง ถ้าเลือกกลุ่มไว้ ทั้งคู่จะค้นเฉพาะในกลุ่มนั้น
+
+               กล่องรายการแนะนำ (.est-suggest) เขียนเองแทน <datalist> ของเบราว์เซอร์
+               เพราะ datalist ตัดชื่อพัสดุยาวทิ้งและจัดหน้าตาไม่ได้ ดู wireSuggestBox -->
           <div class="field est-picker-key">
             <label for="estPickKeyCode">รหัสพัสดุ</label>
-            <input type="text" id="estPickKeyCode" list="estPickKeyList" placeholder="พิมพ์รหัสพัสดุ" autocomplete="off">
-            <datalist id="estPickKeyList"></datalist>
+            <input type="text" id="estPickKeyCode" placeholder="พิมพ์รหัสพัสดุ" autocomplete="off"
+                   role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="estPickKeySuggest">
+            <ul id="estPickKeySuggest" class="est-suggest" role="listbox" aria-label="รหัสพัสดุที่ตรงกับคำค้น" hidden></ul>
           </div>
 
           <div class="field est-picker-item">
             <label for="estPickItem">รายการพัสดุ</label>
-            <input type="text" id="estPickItem" list="estPickItemList" placeholder="พิมพ์ชื่อรายการพัสดุ" autocomplete="off">
-            <datalist id="estPickItemList"></datalist>
+            <input type="text" id="estPickItem" placeholder="พิมพ์ชื่อรายการพัสดุ" autocomplete="off"
+                   role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="estPickItemSuggest">
+            <ul id="estPickItemSuggest" class="est-suggest" role="listbox" aria-label="รายการพัสดุที่ตรงกับคำค้น" hidden></ul>
           </div>
 
           <div class="field est-picker-qty">
@@ -1492,6 +1497,6 @@
      ที่หาสาเหตุยากมาก
      **ต้องเปลี่ยนเลขนี้ทุกครั้งที่แก้ app.js / style.css / track.js / qr.js**
      ไม่งั้นผู้ใช้บางคนจะยังได้ไฟล์เก่าไปอีกพักใหญ่ -->
-<script src="app.js?v=20260913j"></script>
+<script src="app.js?v=20260913k"></script>
 </body>
 </html>
