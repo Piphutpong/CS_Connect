@@ -3107,6 +3107,38 @@
    * พิกัดไม่บังคับกรอก แต่ถ้ากรอกต้องกรอกให้ครบคู่และเป็นพิกัดจริง -- ใช้ร่วมกัน
    * ทั้งฟอร์มขอใช้ไฟฟ้าและขอขยายเขตฯ คืนข้อความ error หรือ null ถ้าผ่าน
    */
+  /**
+   * อ่านเบอร์โทรศัพท์จากช่องกรอก ตรวจความถูกต้อง แล้วคืนค่าที่ตัดเหลือเฉพาะตัวเลข
+   *
+   * เบอร์ที่ผิดไม่ใช่แค่ข้อมูลไม่สวย -- มันคือกุญแจดอกที่สองของหน้าติดตามสถานะ
+   * (track.html ค้นด้วยเลขที่คำร้อง + เบอร์โทร) ลูกค้าที่เบอร์ในระบบพิมพ์ผิดจึง
+   * เปิดดูงานตัวเองไม่ได้เลย และเจ้าหน้าที่ก็โทรกลับไม่ได้ด้วย
+   *
+   * เก็บเฉพาะตัวเลขล้วน เพราะเบอร์เดียวกันที่พิมพ์คนละแบบ ("081-234-5678",
+   * "081 234 5678") จะกลายเป็นคนละค่าเวลาค้นหรือเทียบ ฝั่งเซิร์ฟเวอร์ตัด
+   * อักขระที่ไม่ใช่ตัวเลขทิ้งอยู่แล้วตอนจับคู่ (normalizePhone_) การเก็บให้ตรง
+   * รูปแบบเดียวกันตั้งแต่ต้นจึงทำให้ทั้งสองฝั่งเห็นค่าเดียวกัน
+   *
+   * รับ 9 หลัก (เบอร์บ้าน เช่น 053123456) และ 10 หลัก (มือถือ) ที่ขึ้นต้นด้วย 0
+   */
+  function readPhoneField(raw, label, required) {
+    const text = String(raw == null ? "" : raw).trim();
+
+    if (!text) {
+      return required ? { error: `กรุณากรอก${label}` } : { value: "" };
+    }
+
+    const digits = text.replace(/[^0-9]/g, "");
+
+    if (!/^0[0-9]{8,9}$/.test(digits)) {
+      return {
+        error: `${label}ไม่ถูกต้อง -- ต้องเป็นตัวเลข 9 หรือ 10 หลัก ขึ้นต้นด้วย 0 (เช่น 0812345678 หรือ 053123456)`
+      };
+    }
+
+    return { value: digits };
+  }
+
   function readCoordField(coordEl) {
     const text = coordEl.value.trim();
     if (!text) return { lat: "", lng: "" };
@@ -4764,8 +4796,10 @@
       const bp = document.getElementById("reqBP").value.trim();
       const ca = document.getElementById("reqCA").value.trim();
       const customerName = document.getElementById("reqCustomerName").value.trim();
-      const phonePrimary = document.getElementById("reqPhonePrimary").value.trim();
-      const phoneSecondary = document.getElementById("reqPhoneSecondary").value.trim();
+      const phonePrimaryField = readPhoneField(
+        document.getElementById("reqPhonePrimary").value, "เบอร์โทรศัพท์ (หลัก)", true);
+      const phoneSecondaryField = readPhoneField(
+        document.getElementById("reqPhoneSecondary").value, "เบอร์โทรศัพท์ (รอง)", false);
       const province = document.getElementById("reqProvince").value;
       const districtKey = document.getElementById("reqDistrict").value;
       const subdistrict = document.getElementById("reqSubdistrict").value;
@@ -4800,10 +4834,16 @@
         return;
       }
 
-      if (!phonePrimary) {
-        showError(requestFormError, "กรุณากรอกเบอร์โทรศัพท์ (หลัก)");
+      if (phonePrimaryField.error) {
+        showError(requestFormError, phonePrimaryField.error);
         return;
       }
+      if (phoneSecondaryField.error) {
+        showError(requestFormError, phoneSecondaryField.error);
+        return;
+      }
+      const phonePrimary = phonePrimaryField.value;
+      const phoneSecondary = phoneSecondaryField.value;
 
       if (!districtKey) {
         showError(requestFormError, "กรุณาเลือกอำเภอ");
@@ -4902,6 +4942,21 @@
             showError(requestFormError, `คำร้องที่ ${row.position}: กรุณากรอก${missing.label}`);
             return;
           }
+          // เขียนค่าที่ตัดเหลือตัวเลขกลับเข้า row.values เลย เพราะค่าชุดนี้คือ
+          // ค่าที่ถูกนำไปบันทึกจริงในขั้นถัดไป
+          for (const field of [
+            { key: "phonePrimary", label: "เบอร์โทรศัพท์หลัก", required: true },
+            { key: "phoneSecondary", label: "เบอร์โทรศัพท์รอง", required: false }
+          ]) {
+            const checked = readPhoneField(row.values[field.key], field.label, field.required);
+            if (checked.error) {
+              expandBatchRow(row.el);
+              showError(requestFormError, `คำร้องที่ ${row.position}: ${checked.error}`);
+              return;
+            }
+            row.values[field.key] = checked.value;
+          }
+
           if (row.values.purposeChoice === "other" && !row.values.purposeOther) {
             expandBatchRow(row.el);
             showError(requestFormError, `คำร้องที่ ${row.position}: กรุณาระบุความประสงค์`);
@@ -5061,8 +5116,10 @@
       const requestNumber = document.getElementById("extNumber").value.trim();
       const receivedDate = extDate.value;
       const customerName = document.getElementById("extCustomerName").value.trim();
-      const phonePrimary = document.getElementById("extPhonePrimary").value.trim();
-      const phoneSecondary = document.getElementById("extPhoneSecondary").value.trim();
+      const phonePrimaryField = readPhoneField(
+        document.getElementById("extPhonePrimary").value, "เบอร์โทรศัพท์ (หลัก)", true);
+      const phoneSecondaryField = readPhoneField(
+        document.getElementById("extPhoneSecondary").value, "เบอร์โทรศัพท์ (รอง)", false);
       const location = document.getElementById("extLocation").value.trim();
       const province = document.getElementById("extProvince").value;
       const districtKey = extDistrict.value;
@@ -5093,10 +5150,16 @@
         showError(extendFormError, "กรุณากรอกชื่อลูกค้า");
         return;
       }
-      if (!phonePrimary) {
-        showError(extendFormError, "กรุณากรอกเบอร์โทรศัพท์ (หลัก)");
+      if (phonePrimaryField.error) {
+        showError(extendFormError, phonePrimaryField.error);
         return;
       }
+      if (phoneSecondaryField.error) {
+        showError(extendFormError, phoneSecondaryField.error);
+        return;
+      }
+      const phonePrimary = phonePrimaryField.value;
+      const phoneSecondary = phoneSecondaryField.value;
       if (!districtKey) {
         showError(extendFormError, "กรุณาเลือกอำเภอ");
         return;
@@ -5256,7 +5319,8 @@
       const requestNumber = document.getElementById("genRequestNumber").value.trim();
       const receivedDate = genDate.value;
       const customerName = document.getElementById("genCustomerName").value.trim();
-      const phonePrimary = document.getElementById("genPhone").value.trim();
+      const phoneField = readPhoneField(
+        document.getElementById("genPhone").value, "เบอร์โทรศัพท์", true);
       const jobStatus = genJobStatus.value;
       const sentDate = document.getElementById("genSentDate").value;
       const department = document.getElementById("genDepartment").value.trim();
@@ -5274,10 +5338,11 @@
         showError(generalFormError, "กรุณากรอกชื่อลูกค้า");
         return;
       }
-      if (!phonePrimary) {
-        showError(generalFormError, "กรุณากรอกเบอร์โทรศัพท์");
+      if (phoneField.error) {
+        showError(generalFormError, phoneField.error);
         return;
       }
+      const phonePrimary = phoneField.value;
       if (!jobStatus) {
         showError(generalFormError, "กรุณาเลือกสถานะ");
         return;
