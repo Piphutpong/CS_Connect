@@ -8680,10 +8680,13 @@ ${sheetHtml}
     // สถานะแปลก ๆ ที่ไม่ได้อยู่ในดรอปดาวน์ (ข้อมูลเก่า/พิมพ์มาเอง) ต่อท้ายไว้
     // ดีกว่าปล่อยให้หายไปจากหน้าจอเงียบ ๆ
     const extras = jobs.map(j => j.jobStatus).filter(st => st && order.indexOf(st) === -1);
-    const statuses = order.concat(Array.from(new Set(extras)));
+    // คำร้องที่ไม่มีสถานะเลยต้องมีกลุ่มของตัวเองด้วย -- ตอนมุมมองนี้ใช้แค่งานของฉัน
+    // ยังพอไม่เจอ แต่พอ "งานทั้งหมด" จัดกลุ่มด้วย ใบที่สถานะว่างจะหายไปจากหน้าจอเงียบ ๆ
+    const hasBlank = jobs.some(j => !j.jobStatus);
+    const statuses = order.concat(Array.from(new Set(extras))).concat(hasBlank ? [""] : []);
 
     statuses.forEach(status => {
-      const group = jobs.filter(j => j.jobStatus === status);
+      const group = jobs.filter(j => (j.jobStatus || "") === status);
       if (!group.length) return;
 
       const section = document.createElement("section");
@@ -8698,7 +8701,7 @@ ${sheetHtml}
 
       const badge = document.createElement("span");
       badge.className = `request-badge request-badge-status tone-${JOB_STATUS_TONE[status] || "info"}`;
-      badge.textContent = status;
+      badge.textContent = status || "ไม่ระบุสถานะ";
 
       const count = document.createElement("span");
       count.className = "status-group-count";
@@ -8712,14 +8715,17 @@ ${sheetHtml}
         .sort((a, b) => b.createdAt - a.createdAt)
         .forEach(record => body.appendChild(renderExtendCard(record)));
 
-      const collapsed = extendCollapsed.has(status);
+      // จำการย่อแยกตามประเภทงาน -- สองประเภทมีสถานะชื่อซ้ำกัน (รอเอกสารเพิ่มเติม
+      // ยกเลิกคำร้อง) ย่อกลุ่มในหน้าหนึ่งไม่ควรไปย่อในอีกหน้าด้วย
+      const collapseKey = `${workKind}|${status}`;
+      const collapsed = extendCollapsed.has(collapseKey);
       section.classList.toggle("is-collapsed", collapsed);
       body.hidden = collapsed;
 
       head.addEventListener("click", () => {
-        const nowCollapsed = !extendCollapsed.has(status);
-        if (nowCollapsed) extendCollapsed.add(status);
-        else extendCollapsed.delete(status);
+        const nowCollapsed = !extendCollapsed.has(collapseKey);
+        if (nowCollapsed) extendCollapsed.add(collapseKey);
+        else extendCollapsed.delete(collapseKey);
         section.classList.toggle("is-collapsed", nowCollapsed);
         body.hidden = nowCollapsed;
       });
@@ -8976,8 +8982,12 @@ ${sheetHtml}
       return;
     }
 
-    // งานของฉัน และงานรายคนของหัวหน้า -- จัดกลุ่มตามสถานะ ย่อ/ขยายได้
-    if (extendFilter === EXTEND_FILTER_MINE || extendFilter === EXTEND_FILTER_PEOPLE) {
+    // งานทั้งหมด งานของฉัน และงานรายคนของหัวหน้า -- จัดกลุ่มตามสถานะ ย่อ/ขยายได้
+    // (งานทั้งหมดจัดกลุ่มด้วยตามที่เจ้าของงานขอ ชิปสถานะเดี่ยว ๆ ยังเป็นรายการเรียบ
+    // เพราะทั้งหน้าเป็นสถานะเดียวอยู่แล้ว หัวกลุ่มก้อนเดียวไม่ช่วยอะไร)
+    if (extendFilter === EXTEND_FILTER_ALL
+      || extendFilter === EXTEND_FILTER_MINE
+      || extendFilter === EXTEND_FILTER_PEOPLE) {
       renderJobsByStatus(filtered);
       renderAssignBar();
       return;
