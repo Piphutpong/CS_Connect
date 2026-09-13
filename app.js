@@ -178,9 +178,10 @@
     async saveRequests(requests) {
       if (!storageAvailable) {
         memoryRequests = requests;
-        return;
+        return requests;
       }
       localStorage.setItem(REQUESTS_KEY, JSON.stringify(requests));
+      return requests;
     },
 
     async saveMeterDispatch(dispatch) {
@@ -449,10 +450,24 @@
 
       async saveRequests(requests) {
         const changed = requests.filter(r => savedRequests.get(String(r.id)) !== JSON.stringify(r));
-        if (!changed.length) return;
+        if (!changed.length) return [];
 
-        await callAsUser({ action: "saveRequests", records: changed });
-        changed.forEach(r => savedRequests.set(String(r.id), JSON.stringify(r)));
+        const res = await callAsUser({ action: "saveRequests", records: changed });
+
+        // เลขที่คำร้อง (ระบบ) ออกจากฝั่งเซิร์ฟเวอร์ใต้ล็อกของชีต (ดู saveRequests_
+        // ใน Code.gs) ฉบับที่ถูกต้องจึงเป็นฉบับที่มันคืนมา ไม่ใช่ฉบับที่เราส่งไป
+        // -- ต้องเก็บฉบับนั้นลง snapshot ด้วย ไม่งั้นการบันทึกครั้งถัดไปจะเห็น
+        // เลขต่างจากที่จำไว้แล้วส่งซ้ำทั้งที่ไม่มีอะไรเปลี่ยน
+        //
+        // สคริปต์เวอร์ชันที่ยังไม่ได้ดีพลอยจะไม่คืน records มา -- ถอยไปใช้ฉบับที่
+        // ส่งไป ผลลัพธ์จึงเท่ากับพฤติกรรมเดิมทุกประการ ไม่ใช่วันดีเดย์ที่ต้อง
+        // อัปเดตสองฝั่งพร้อมกัน
+        const saved = (res && Array.isArray(res.records) && res.records.length === changed.length)
+          ? res.records
+          : changed;
+
+        saved.forEach(r => savedRequests.set(String(r.id), JSON.stringify(r)));
+        return saved;
       },
 
       async saveMeterDispatch(dispatch) {
@@ -655,7 +670,16 @@
     const previous = requestsCache;
     requestsCache = requests;
     try {
-      await backend.saveRequests(requests);
+      const saved = await backend.saveRequests(requests);
+
+      // ใบใหม่ได้เลขที่คำร้อง (ระบบ) จากเซิร์ฟเวอร์ ไม่ใช่จากเลขที่ฟอร์มโชว์ไว้
+      // ตอนกรอก -- รวมฉบับที่บันทึกจริงกลับเข้าแคช ไม่งั้นการ์ดในลิสต์กับใบพิมพ์
+      // QR จะอ้างเลขที่ไม่ตรงกับในชีตจนกว่าจะโหลดใหม่
+      if (saved && saved.length) {
+        const byId = new Map(saved.map(r => [String(r.id), r]));
+        requestsCache = requestsCache.map(r => byId.get(String(r.id)) || r);
+      }
+      return requestsCache;
     } catch (err) {
       requestsCache = previous;
       throw err;
@@ -1454,7 +1478,12 @@
    */
   const TRACKING_TYPE_CODES = {
     power: "1",
-    extend: "2"
+    extend: "2",
+    // คำร้องทั่วไปใช้เลขนี้ภายในแผนกเท่านั้น (ดู findRequestFor_ ใน Code.gs ที่
+    // กันประเภทนี้ออกจากหน้าติดตามสาธารณะ) แต่ยังต้องมีเลขประเภทของตัวเอง --
+    // ถ้าไม่ใส่ generateTrackingNumbers() จะ fallback ไปใช้ "1" ของขอใช้ไฟฟ้า
+    // แล้วเลขจะชนกันข้ามประเภท ซึ่งพังการค้นหาด้วยเลขที่คำร้องทั้งระบบ
+    general: "3"
   };
 
   // System-issued tracking number: last 2 digits of the Buddhist Era year, one
@@ -2677,6 +2706,7 @@
   const generalForm = document.getElementById("generalForm");
   const generalFormError = document.getElementById("generalFormError");
   const generalFormSubmitBtn = document.getElementById("generalFormSubmitBtn");
+  const genTrackingNumber = document.getElementById("genTrackingNumber");
   const genDate = document.getElementById("genDate");
   const genJobStatus = document.getElementById("genJobStatus");
 
@@ -3521,7 +3551,7 @@
       // buttons don't have to fight over the same absolute position.
       const cardActions = [];
 
-      if (r.trackingNumber) {
+      if (r.trackingNumber && r.type !== "general") {
         const qrBtn = document.createElement("button");
         qrBtn.type = "button";
         qrBtn.className = "btn btn-ghost request-card-action-btn";
@@ -4003,6 +4033,7 @@
   /** เหมือน fillRequestForm/fillExtendForm ด้านบน แต่ของ #generalForm -- ชุดฟิลด์เล็กกว่ามาก */
   function fillGeneralForm(r) {
     document.getElementById("genSubject").value = r.subject || "";
+    document.getElementById("genRequestNumber").value = r.requestNumber || "";
     genDate.value = r.receivedDate || "";
     document.getElementById("genCustomerName").value = r.customerName || "";
     document.getElementById("genPhone").value = r.phonePrimary || "";
@@ -4031,6 +4062,8 @@
     // บรรทัดของตัวเองไปเลย อ่านตรงกับสิ่งที่ฟอร์มนี้เก็บจริง
     if (record.type === "general") {
       return [
+        { label: "เลขที่รับ", value: record.requestNumber || "-", mono: true },
+        { label: "เลขที่คำร้อง (ระบบ)", value: record.trackingNumber || "-", mono: true },
         { label: "เรื่อง", value: record.subject || "-" },
         { label: "วันที่ยื่นเรื่อง", value: formatThaiDate(record.receivedDate), mono: true },
         { label: "ชื่อลูกค้า", value: record.customerName || "-" },
@@ -4636,6 +4669,13 @@
         : generateTrackingNumber("extend");
     }
 
+    if (isSupported && isGeneral) {
+      // ใบเก่าที่บันทึกไว้ก่อนมีเลขระบบ จะได้เลขตอนเปิดฟอร์มครั้งถัดไปแล้วบันทึกติดไป
+      genTrackingNumber.value = record
+        ? (record.trackingNumber || generateTrackingNumber("general"))
+        : generateTrackingNumber("general");
+    }
+
     if (isSupported && isPower && record) {
       fillRequestForm(record);
     }
@@ -4916,7 +4956,11 @@
         // ต้องบอกว่ากำลังทำงาน -- finally ท้าย handler เป็นตัวคืนปุ่มให้เอง
         setBusy(requestFormSubmitBtn, true, "กำลังบันทึกคำร้อง...");
 
-        await saveRequests(getRequests().concat(created));
+        const savedAll = await saveRequests(getRequests().concat(created));
+        // อ่านเลขที่คำร้อง (ระบบ) ฉบับที่บันทึกจริงกลับมา -- ใบ QR ที่ยื่นให้ลูกค้า
+        // ต้องตรงกับในชีต ไม่ใช่เลขที่เบราว์เซอร์เดาไว้ก่อนส่ง
+        const createdIds = new Set(created.map(r => String(r.id)));
+        const createdSaved = (savedAll || []).filter(r => createdIds.has(String(r.id)));
 
         // Clear everything that was typed, so the next batch starts from a
         // blank form rather than the previous group's values.
@@ -4926,7 +4970,7 @@
         setDefaultRequestDate();
         resetBatchRows();
 
-        showBatchResult(created);
+        showBatchResult(createdSaved.length === created.length ? createdSaved : created);
         return;
       }
 
@@ -5191,6 +5235,8 @@
 
     try {
       const subject = document.getElementById("genSubject").value.trim();
+      const trackingNumber = genTrackingNumber.value;
+      const requestNumber = document.getElementById("genRequestNumber").value.trim();
       const receivedDate = genDate.value;
       const customerName = document.getElementById("genCustomerName").value.trim();
       const phonePrimary = document.getElementById("genPhone").value.trim();
@@ -5223,6 +5269,8 @@
       const recordData = {
         type: "general",
         subject,
+        trackingNumber,
+        requestNumber,
         receivedDate,
         customerName,
         phonePrimary,

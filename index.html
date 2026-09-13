@@ -25,7 +25,7 @@
 <title>CS Connect</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=Sarabun:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=20260913a">
+<link rel="stylesheet" href="style.css?v=20260913b">
 </head>
 <body>
 
@@ -857,6 +857,22 @@
         <!-- คำร้องทั่วไป -- เอกสารที่ต้องส่งต่อให้แผนกอื่น (เช่น ผสน.) ไม่ใช่งานภาคสนามที่ลูกค้าต้องติดตามสถานะเอง จึงไม่มีเลขที่คำร้อง (ระบบ)/QR เหมือนสองประเภทข้างต้น
              ไม่มีโหมดกลุ่มด้วย -- ดูปุ่มจัดการของ requestsAddBatchBtn ใน app.js -->
         <form id="generalForm" class="auth-form request-form" novalidate hidden>
+          <!-- เลขระบบของประเภทนี้ใช้ภายในแผนกเท่านั้น ไม่เปิดให้ค้นในหน้าติดตาม
+               สาธารณะ (findRequestFor_ ใน Code.gs กันไว้) และการ์ดไม่มีปุ่มพิมพ์ QR
+               ต่างจากขอใช้ไฟฟ้า/ขอขยายเขตฯ -- มีไว้ให้อ้างอิงใบคำร้องได้ และให้ใบ
+               ที่บันทึกซ้ำโผล่เลขเดียวกันจนสังเกตเห็น ดู findDuplicateGeneralRequest
+               "เลขที่รับ" คือเลขทะเบียนรับที่เจ้าหน้าที่กรอกเอง เก็บในคอลัมน์
+               requestNumber เดิม (นิยามเดิมคือเลขอ้างอิงทางเอกสารที่กรอกมือ) -->
+          <div class="field-row">
+            <div class="field">
+              <label for="genTrackingNumber">เลขที่คำร้อง (ระบบ)</label>
+              <input type="text" id="genTrackingNumber" readonly>
+            </div>
+            <div class="field">
+              <label for="genRequestNumber">เลขที่รับ</label>
+              <input type="text" id="genRequestNumber" placeholder="เลขทะเบียนรับ (ถ้ามี)" autocomplete="off">
+            </div>
+          </div>
           <div class="field-row">
             <div class="field">
               <label for="genSubject">เรื่อง</label>
@@ -1384,6 +1400,6 @@
      ที่หาสาเหตุยากมาก
      **ต้องเปลี่ยนเลขนี้ทุกครั้งที่แก้ app.js / style.css / track.js / qr.js**
      ไม่งั้นผู้ใช้บางคนจะยังได้ไฟล์เก่าไปอีกพักใหญ่ -->
-<script src="app.js?v=20260913a"></script>
+<script src="app.js?v=20260913b"></script>
 </body>
 </html>
