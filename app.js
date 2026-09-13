@@ -1572,6 +1572,11 @@
   }
 
   /**
+   * จุดเริ่มนับของ id -- ไม่มีความหมายอื่นนอกจากทำให้ตัวเลขสั้นลง ดู newRequestId
+   */
+  const ID_EPOCH = Date.UTC(2020, 0, 1);
+
+  /**
    * Primary key for a new record. This used to be a bare `Date.now()`, which
    * collides whenever two staff save within the same millisecond -- and since
    * upsertAll_ matches rows by id, a collision meant one record silently
@@ -1579,12 +1584,32 @@
    * wouldn't help (neither browser knows about the other's brand-new record
    * yet), so the millisecond is widened with a random suffix instead: no
    * coordination needed, and a same-millisecond pair now has a 1-in-1000
-   * chance of colliding rather than a certainty. Stays a plain integer
-   * (NUMBER_COLUMNS in Code.gs requires it) and well inside
-   * Number.MAX_SAFE_INTEGER.
+   * chance of colliding rather than a certainty.
+   *
+   * **ต้องไม่เกิน 15 หลัก และนี่คือเหตุผลที่ต้องลบ ID_EPOCH ออกก่อนคูณ**
+   *
+   * Google Sheets เก็บตัวเลขได้แม่นยำ 15 หลักนัยสำคัญ ไม่ใช่ 16 -- ของเดิม
+   * Date.now() * 1000 ให้เลข 16 หลัก (ราว 1.79e15) ชีตจึงปัดหลักสุดท้ายทิ้ง
+   * เงียบ ๆ ตอนเขียน id ที่เบราว์เซอร์ถืออยู่กับ id ที่ชีตเก็บจริงจึงไม่ตรงกัน
+   * เช่นส่งไป ...637 แต่ชีตเก็บ ...630 พอกดบันทึกใบเดิมอีกครั้งโดยยังไม่ได้
+   * รีเฟรช upsertAll_ ที่จับคู่แถวด้วย id หาไม่เจอ แล้วต่อแถวใหม่ให้ -- คือ
+   * อาการคำร้อง "เบิ้ล" ที่เจอ ไม่ใช่การกดบันทึกซ้ำของคน
+   *
+   * ตรวจแล้วว่าเป็นจริง: id สามใบในชีตอ่านได้เป็น 1789270610457630,
+   * 1789270671985170 และ 1789270710790230 -- ลงท้ายด้วย 0 ทั้งหมด ทั้งที่หลัก
+   * สุดท้ายมาจากตัวสุ่ม
+   *
+   * ลบ ID_EPOCH ก่อนคูณทำให้เหลือ 15 หลักพอดี โดยยังคงความละเอียดระดับ
+   * มิลลิวินาทีและตัวสุ่ม 3 หลักไว้ครบเหมือนเดิม (จะยาวเป็น 16 หลักอีกครั้ง
+   * ราวปี ค.ศ. 2051 -- ถึงตอนนั้นต้องขยับ ID_EPOCH หรือเลิกเก็บ id เป็นตัวเลข)
+   * ยังเป็นจำนวนเต็มล้วนตามที่ NUMBER_COLUMNS ใน Code.gs บังคับ และเล็กกว่า
+   * Number.MAX_SAFE_INTEGER มาก
+   *
+   * id ที่ออกหลังจากนี้จะ "น้อยกว่า" ของเดิมทั้งหมด จึงเทียบกันเป็นลำดับเวลา
+   * ไม่ได้ -- ซึ่งไม่กระทบอะไร เพราะทุกที่ในแอปเรียงด้วย createdAt อยู่แล้ว
    */
   function newRequestId() {
-    return Date.now() * 1000 + Math.floor(Math.random() * 1000);
+    return (Date.now() - ID_EPOCH) * 1000 + Math.floor(Math.random() * 1000);
   }
 
   /**
