@@ -345,9 +345,19 @@ button:active {
   align-items: center;
 }
 
-.field-input-row input {
+.field-input-row input,
+/* สถานะงานของฟอร์มขอใช้ไฟฟ้าอยู่แถวเดียวกับปุ่มสร้างคำร้องขยายเขตฯ -- ดรอปดาวน์
+   ต้องยืดกินที่ว่างเหมือน input ไม่งั้นมันจะหดเหลือเท่าข้อความที่ยาวที่สุดในลิสต์ */
+.field-input-row select {
   flex: 1;
   min-width: 0;
+}
+
+/* ปุ่มที่อยู่ข้างช่องกรอกในแถวเดียวกัน -- ห้ามตัดบรรทัด ไม่งั้นความสูงของแถวจะ
+   กระโดดจนดรอปดาวน์ข้าง ๆ ดูเบี้ยว */
+.btn-inline {
+  white-space: nowrap;
+  flex: 0 0 auto;
 }
 
 .field-row > .field {

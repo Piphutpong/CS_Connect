@@ -1962,6 +1962,9 @@
     document.getElementById("requestSummaryType").textContent = "";
     document.getElementById("requestSummaryList").innerHTML = "";
     document.getElementById("requestCommentInput").value = "";
+    document.getElementById("requestFormLinkedInfo").hidden = true;
+    document.getElementById("requestFormLinkedInfo").innerHTML = "";
+    document.getElementById("reqCreateExtendBtn").hidden = true;
     // #extendForm/#generalForm เก็บข้อมูลลูกค้าได้เหมือน #requestForm ข้างบน
     // ทุกประการ แต่ไม่เคยถูกล้างตรงนี้มาก่อน -- ค่าที่พิมพ์ค้างไว้จะยังอยู่ใน DOM
     // ทั้งที่จอกลับไปเป็นหน้า login แล้ว อ่านได้ทันทีผ่านเครื่องมือพัฒนาของ
@@ -2706,6 +2709,7 @@
   const reqPurposeOtherField = document.getElementById("reqPurposeOtherField");
   const reqPurposeOther = document.getElementById("reqPurposeOther");
   const reqDate = document.getElementById("reqDate");
+  const reqCreateExtendBtn = document.getElementById("reqCreateExtendBtn");
   const reqCoord = document.getElementById("reqCoord");
   const reqMapBtn = document.getElementById("reqMapBtn");
   const reqNavBtn = document.getElementById("reqNavBtn");
@@ -3155,10 +3159,28 @@
 
     const digits = text.replace(/[^0-9]/g, "");
 
-    if (!/^0[0-9]{8,9}$/.test(digits)) {
-      return {
-        error: `${label}ไม่ถูกต้อง -- ต้องเป็นตัวเลข 9 หรือ 10 หลัก ขึ้นต้นด้วย 0 (เช่น 0812345678 หรือ 053123456)`
-      };
+    // แยกตามหัวเบอร์ ไม่ใช่แค่นับหลัก -- ถ้ารับ "9 หรือ 10 หลัก" รวม ๆ เบอร์
+    // มือถือที่พิมพ์ตกไปหนึ่งหลัก (0812345678 -> 081234567) จะกลายเป็น 9 หลัก
+    // แล้วผ่านไปเงียบ ๆ ในฐานะเบอร์บ้าน ทั้งที่เป็นเบอร์ที่โทรไม่ติด
+    //
+    // 06/08/09 = มือถือ ต้อง 10 หลักเสมอ
+    // 02-07    = เบอร์บ้าน/สำนักงาน ต้อง 9 หลักเสมอ (02 กรุงเทพฯ, 053 เชียงใหม่)
+    const mobile = /^0[689][0-9]{8}$/.test(digits);
+    const landline = /^0[2-7][0-9]{7}$/.test(digits);
+
+    if (!mobile && !landline) {
+      const head = digits.slice(0, 2);
+      let reason;
+
+      if (/^0[689]$/.test(head)) {
+        reason = `เบอร์มือถือต้องมี 10 หลัก แต่ที่กรอกมามี ${digits.length} หลัก`;
+      } else if (/^0[2-7]$/.test(head)) {
+        reason = `เบอร์บ้านต้องมี 9 หลัก แต่ที่กรอกมามี ${digits.length} หลัก`;
+      } else {
+        reason = "ต้องขึ้นต้นด้วย 06/08/09 (มือถือ) หรือ 02-07 (เบอร์บ้าน)";
+      }
+
+      return { error: `${label}ไม่ถูกต้อง -- ${reason} (เช่น 0812345678 หรือ 053123456)` };
     }
 
     return { value: digits };
@@ -3534,6 +3556,15 @@
         statusEl.remove();
       }
 
+      // ป้ายบอกว่าใบนี้มีคำร้องอีกใบผูกอยู่ -- ต้องเห็นตั้งแต่ในลิสต์ ไม่ใช่ต้อง
+      // เปิดเข้าไปดูก่อนถึงจะรู้ว่างานนี้ยังมีอีกครึ่งหนึ่งรออยู่อีกประเภทหนึ่ง
+      if (r.linkedRequestId) {
+        const linkEl = document.createElement("span");
+        linkEl.className = "request-badge tone-info";
+        linkEl.textContent = r.type === "extend" ? "มาจากคำร้องขอใช้ไฟฟ้า" : "มีคำร้องขยายเขตฯ";
+        card.querySelector(".request-badges").appendChild(linkEl);
+      }
+
       card.querySelector(".request-name").textContent = r.customerName || r.requesterName || "";
 
       // tel: link ธรรมดา ไม่ใช้ innerHTML กับข้อความที่มาจากฟอร์ม -- สร้างผ่าน
@@ -3731,6 +3762,74 @@
     link.textContent = "ดูสมุดคุม";
     link.addEventListener("click", () => openGeneralDispatchReprint(dispatch));
     line.appendChild(link);
+  }
+
+  /** สถานะตั้งต้นของคำร้องขยายเขตฯ -- ตรงกับตัวเลือกแรกของ #extJobStatus */
+  const EXTEND_DEFAULT_STATUS = "รอจ่ายงาน";
+
+  /** คำร้องอีกใบที่ผูกกันอยู่ หรือ null ถ้าไม่มี/ไม่ได้ถูกโหลดมา */
+  function linkedRequestOf(record) {
+    if (!record || !record.linkedRequestId) return null;
+    return getRequests().find(r => r.id === record.linkedRequestId) || null;
+  }
+
+  /** ป้ายเรียกคำร้องหนึ่งใบแบบสั้น ๆ ให้คนอ่านรู้ว่าหมายถึงใบไหน */
+  function requestLabel(record) {
+    return [REQUEST_TYPES[record.type], record.requestNumber || record.trackingNumber]
+      .filter(Boolean).join(" เลขที่ ");
+  }
+
+  /**
+   * บรรทัด "คำร้องที่เกี่ยวข้อง" ในแผงประวัติ -- ขึ้นทั้งสองฝั่งด้วยโค้ดชุดเดียว
+   *
+   * ตอนไปสำรวจจุดติดตั้งมิเตอร์แล้วพบว่าต้องขยายเขตระบบจำหน่ายก่อน งานจะแตกเป็น
+   * สองคำร้องคนละประเภทที่เดินคนละสาย (คนละฟอร์ม คนละชุดสถานะ คนละโมดูล) แต่เป็น
+   * เรื่องเดียวกันของลูกค้ารายเดียวกัน -- เปิดใบไหนขึ้นมาก็ต้องเห็นอีกใบทันที
+   * ไม่ใช่ต้องจำเอาเองหรือไปค้นด้วยชื่อลูกค้า
+   */
+  function renderLinkedRequestInfo(record) {
+    const line = document.getElementById("requestFormLinkedInfo");
+    line.innerHTML = "";
+    line.hidden = !(record && record.linkedRequestId);
+    if (line.hidden) return;
+
+    const other = linkedRequestOf(record);
+
+    // คำร้องที่เชื่อมอยู่อาจไม่ได้ถูกโหลดมา เพราะ loadRequests ตัดใบเก่าที่ปิดงาน
+    // แล้วออก -- บอกตามตรงว่ามีอยู่แต่ยังไม่ได้โหลด ดีกว่าเงียบไปเฉย ๆ
+    if (!other) {
+      line.textContent = "คำร้องที่เกี่ยวข้อง: มีอยู่ แต่ยังไม่ได้โหลดมาในรอบนี้ (ค้นด้วยชื่อลูกค้าได้)";
+      return;
+    }
+
+    line.append(`คำร้องที่เกี่ยวข้อง: ${requestLabel(other)} · `);
+    const link = document.createElement("button");
+    link.type = "button";
+    link.className = "link-btn";
+    link.textContent = "เปิดคำร้องนี้";
+    link.addEventListener("click", () => openRequestForm(other.type, other));
+    line.appendChild(link);
+  }
+
+  /**
+   * ปุ่ม "+ สร้างคำร้องขยายเขตฯ" ข้างช่องสถานะงานของฟอร์มขอใช้ไฟฟ้า
+   *
+   * โผล่เมื่อครบสามข้อ: เป็นคำร้องที่บันทึกแล้ว (ใบใหม่ยังไม่มี id ให้ผูก),
+   * สถานะที่เลือกอยู่คือ "รอขยายเขตฯ" และยังไม่เคยผูกกับใบไหน
+   *
+   * อ่านจากดรอปดาวน์ ไม่ใช่จากค่าที่บันทึกไว้ เพราะจังหวะที่เจ้าหน้าที่ต้องการ
+   * ปุ่มนี้คือวินาทีที่เพิ่งเลือกสถานะเสร็จ -- ปุ่มที่ต้องกดบันทึกก่อนถึงจะโผล่
+   * จะกลายเป็นปุ่มที่หาไม่เจอ ส่วนตัวการกดปุ่มเองไม่แตะค่าที่พิมพ์ค้างในฟอร์มเลย
+   * (ดู reqCreateExtendBtn) จึงไม่มีปัญหาว่าฟอร์มยังไม่ได้บันทึก
+   */
+  function syncExtendLinkButton() {
+    const record = editingId ? getRequests().find(r => r.id === editingId) : null;
+    reqCreateExtendBtn.hidden = !(
+      record &&
+      record.type === "power" &&
+      document.getElementById("reqJobStatus").value === "รอขยายเขตฯ" &&
+      !record.linkedRequestId
+    );
   }
 
   /**
@@ -4796,15 +4895,127 @@
       renderBatchInfo(record);
       renderDispatchInfo(record);
       renderGeneralDispatchInfo(record);
+      renderLinkedRequestInfo(record);
 
       document.getElementById("requestFormEditedBy").textContent = record.updatedByName
         ? `ผู้แก้ไขล่าสุด: ${record.updatedByName} · ${formatThaiDateTime(record.updatedAt)}`
         : "ผู้แก้ไขล่าสุด: -";
     }
 
+    syncExtendLinkButton();
+
     requestsListMode.hidden = true;
     requestsFormMode.hidden = false;
   }
+
+  // สถานะงานเปลี่ยนเมื่อไร ปุ่มสร้างคำร้องขยายเขตฯ ต้องตามทันที
+  document.getElementById("reqJobStatus").addEventListener("change", syncExtendLinkButton);
+
+  /**
+   * สร้างคำร้องขอขยายเขตฯ ที่ผูกกับคำร้องขอใช้ไฟฟ้าใบที่เปิดอยู่
+   *
+   * ทำงานจากข้อมูลที่ "บันทึกไว้แล้ว" ล้วน ๆ ไม่อ่านค่าจากช่องกรอกในฟอร์มเลย
+   * จึงไม่ไปบันทึกสิ่งที่เจ้าหน้าที่พิมพ์ค้างไว้แต่ยังไม่ได้กดบันทึก และไม่ต้อง
+   * ปิดฟอร์มทิ้ง -- กดแล้วอยู่หน้าเดิม มีบรรทัดคำร้องที่เกี่ยวข้องโผล่ในแผงขวา
+   * ให้กดเข้าไปต่อเมื่อพร้อม
+   *
+   * เขียนสองใบในการบันทึกครั้งเดียว (upsert ทีละชุด) ความเชื่อมโยงสองฝั่งจึงไม่มี
+   * ทางเหลือแค่ข้างเดียวจากการเขียนสำเร็จครึ่งทาง
+   */
+  reqCreateExtendBtn.addEventListener("click", async () => {
+    const source = editingId ? getRequests().find(r => r.id === editingId) : null;
+    if (!source || source.linkedRequestId) return;
+
+    const ok = window.confirm([
+      "สร้างคำร้องขอขยายเขตฯ ใบใหม่ที่เชื่อมกับคำร้องนี้",
+      "",
+      "ลูกค้า: " + (source.customerName || "-"),
+      "",
+      "ระบบจะคัดลอกชื่อ ที่อยู่ เบอร์โทร และพิกัดไปตั้งต้นให้",
+      "ข้อมูลที่พิมพ์ค้างไว้ในฟอร์มนี้แต่ยังไม่ได้กดบันทึก จะไม่ถูกบันทึกไปด้วย"
+    ].join("\n"));
+    if (!ok) return;
+
+    hideError(requestFormError);
+    setBusy(reqCreateExtendBtn, true, "กำลังสร้าง...");
+
+    try {
+      const { byName: savedByName, byEmail: savedByEmail } = actingStaff();
+      const now = Date.now();
+      const extendId = newRequestId();
+
+      const extendRecord = {
+        id: extendId,
+        type: "extend",
+        trackingNumber: generateTrackingNumber("extend"),
+        requestNumber: source.requestNumber || "",
+        receivedDate: todayDateString(new Date(now)),
+        customerName: source.customerName || "",
+        phonePrimary: source.phonePrimary || "",
+        phoneSecondary: source.phoneSecondary || "",
+        province: source.province || "",
+        district: source.district || "",
+        subdistrict: source.subdistrict || "",
+        zipcode: source.zipcode || "",
+        houseNo: source.houseNo || "",
+        moo: source.moo || "",
+        village: source.village || "",
+        deed: source.deed || "",
+        lat: source.lat || "",
+        lng: source.lng || "",
+        jobStatus: EXTEND_DEFAULT_STATUS,
+        linkedRequestId: source.id,
+        statusHistory: [
+          { status: EXTEND_DEFAULT_STATUS, byName: savedByName, byEmail: savedByEmail, at: now }
+        ],
+        comments: [
+          {
+            text: `สร้างจาก${requestLabel(source)}`,
+            byName: savedByName, byEmail: savedByEmail, at: now
+          }
+        ],
+        createdByName: savedByName,
+        createdByEmail: savedByEmail,
+        createdAt: now
+      };
+
+      const requests = getRequests();
+      const idx = requests.findIndex(r => r.id === source.id);
+      if (idx !== -1) {
+        requests[idx] = {
+          ...requests[idx],
+          linkedRequestId: extendId,
+          comments: (requests[idx].comments || []).concat([
+            {
+              text: `สร้าง${requestLabel(extendRecord)} จากคำร้องนี้`,
+              byName: savedByName, byEmail: savedByEmail, at: now
+            }
+          ]),
+          updatedByName: savedByName,
+          updatedByEmail: savedByEmail,
+          updatedAt: now
+        };
+      }
+      requests.push(extendRecord);
+
+      await saveRequests(requests);
+
+      const saved = getRequests().find(r => r.id === source.id);
+      renderLinkedRequestInfo(saved);
+      renderComments(saved);
+      syncExtendLinkButton();
+
+      requestFormError.textContent =
+        "สร้างคำร้องขยายเขตฯ แล้ว -- ดูบรรทัด \"คำร้องที่เกี่ยวข้อง\" ในแผงด้านขวาเพื่อเปิดเข้าไปกรอกต่อ";
+      requestFormError.classList.add("is-notice");
+      requestFormError.hidden = false;
+    } catch (err) {
+      console.error("CS Connect create linked extend error:", err);
+      showError(requestFormError, friendlyError(err, "สร้างคำร้องขยายเขตฯ ไม่สำเร็จ กรุณาลองใหม่อีกครั้ง"));
+    } finally {
+      setBusy(reqCreateExtendBtn, false);
+    }
+  });
 
   requestsAddBtn.addEventListener("click", () => openRequestForm(currentRequestFilter));
   requestsAddBatchBtn.addEventListener("click", () => openRequestForm(currentRequestFilter, null, { batch: true }));

@@ -25,7 +25,7 @@
 <title>CS Connect</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=Sarabun:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=20260913e">
+<link rel="stylesheet" href="style.css?v=20260913f">
 </head>
 <body>
 
@@ -585,8 +585,12 @@
               <p class="field-hint">ระบบใส่ค่าธรรมเนียมมาตรฐานให้ตามความประสงค์และขนาดมิเตอร์ พิมพ์ทับได้</p>
             </div>
           </div>
+          <!-- ปุ่มสร้างคำร้องขยายเขตฯ อยู่ข้างสถานะงานโดยตั้งใจ เพราะมันโผล่มาตอน
+               สถานะเป็น "รอขยายเขตฯ" พอดี -- คือจังหวะที่เจ้าหน้าที่เพิ่งกลับจาก
+               สำรวจแล้วพบว่าต้องขยายเขตก่อนติดตั้งมิเตอร์ได้ ดู syncExtendLinkButton -->
           <div class="field">
             <label for="reqJobStatus">สถานะงาน</label>
+            <div class="field-input-row">
             <select id="reqJobStatus" required>
               <option value="รอตรวจสอบ">รอตรวจสอบ</option>
               <option value="รอชำระเงิน">รอชำระเงิน</option>
@@ -600,6 +604,10 @@
               <option value="จัดเก็บเอกสาร (ผบส.)">จัดเก็บเอกสาร (ผบส.)</option>
               <option value="ผมต. ตีกลับ">ผมต. ตีกลับ</option>
             </select>
+            <button type="button" id="reqCreateExtendBtn" class="btn btn-ghost btn-inline" hidden>
+              + สร้างคำร้องขยายเขตฯ
+            </button>
+            </div>
           </div>
           <div class="field">
             <label for="reqNote">หมายเหตุ</label>
@@ -968,6 +976,9 @@
             <p id="requestFormDispatchInfo" class="form-meta-line" hidden></p>
             <!-- เหมือน requestFormDispatchInfo ข้างบน แต่ของสมุดคุมคำร้องทั่วไป (ส่ง ผสน.) -->
             <p id="requestFormGeneralDispatchInfo" class="form-meta-line" hidden></p>
+          <!-- คำร้องอีกใบที่เป็นเรื่องเดียวกัน (ขอใช้ไฟฟ้า <-> ขอขยายเขตฯ) --
+               ขึ้นทั้งสองฝั่ง เพราะทั้งสองใบต้องรู้ว่าอีกใบมีอยู่ ดู renderLinkedRequestInfo -->
+          <p id="requestFormLinkedInfo" class="form-meta-line" hidden></p>
             <p id="requestFormEditedBy" class="form-meta-line"></p>
           </aside>
         </div>
@@ -1400,6 +1411,6 @@
      ที่หาสาเหตุยากมาก
      **ต้องเปลี่ยนเลขนี้ทุกครั้งที่แก้ app.js / style.css / track.js / qr.js**
      ไม่งั้นผู้ใช้บางคนจะยังได้ไฟล์เก่าไปอีกพักใหญ่ -->
-<script src="app.js?v=20260913e"></script>
+<script src="app.js?v=20260913f"></script>
 </body>
 </html>
