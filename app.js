@@ -989,8 +989,8 @@
   // ไม่มีคอลัมน์แผนกที่รับผิดชอบโดยตั้งใจ -- ตามที่สั่งไว้ว่าสมุดเล่มนี้ไม่ต้อง
   // ดึงข้อมูลนั้นมาแสดง (ยังกรอกไว้ในคำร้องเองได้ตามปกติ แค่ไม่ขึ้นบนกระดาษที่พิมพ์)
   const GENERAL_DISPATCH_PRINT_COLUMNS = [
-    { label: "เรื่อง", cell: row => row.subject || "-" },
-    { label: "ชื่อลูกค้า", cell: row => row.customerName || "-" }
+    { label: "ชื่อลูกค้า", cell: row => row.customerName || "-" },
+    { label: "เรื่อง", cell: row => row.subject || "-" }
   ];
 
   /**
@@ -1070,8 +1070,14 @@
             .col-number { width: 120px; }
             [contenteditable="true"] { outline: 1px dashed #a877d6; outline-offset: 2px; min-height: 1.4em; }
             .signatures { display: flex; justify-content: space-between; gap: 40px; margin-top: 48px; }
-            .sig-block { flex: 1; text-align: center; font-size: 14px; line-height: 1.9; }
-            .sig-line { white-space: nowrap; }
+            /* ระยะบรรทัดแบบ Word single (~1.15) และตัด margin ปริยายของ <p> ทิ้ง:
+               (ชื่อ สกุล) / ตำแหน่ง / วันที่ เป็นบรรทัดต่อเนื่องของบล็อกลงชื่อเดียวกัน
+               ไม่ใช่คนละย่อหน้า ค่าเดิม line-height 1.9 บวก margin 1em บน-ล่างที่
+               เบราว์เซอร์ให้ <p> มาเอง ทำให้สามบรรทัดนี้ห่างกันเกินจริงไปมาก */
+            .sig-block { flex: 1; text-align: center; font-size: 14px; line-height: 1.15; }
+            .sig-block p { margin: 0; }
+            /* เว้นเฉพาะใต้เส้นลงชื่อ ให้ชื่อในวงเล็บไม่ติดเส้นจนอ่านยาก */
+            .sig-line { white-space: nowrap; margin-bottom: 6px; }
             .sig-fill { display: inline-block; min-width: 3em; }
             /* ดรอปดาวน์เลือกผู้ส่ง -- เครื่องมือกรอกฝั่งจอเท่านั้น ไม่ใช่ส่วนของ
                เอกสารที่พิมพ์ออกมา (ชื่อ/ตำแหน่งที่มันกรอกให้ต่างหากคือของจริง) */
@@ -5143,6 +5149,37 @@
   });
 
   /**
+   * หาคำร้องทั่วไปใบที่ข้อมูลระบุตัวคำร้องตรงกันทุกช่องกับใบที่กำลังจะบันทึกใหม่
+   *
+   * ทำไมมีเฉพาะประเภทนี้: คำร้องทั่วไปเป็นประเภทเดียวในสามประเภทที่ไม่มีเลข
+   * อ้างอิงของตัวเองเลย -- ขอใช้ไฟฟ้า/ขอขยายเขตฯ มีทั้งเลขที่คำร้องที่เจ้าหน้าที่
+   * กรอกเอง และเลขที่คำร้อง (ระบบ) ที่ออกให้อัตโนมัติ ใบซ้ำจึงสะดุดตาทันทีจาก
+   * เลขที่ซ้ำกัน ส่วนใบนี้มีแค่ เรื่อง/ชื่อ/เบอร์/วันที่ สองใบที่ซ้ำกันจึงเหมือนกัน
+   * เป๊ะทุกช่องและแยกด้วยตาเปล่าไม่ออก
+   *
+   * ที่ต้องกันตรงนี้เพราะ pendingNewId กันได้แค่การกดบันทึกซ้ำในฟอร์มเดิม --
+   * เส้นทางที่หลุดคือ เขียนลงชีตสำเร็จแล้วแต่ขากลับ (302 ไป
+   * script.googleusercontent.com) คืน 404 เป็นครั้งคราว ฝั่งเบราว์เซอร์เห็นเป็น
+   * ล้มเหลว saveRequests จึงย้อนแคชกลับ การ์ดที่เพิ่งบันทึกหายไปจากจอ เจ้าหน้าที่
+   * เข้าใจว่ายังไม่ได้บันทึกเลยกดเพิ่มคำร้องแล้วพิมพ์ใหม่ -- ตอนนั้น
+   * openRequestForm ล้าง pendingNewId ไปแล้ว ใบใหม่จึงได้ id ใหม่ และ upsertAll_
+   * ที่จับคู่แถวด้วย id ก็ต่อแถวใหม่ให้ตามที่ถูกสั่ง กลายเป็นคำร้องซ้ำจริงในชีต
+   *
+   * เทียบแบบตัดช่องว่างหัวท้ายและไม่สนตัวพิมพ์เล็กใหญ่ และข้ามใบที่กำลังแก้ไขอยู่เอง
+   */
+  function findDuplicateGeneralRequest({ subject, customerName, phonePrimary, receivedDate }) {
+    const norm = v => String(v == null ? "" : v).trim().toLowerCase();
+    return getRequests().find(r =>
+      r.type === "general" &&
+      r.id !== editingId &&
+      norm(r.subject) === norm(subject) &&
+      norm(r.customerName) === norm(customerName) &&
+      norm(r.phonePrimary) === norm(phonePrimary) &&
+      norm(r.receivedDate) === norm(receivedDate)
+    ) || null;
+  }
+
+  /**
    * คำร้องทั่วไป -- เหมือนโครงของ #extendForm ด้านบน (editingId เดิม/ใหม่,
    * appendStatusHistoryIfChanged, actingStaff, saveRequests) แต่ตัดทุกอย่างที่
    * เป็นของขอขยายเขตฯ ล้วน ๆ ออก (ที่อยู่, พิกัด, WBS, การจ่ายงาน) เพราะฟอร์มนี้
@@ -5216,6 +5253,23 @@
           };
         }
       } else {
+        // ถามก่อนสร้างใบที่ซ้ำกับของเดิมทุกช่อง -- ดู findDuplicateGeneralRequest
+        // ว่าทำไมเฉพาะประเภทนี้ต้องกัน ยังเลือก "บันทึกเป็นใบใหม่" ได้อยู่ เพราะ
+        // ลูกค้าคนเดิมยื่นเรื่องเดิมซ้ำในวันเดียวกันจริง ๆ ก็เป็นไปได้ แค่ต้องตั้งใจ
+        const duplicate = findDuplicateGeneralRequest(recordData);
+        if (duplicate) {
+          const ok = window.confirm([
+            "มีคำร้องทั่วไปที่ข้อมูลตรงกันทุกช่องอยู่แล้ว",
+            "",
+            "เรื่อง: " + (duplicate.subject || "-"),
+            "ชื่อลูกค้า: " + (duplicate.customerName || "-"),
+            "สถานะ: " + (duplicate.jobStatus || "-"),
+            "",
+            "ถ้าใบเดิมเกิดจากการบันทึกซ้ำ ให้กดยกเลิกแล้วเปิดใบเดิมขึ้นมาแก้แทน",
+            "ยืนยันบันทึกเป็นคำร้องใบใหม่อีกใบหรือไม่?"
+          ].join("\n"));
+          if (!ok) return;
+        }
         if (!pendingNewId) pendingNewId = newRequestId();
         requests.push({
           id: pendingNewId,
