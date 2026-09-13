@@ -2023,18 +2023,35 @@ span.estimate-crumb {
   color: var(--volt-700);
 }
 
+/* ชื่อพัสดุต้องขึ้นครบเสมอ -- ตัดขึ้นบรรทัดใหม่ในช่องของตัวเอง min-width: 0 กัน
+   ไม่ให้ช่องกริดขยายตามข้อความยาวจนดันคอลัมน์ข้าง ๆ หรือโดน .estimate-table
+   (overflow: hidden) ตัดทิ้ง และ overflow-wrap ใช้กับข้อความยาวที่ไม่มีเว้นวรรค */
 .estimate-cell-desc {
+  min-width: 0;
   font-size: 13.5px;
   color: var(--ink);
   line-height: 1.4;
+  overflow-wrap: anywhere;
 }
 
+/* กลุ่มเคยตัดท้ายเป็น "…" -- ชื่อกลุ่มยาวจึงอ่านไม่ครบ ให้ขึ้นบรรทัดใหม่แทน */
 .estimate-cell-group {
+  min-width: 0;
   font-size: 12.5px;
   color: var(--ink-soft);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.est-picker-full {
+  margin: 12px 0 0;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: var(--volt-50);
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: var(--volt-700);
+  overflow-wrap: anywhere;
 }
 
 .estimate-empty {

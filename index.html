@@ -25,7 +25,7 @@
 <title>CS Connect</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=Sarabun:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=20260913i">
+<link rel="stylesheet" href="style.css?v=20260913j">
 </head>
 <body>
 
@@ -1428,6 +1428,12 @@
           </div>
         </div>
 
+        <!-- ชื่อเต็มของพัสดุที่เลือกอยู่ -- ช่องพิมพ์เป็นบรรทัดเดียว และรายการแนะนำ
+             (datalist) ของเบราว์เซอร์ตัดชื่อยาวทิ้งโดยจัดหน้าตาไม่ได้ ชื่อพัสดุที่ต่างกัน
+             แค่ท้ายชื่อ (ขนาดสาย ขนาดหม้อแปลง) จึงอ่านไม่ออกว่าเลือกตัวไหน บรรทัดนี้
+             แสดงให้ครบก่อนกดเพิ่ม ดู setPickedItem ใน app.js -->
+        <p id="estPickFull" class="est-picker-full" hidden></p>
+
         <button type="button" id="estAddItemBtn" class="btn btn-primary est-picker-add">+ เพิ่มพัสดุ</button>
         <p id="estPickError" class="form-error" hidden></p>
       </div>
@@ -1486,6 +1492,6 @@
      ที่หาสาเหตุยากมาก
      **ต้องเปลี่ยนเลขนี้ทุกครั้งที่แก้ app.js / style.css / track.js / qr.js**
      ไม่งั้นผู้ใช้บางคนจะยังได้ไฟล์เก่าไปอีกพักใหญ่ -->
-<script src="app.js?v=20260913i"></script>
+<script src="app.js?v=20260913j"></script>
 </body>
 </html>

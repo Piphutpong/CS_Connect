@@ -6569,6 +6569,7 @@
     rowsEmpty: document.getElementById("estRowsEmpty"),
     pickGroup: document.getElementById("estPickGroup"),
     pickItem: document.getElementById("estPickItem"),
+    pickFull: document.getElementById("estPickFull"),
     pickItemList: document.getElementById("estPickItemList"),
     pickKeyCode: document.getElementById("estPickKeyCode"),
     pickKeyList: document.getElementById("estPickKeyList"),
@@ -7185,6 +7186,20 @@
     if (typedField !== "key") {
       estimateView.pickKeyCode.value = pickedItem ? (pickedItem.keyCode || "") : "";
     }
+
+    // ช่องพิมพ์บรรทัดเดียวกับรายการแนะนำของเบราว์เซอร์ตัดชื่อยาวทิ้ง -- แสดงชื่อเต็ม
+    // ของตัวที่เลือกไว้ใต้แผง ให้ตรวจได้ก่อนกดเพิ่มว่าเลือกถูกตัว
+    const full = estimateView.pickFull;
+    if (pickedItem) {
+      full.textContent = "รายการที่เลือก: " +
+        [pickedItem.keyCode, pickedItem.description].filter(Boolean).join("  ") +
+        (pickedItem.group ? `  (กลุ่ม ${pickedItem.group})` : "");
+      full.hidden = false;
+    } else {
+      full.textContent = "";
+      full.hidden = true;
+    }
+    estimateView.pickItem.title = pickedItem ? pickedItem.description : "";
   }
 
   /** ล้างช่องพัสดุทั้งหมด (ไม่แตะกลุ่ม) -- ใช้หลังเพิ่มพัสดุสำเร็จและตอนเปิดใบใหม่ */
