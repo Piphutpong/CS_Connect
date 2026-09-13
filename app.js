@@ -1965,6 +1965,7 @@
     document.getElementById("requestFormLinkedInfo").hidden = true;
     document.getElementById("requestFormLinkedInfo").innerHTML = "";
     document.getElementById("reqCreateExtendBtn").hidden = true;
+    linkedReturn = null;
     // #extendForm/#generalForm เก็บข้อมูลลูกค้าได้เหมือน #requestForm ข้างบน
     // ทุกประการ แต่ไม่เคยถูกล้างตรงนี้มาก่อน -- ค่าที่พิมพ์ค้างไว้จะยังอยู่ใน DOM
     // ทั้งที่จอกลับไปเป็นหน้า login แล้ว อ่านได้ทันทีผ่านเครื่องมือพัฒนาของ
@@ -2578,6 +2579,28 @@
     extendDetailMode.hidden = true;
     extendWorkListMode.hidden = false;
 
+    // เพิ่งกรอกคำร้องขยายเขตฯ ที่สร้างจากคำร้องขอใช้ไฟฟ้าเสร็จ -- พากลับไปที่ใบนั้น
+    // พร้อมคืนค่าที่ค้างอยู่ในฟอร์ม เพื่อกดบันทึกการแก้ไขต่อได้ทันที
+    // ใช้เส้นทางนี้ทั้งตอนกดบันทึกและตอนกดย้อนกลับโดยไม่บันทึก -- ปลายทางเดียวกัน
+    if (formReturnTo === "linkedPower" && linkedReturn) {
+      const back = linkedReturn;
+      linkedReturn = null;
+
+      const power = getRequests().find(r => r.id === back.powerId);
+      if (power) {
+        showView("requests");
+        openRequestForm("power", power);
+        restoreRequestForm(back.draft);
+        syncExtendLinkButton();
+
+        requestFormError.textContent =
+          "กลับมาที่คำร้องขอใช้ไฟฟ้าใบเดิมแล้ว -- กด \"บันทึกการแก้ไข\" ด้านล่างเพื่อบันทึกคำร้องใบนี้ด้วย";
+        requestFormError.classList.add("is-notice");
+        requestFormError.hidden = false;
+        return;
+      }
+    }
+
     if (formReturnTo === "extendWork") {
       // keepView: กลับมาที่ชิปและคำค้นเดิม ไม่ใช่รีเซ็ตเป็น "ทั้งหมด" ทุกครั้ง
       openExtendWorkView({ keepView: true });
@@ -2786,6 +2809,16 @@
   // "requests" (หน้ารับคำร้อง) หรือ "extendWork" (คิวงานขอขยายเขตฯ) -- ดู
   // leaveRequestForm ว่าใช้ทำอะไร
   let formReturnTo = "requests";
+
+  /**
+   * ที่หมายของการวกกลับหลังกรอกคำร้องขยายเขตฯ ที่เพิ่งสร้างจากคำร้องขอใช้ไฟฟ้าเสร็จ
+   * -- { powerId, draft } โดย draft คือค่าที่ค้างอยู่ในฟอร์มขอใช้ไฟฟ้าตอนกดปุ่ม
+   * (ดู snapshotRequestForm) ต้องเก็บไว้ เพราะการออกจากฟอร์มไปโมดูลอื่นแล้วเปิด
+   * กลับมาใหม่จะเติมฟอร์มจากค่าที่บันทึกไว้ในชีต ของที่พิมพ์ค้างไว้จะหายหมด --
+   * รวมถึง "รอขยายเขตฯ" ที่เพิ่งเลือกแต่ยังไม่ได้กดบันทึก ซึ่งเป็นตัวที่ทำให้ปุ่ม
+   * โผล่มาตั้งแต่แรก ถ้าไม่คืนค่าให้ คนจะวกกลับมาเจอสถานะเดิมแล้วต้องเลือกใหม่
+   */
+  let linkedReturn = null;
   // true ระหว่างที่ fillRequestForm/fillExtendForm กำลังยัดค่าลงฟอร์ม -- ตัวช่วย
   // ที่ฟัง change อยู่ (เช่นค่าธรรมเนียมอัตโนมัติ) ต้องไม่ทำงานในช่วงนั้น
   let fillingForm = false;
@@ -3807,8 +3840,79 @@
     link.type = "button";
     link.className = "link-btn";
     link.textContent = "เปิดคำร้องนี้";
-    link.addEventListener("click", () => openRequestForm(other.type, other));
+    link.addEventListener("click", () => openLinkedRequest(other));
     line.appendChild(link);
+  }
+
+  /**
+   * ข้ามไปเปิดคำร้องอีกใบที่ผูกกันอยู่ -- ข้าม "โมดูล" ไม่ใช่แค่ข้ามคำร้อง
+   *
+   * ขอขยายเขตฯ ทำงานอยู่ในหน้า extendWork ส่วนขอใช้ไฟฟ้าอยู่ในหน้า requests
+   * openRequestForm เปิดฟอร์มให้ก็จริง แต่มันสั่ง showView ให้เฉพาะฝั่งขยายเขตฯ
+   * เท่านั้น -- เรียกตรง ๆ จากในหน้าขยายเขตฯ ฟอร์มขอใช้ไฟฟ้าจึงถูกเปิดอยู่ใน
+   * section ที่ยังซ่อนอยู่ กดแล้วเหมือนไม่มีอะไรเกิดขึ้น
+   *
+   * กับดักเดียวกับที่ leaveRequestForm ต้องเรียก showView("requests") เอง --
+   * อะไรก็ตามที่พาผู้ใช้ออกจากโมดูลขยายเขตฯ ต้องปิดหน้ารายละเอียดของโมดูลนั้น
+   * และสลับ view ด้วยตัวเอง
+   */
+  function openLinkedRequest(record) {
+    if (record.type !== "extend") {
+      extendDetailMode.hidden = true;
+      extendWorkListMode.hidden = false;
+      showView("requests");
+    }
+
+    openRequestForm(record.type, record);
+  }
+
+  /** ค่าทุกช่องในฟอร์มขอใช้ไฟฟ้าตอนนี้ -- ใช้คู่กับ restoreRequestForm */
+  function snapshotRequestForm() {
+    const values = {};
+    requestForm.querySelectorAll("input[id], select[id], textarea[id]")
+      .forEach(el => { values[el.id] = el.value; });
+    return values;
+  }
+
+  /**
+   * คืนค่าที่เก็บไว้กลับเข้าฟอร์มขอใช้ไฟฟ้า
+   *
+   * ลำดับสำคัญ ไม่ใช่แค่ไล่เซ็ตตามลำดับใน DOM: ในหน้าจอ "ตำบล" อยู่ก่อน "อำเภอ"
+   * แต่ตัวเลือกของตำบลถูกสร้างจาก change ของอำเภอ -- เซ็ตตำบลก่อนจึงล้มเงียบ ๆ
+   * เพราะ option นั้นยังไม่มีอยู่ (กับดักเดียวกับที่ BATCH_ROW_FIELDS ต้องเรียง
+   * อำเภอ -> ตำบล -> รหัสไปรษณีย์) ความประสงค์ก็ต้องยิง change เองเหมือนกัน เพื่อ
+   * เปิด/ปิดช่อง "อื่นๆ" ให้ตรงกับค่าที่คืนกลับมา
+   *
+   * ตั้ง fillingForm ระหว่างทำงานด้วยเหตุผลเดียวกับ fillRequestForm -- กันไม่ให้
+   * ตัวเติมค่าธรรมเนียมอัตโนมัติเขียนทับตัวเลขที่เจ้าหน้าที่พิมพ์เองไว้
+   */
+  function restoreRequestForm(values) {
+    if (!values) return;
+
+    const cascaded = ["reqDistrict", "reqSubdistrict", "reqPurpose"];
+
+    fillingForm = true;
+    try {
+      cascaded.forEach(id => {
+        if (!(id in values)) return;
+        const el = document.getElementById(id);
+        if (!el) return;
+        el.value = values[id];
+        el.dispatchEvent(new Event("change"));
+      });
+
+      Object.keys(values).forEach(id => {
+        if (cascaded.indexOf(id) !== -1) return;
+        const el = document.getElementById(id);
+        if (el) el.value = values[id];
+      });
+    } finally {
+      fillingForm = false;
+    }
+
+    updateReqCoords();
+    updateReqPhonePrimaryCall();
+    updateReqPhoneSecondaryCall();
   }
 
   /**
@@ -4932,7 +5036,8 @@
       "ลูกค้า: " + (source.customerName || "-"),
       "",
       "ระบบจะคัดลอกชื่อ ที่อยู่ เบอร์โทร และพิกัดไปตั้งต้นให้",
-      "ข้อมูลที่พิมพ์ค้างไว้ในฟอร์มนี้แต่ยังไม่ได้กดบันทึก จะไม่ถูกบันทึกไปด้วย"
+      "แล้วพาเข้าไปที่คำร้องขยายเขตฯ ใบนั้นเพื่อกรอกต่อทันที",
+      "บันทึกเสร็จแล้วจะพากลับมาที่หน้านี้ พร้อมค่าที่กรอกค้างไว้ครบเหมือนเดิม"
     ].join("\n"));
     if (!ok) return;
 
@@ -5000,15 +5105,13 @@
 
       await saveRequests(requests);
 
-      const saved = getRequests().find(r => r.id === source.id);
-      renderLinkedRequestInfo(saved);
-      renderComments(saved);
-      syncExtendLinkButton();
+      // เก็บค่าที่ค้างอยู่ในฟอร์มไว้ก่อนเดินออกไปอีกโมดูล แล้วค่อยคืนตอนวกกลับมา
+      // (ดู leaveRequestForm) -- เก็บหลังบันทึกสำเร็จเท่านั้น ถ้าบันทึกล้มจะได้ไม่
+      // มีที่หมายการวกกลับค้างอยู่ทั้งที่ยังไม่ได้ไปไหน
+      linkedReturn = { powerId: source.id, draft: snapshotRequestForm() };
 
-      requestFormError.textContent =
-        "สร้างคำร้องขยายเขตฯ แล้ว -- ดูบรรทัด \"คำร้องที่เกี่ยวข้อง\" ในแผงด้านขวาเพื่อเปิดเข้าไปกรอกต่อ";
-      requestFormError.classList.add("is-notice");
-      requestFormError.hidden = false;
+      const savedExtend = getRequests().find(r => r.id === extendId);
+      openRequestForm("extend", savedExtend, { returnTo: "linkedPower" });
     } catch (err) {
       console.error("CS Connect create linked extend error:", err);
       showError(requestFormError, friendlyError(err, "สร้างคำร้องขยายเขตฯ ไม่สำเร็จ กรุณาลองใหม่อีกครั้ง"));
