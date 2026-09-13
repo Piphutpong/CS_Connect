@@ -1068,9 +1068,9 @@
         <div class="sig-block">
           <p class="sig-line">ลงชื่อ ....................................... ${role}</p>
           ${picker}
-          <p>(<span${editAttr} class="sig-fill js-name">${escapeForPrint(person.name || "")}</span>)</p>
-          <p${editAttr} class="sig-fill sig-position js-position">${escapeForPrint(person.position || (editable ? "ตำแหน่ง" : ""))}</p>
-          <p>${signedDate}</p>
+          <p class="sig-name">(<span${editAttr} class="sig-fill js-name">${escapeForPrint(person.name || "")}</span>)</p>
+          <p class="sig-position"><span${editAttr} class="sig-fill js-position">${escapeForPrint(person.position || "")}</span></p>
+          <p class="sig-date">${signedDate}</p>
         </div>
       `;
     }
@@ -1099,10 +1099,28 @@
                ไม่ใช่คนละย่อหน้า ค่าเดิม line-height 1.9 บวก margin 1em บน-ล่างที่
                เบราว์เซอร์ให้ <p> มาเอง ทำให้สามบรรทัดนี้ห่างกันเกินจริงไปมาก */
             .sig-block { flex: 1; text-align: center; font-size: 14px; line-height: 1.15; }
+            /* อ้างอิงย่อหน้าของ Word: บรรทัดเดี่ยว (single) แล้วตั้งระยะห่าง
+               "ก่อนย่อหน้า" 6 pt ให้ทีละบรรทัด -- margin ปริยายของ <p> ที่
+               เบราว์เซอร์ให้มา (1em บน-ล่าง) ไม่ใช่ระยะของ Word จึงล้างทิ้งก่อน
+               ใช้ margin-top ราย class ไม่ใช่ p + p เพราะดรอปดาวน์เลือกผู้ส่งคั่น
+               อยู่ระหว่างเส้นลงชื่อกับบรรทัดชื่อ ตัวเลือกพี่น้องติดกันจึงไม่ match
+               (ซ่อนด้วย display:none ตอนพิมพ์ก็ไม่ช่วย เพราะ selector อ่านจาก DOM
+               ไม่ใช่จากสิ่งที่แสดงผล)
+
+               ใส่เฉพาะบรรทัดวงเล็บชื่อกับบรรทัดวันที่ -- ตำแหน่งไม่ใส่ เพราะชื่อกับ
+               ตำแหน่งเป็นข้อมูลของคนเดียวกัน ต้องอ่านเป็นก้อนเดียวชิดกัน ส่วนวันที่
+               เป็นคนละส่วนจึงเว้นห่างออกมา */
             .sig-block p { margin: 0; }
-            /* เว้นเฉพาะใต้เส้นลงชื่อ ให้ชื่อในวงเล็บไม่ติดเส้นจนอ่านยาก */
-            .sig-line { white-space: nowrap; margin-bottom: 6px; }
+            .sig-name, .sig-date { margin-top: 6pt; }
+            .sig-line { white-space: nowrap; }
             .sig-fill { display: inline-block; min-width: 3em; }
+            /* ผู้รับไม่มีชื่อ/ตำแหน่งมาให้ล่วงหน้า (เป็นคนของแผนกปลายทาง ไม่มี
+               บัญชีในระบบนี้) ปล่อยว่างไว้เฉย ๆ จะกลายเป็นวงเล็บเปล่าที่เขียนทับ
+               ไม่ได้บนกระดาษ -- ใส่จุดไข่ปลาเป็นเส้นให้เซ็น/เขียนด้วยมือแทน
+               ใช้ ::before ไม่ใช่ข้อความจริง เพราะสองเหตุผล: พิมพ์ทับได้เลยโดย
+               ไม่ต้องลบจุดทิ้งก่อน และ textContent ไม่นับเนื้อหาของ pseudo-element
+               ช่องที่ไม่ได้แตะจึงอ่านกลับมาเป็นค่าว่างจริง ๆ (ดู readDispatchDocument) */
+            .sig-fill:empty::before { content: "................................"; color: #8d7aa8; }
             /* ดรอปดาวน์เลือกผู้ส่ง -- เครื่องมือกรอกฝั่งจอเท่านั้น ไม่ใช่ส่วนของ
                เอกสารที่พิมพ์ออกมา (ชื่อ/ตำแหน่งที่มันกรอกให้ต่างหากคือของจริง) */
             .sig-picker {
@@ -1165,13 +1183,12 @@
     const doc = printWindow.document;
     const text = (el) => (el ? el.textContent.trim() : "");
     const [senderBlock, receiverBlock] = doc.querySelectorAll(".sig-block");
+    // ช่องที่ยังไม่ได้กรอกเป็น element ว่างจริง ๆ -- จุดไข่ปลาที่เห็นบนจอมาจาก
+    // .sig-fill:empty::before ซึ่ง textContent ไม่นับ จึงไม่ต้องมากรองข้อความ
+    // ตัวอย่างทิ้งทีหลังเหมือนที่เคยต้องทำกับ placeholder ที่เป็นข้อความจริง
     const person = (block) => ({
       name: text(block && block.querySelector(".js-name")),
-      // The placeholder is literal text in a contenteditable, not a real
-      // placeholder attribute, so an untouched field still reads "ตำแหน่ง".
-      position: text(block && block.querySelector(".js-position")) === "ตำแหน่ง"
-        ? ""
-        : text(block && block.querySelector(".js-position"))
+      position: text(block && block.querySelector(".js-position"))
     });
 
     const notes = Array.from(doc.querySelectorAll("tbody tr")).map(tr => {
