@@ -5053,7 +5053,10 @@
         id: extendId,
         type: "extend",
         trackingNumber: generateTrackingNumber("extend"),
-        requestNumber: source.requestNumber || "",
+        // ไม่ดึงเลขที่คำร้องของใบต้นทางมา -- ขอใช้ไฟฟ้ากับขอขยายเขตฯ รับเลขมาคนละ
+        // ทะเบียนกัน ใบนี้ต้องมีเลขของตัวเอง เจ้าหน้าที่กรอกตอนเปิดเข้าไปกรอกต่อ
+        // (ฟอร์มบังคับกรอกช่องนี้อยู่แล้ว จึงไม่มีทางหลุดเป็นค่าว่างไปลงชีต)
+        requestNumber: "",
         receivedDate: todayDateString(new Date(now)),
         customerName: source.customerName || "",
         phonePrimary: source.phonePrimary || "",
@@ -5092,7 +5095,7 @@
           linkedRequestId: extendId,
           comments: (requests[idx].comments || []).concat([
             {
-              text: `สร้าง${requestLabel(extendRecord)} จากคำร้องนี้`,
+              text: "สร้างคำร้องขอขยายเขตระบบจำหน่ายไฟฟ้าจากคำร้องนี้",
               byName: savedByName, byEmail: savedByEmail, at: now
             }
           ]),
