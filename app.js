@@ -5072,7 +5072,8 @@
         },
         { label: "BP", value: record.bp || "-", mono: true },
         { label: "CA", value: record.ca || "-", mono: true },
-        { label: "สถานะ", value: record.jobStatus || "-", status: true }
+        { label: "สถานะ", value: record.jobStatus || "-", status: true },
+        { label: "หมายเหตุ", value: record.note || "-" }
       ];
     }
 
@@ -5094,7 +5095,8 @@
           value: record.sentDate ? formatThaiDate(record.sentDate) : "-",
           mono: true
         },
-        { label: "แผนกที่รับผิดชอบ", value: record.department || "-" }
+        { label: "แผนกที่รับผิดชอบ", value: record.department || "-" },
+        { label: "หมายเหตุ", value: record.note || "-" }
       ];
     }
 
@@ -5136,6 +5138,10 @@
     if (record.type === "extend" || record.assignee) {
       lines.push({ label: "ผู้รับผิดชอบ", value: record.assignee || "ยังไม่ได้จ่ายงาน" });
     }
+
+    // ต่อท้ายสุดเสมอ เหมือนตำแหน่งของหมายเหตุบนการ์ดในหน้ารายการ (แสดงเป็น "-"
+    // เมื่อไม่มี แทนที่จะซ่อนบรรทัดทิ้ง เพื่อให้บรรทัดของการ์ดนิ่ง ไม่ขยับตามเนื้อหา)
+    lines.push({ label: "หมายเหตุ", value: record.note || "-" });
 
     return lines;
   }
