@@ -148,7 +148,7 @@
       desc: "ตัวชี้วัดผลการดำเนินงานของแผนกบริการและลูกค้าสัมพันธ์",
       icon: '<svg viewBox="0 0 24 24" fill="none"><path d="M4 20V10m6 10V4m6 16v-7m6 7V13" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>',
       links: [
-        { label: "Google Sheet: KPI แผนกบริการและลูกค้าสัมพันธ์", url: "https://docs.google.com/spreadsheets/d/1oM1UKwlCWXu_gGXJcXtO4DuSTilz2H42ex5Nb1dYM_A/edit?usp=sharing" }
+        { label: "Google Sheet: ควบคุมการสร้างคำร้อง Y1, Y2, Y3 เพื่อประสานงาน และควบคุมการเปิด/ปิดใบสั่ง", url: "https://docs.google.com/spreadsheets/d/1oM1UKwlCWXu_gGXJcXtO4DuSTilz2H42ex5Nb1dYM_A/edit?usp=sharing" }
       ]
     },
     sideBusiness: {
