@@ -147,15 +147,17 @@
       title: "KPI แผนกบริการและลูกค้าสัมพันธ์",
       desc: "ตัวชี้วัดผลการดำเนินงานของแผนกบริการและลูกค้าสัมพันธ์",
       icon: '<svg viewBox="0 0 24 24" fill="none"><path d="M4 20V10m6 10V4m6 16v-7m6 7V13" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>',
-      url: "https://docs.google.com/spreadsheets/d/1oM1UKwlCWXu_gGXJcXtO4DuSTilz2H42ex5Nb1dYM_A/edit?usp=sharing",
-      linkLabel: "เปิด Google Sheet"
+      links: [
+        { label: "Google Sheet: KPI แผนกบริการและลูกค้าสัมพันธ์", url: "https://docs.google.com/spreadsheets/d/1oM1UKwlCWXu_gGXJcXtO4DuSTilz2H42ex5Nb1dYM_A/edit?usp=sharing" }
+      ]
     },
     sideBusiness: {
       title: "งานธุรกิจเสริม",
       desc: "PEA Engineering Service — บริการตรวจสอบและบำรุงรักษาระบบไฟฟ้าแบบครบวงจร (บำรุงรักษาหม้อแปลง, ตรวจจุดร้อนด้วยกล้องอินฟราเรด)",
       icon: '<svg viewBox="0 0 24 24" fill="none"><rect x="3" y="7" width="18" height="13" rx="2" stroke="currentColor" stroke-width="1.6"/><path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M3 12h18" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>',
-      url: "https://docs.google.com/spreadsheets/d/1Ys-uVEzhEOJIS5MbxdoXYWrfR2UwXX70r-mzQE9yAJg/edit?usp=sharing",
-      linkLabel: "เปิด Google Sheet",
+      links: [
+        { label: "Google Sheet: งานธุรกิจเสริม", url: "https://docs.google.com/spreadsheets/d/1Ys-uVEzhEOJIS5MbxdoXYWrfR2UwXX70r-mzQE9yAJg/edit?usp=sharing" }
+      ],
       // โบรชัวร์ 3 ใบที่เจ้าของระบบส่งมาให้แปะไว้ -- ไฟล์อยู่ใน assets/ (ดู
       // .service-gallery ใน style.css ที่ไม่ eager-load รูปพวกนี้ตอนเปิดหน้าแรก)
       images: [
@@ -3073,20 +3075,31 @@
       document.getElementById("serviceDesc").textContent = service.desc;
       document.getElementById("servicePlaceholderIcon").innerHTML = service.icon;
 
-      // การ์ดที่มี url (เช่น KPI/งานธุรกิจเสริม -- ลิงก์ออกไปหา Google Sheet)
-      // โชว์ปุ่มเปิดลิงก์แทนข้อความ "อยู่ระหว่างการพัฒนา" ซึ่งไม่จริงสำหรับการ์ด
-      // พวกนี้ -- ตั้งใจเช็คด้วย Boolean(service.url) ไม่ใช่แค่ตรวจว่ามี key
-      // เพราะการ์ดอย่าง Solar ยังไม่มีอะไรจริงให้เปิดเลย
-      const linkBtn = document.getElementById("serviceLinkBtn");
+      // การ์ดที่มีลิงก์ (เช่น KPI/งานธุรกิจเสริม -- ออกไปหา Google Sheet ของแผนก)
+      // โชว์รายการลิงก์แทนข้อความ "อยู่ระหว่างการพัฒนา" ซึ่งไม่จริงสำหรับการ์ด
+      // พวกนี้ -- เช็คด้วยว่ามี service.links จริงไหม ไม่ใช่แค่ตรวจว่ามี key
+      // เพราะการ์ดอย่าง Solar ยังไม่มีอะไรจริงให้เปิดเลย เป็น array ไว้ตั้งแต่แรก
+      // เพราะบางการ์ดจะมีมากกว่าหนึ่งลิงก์ในอนาคต
+      const linksEl = document.getElementById("serviceLinks");
       const noteEl = document.getElementById("serviceNote");
-      if (service.url) {
-        linkBtn.href = service.url;
-        linkBtn.textContent = service.linkLabel || "เปิดลิงก์";
-        linkBtn.hidden = false;
+      linksEl.innerHTML = "";
+      if (service.links && service.links.length) {
+        service.links.forEach(link => {
+          const a = document.createElement("a");
+          a.className = "service-link-item";
+          a.href = link.url;
+          a.target = "_blank";
+          a.rel = "noopener";
+          a.innerHTML = '<svg viewBox="0 0 24 24" fill="none"><path d="M5 3h14v18H5z" stroke="currentColor" stroke-width="1.6"/><path d="M8 8h8M8 12h8M8 16h5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>';
+          const label = document.createElement("span");
+          label.textContent = link.label;
+          a.appendChild(label);
+          linksEl.appendChild(a);
+        });
+        linksEl.hidden = false;
         noteEl.hidden = true;
       } else {
-        linkBtn.hidden = true;
-        linkBtn.removeAttribute("href");
+        linksEl.hidden = true;
         noteEl.hidden = false;
       }
 

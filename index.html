@@ -24,7 +24,7 @@
 <title>CS Connect</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=Sarabun:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=20260914e">
+<link rel="stylesheet" href="style.css?v=20260914f">
 </head>
 <body>
 
@@ -1563,7 +1563,10 @@
       <p id="serviceDesc" class="placeholder-desc">รายละเอียดงานบริการ</p>
       <!-- ขึ้นเฉพาะการ์ดที่มีลิงก์ (SERVICES[key].url ใน app.js เช่น Google Sheet
            ของแผนก) -- การ์ดที่ยังไม่มีอะไรจริงอย่าง Solar ไม่ตั้งค่านี้ ปุ่มจึงซ่อน -->
-      <a href="#" id="serviceLinkBtn" class="btn btn-primary" target="_blank" rel="noopener" hidden></a>
+      <!-- SERVICES[key].links ใน app.js เป็น array -- แยกเป็นคนละแถวต่อลิงก์
+           ตั้งใจไว้แบบนี้เพราะจะมีลิงก์อื่นมาเพิ่มทีหลัง (ไม่ใช่แค่ Google Sheet
+           เดียวเสมอไป) JS เติมแถวเองตอนเปิดการ์ด ไม่มีลิงก์ไหน hardcode ไว้ตรงนี้ -->
+      <div id="serviceLinks" class="service-links" hidden></div>
       <p id="serviceNote" class="placeholder-note">หน้านี้อยู่ระหว่างการพัฒนา — เร็ว ๆ นี้จะสามารถยื่นคำร้องและติดตามสถานะได้จากหน้านี้</p>
       <!-- โบรชัวร์ (เฉพาะการ์ดที่มี SERVICES[key].images ใน app.js เช่น งานธุรกิจเสริม)
            รูปตั้ง src ด้วย JS ตอนคลิกการ์ดเท่านั้น ไม่ใส่ไว้ใน markup ตรง ๆ เพื่อไม่ให้
@@ -1582,6 +1585,6 @@
      **ต้องเปลี่ยนเลขนี้ทุกครั้งที่แก้ app.js / style.css / track.js / qr.js**
      ไม่งั้นผู้ใช้บางคนจะยังได้ไฟล์เก่าไปอีกพักใหญ่ -->
 <script src="vendor/supabase.js?v=2.116.0"></script>
-<script src="app.js?v=20260914e"></script>
+<script src="app.js?v=20260914f"></script>
 </body>
 </html>

@@ -851,6 +851,46 @@ button:active {
   line-height: 1.6;
 }
 
+/* รายการลิงก์ของการ์ด (เช่น Google Sheet ของแผนก) -- เป็นแถวแยกทีละอัน ไม่ใช่
+   ปุ่มเดียว เพราะบางการ์ดจะมีมากกว่าหนึ่งลิงก์ในอนาคต (SERVICES[key].links) */
+.service-links {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0 0 18px;
+  text-align: left;
+}
+
+.service-link-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: var(--ink);
+  text-decoration: none;
+  font-size: 14px;
+  font-weight: 500;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.service-link-item:hover {
+  border-color: var(--volt-300);
+  background: var(--volt-50);
+}
+
+.service-link-item svg {
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  color: var(--volt-500);
+}
+
+.service-link-item span {
+  flex: 1;
+}
+
 /* โบรชัวร์ของการ์ดที่มีรูป (เช่นงานธุรกิจเสริม) -- การ์ดปกติกว้างแค่ 460px
    ซึ่งแคบเกินไปสำหรับภาพโบรชัวร์แนวตั้ง จึงขยายเฉพาะตอนที่มีรูปจริงอยู่ข้างใน
    ด้วย :has() แทนการเพิ่มคลาสแยกจาก JS -- กว้างเท่าฟอร์มคำร้อง (720px) ซึ่งเผื่อ
