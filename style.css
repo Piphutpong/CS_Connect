@@ -913,6 +913,13 @@ button:active {
   width: 100%;
 }
 
+/* .service-link-item ตั้ง display: flex แบบไม่มีเงื่อนไข -- ลิงก์นี้ถูกซ่อนด้วย
+   [hidden] ตอนดูงานขยายเขตฯ (ยังไม่มีลิงก์ของประเภทนี้) จึงต้อง override ไม่งั้น
+   [hidden] จะไม่มีผลเลย (ดู Gotcha ใน CLAUDE.md) */
+.work-sheet-link[hidden] {
+  display: none;
+}
+
 /* .work-main เดิมกึ่งกลางตัวเองด้วย margin: 0 auto (ยังใช้แบบนั้นในหน้าประมาณการ)
    แต่ในเลย์เอาต์ 2 คอลัมน์นี้ต้องเป็นคอลัมน์ขวาที่ยืดเต็มพื้นที่ที่เหลือแทน */
 .work-list-layout .work-main {

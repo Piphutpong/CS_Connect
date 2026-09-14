@@ -8793,7 +8793,6 @@ ${sheetHtml}
   extendListSheetLink.id = "extendListSheetLink";
   extendListSheetLink.className = "service-link-item work-sheet-link";
   document.getElementById("extendListSheetLink").replaceWith(extendListSheetLink);
-  const extendWorkSide = document.getElementById("extendWorkSide");
   const extendPaneNotice = document.getElementById("extendPaneNotice");
   const extendWorkChips = document.getElementById("extendWorkChips");
   const extendWorkTitle = document.getElementById("extendWorkTitle");
@@ -8881,9 +8880,9 @@ ${sheetHtml}
     extendPaneItems.forEach(item => {
       item.hidden = workKind !== "extend" && item.dataset.extendPane !== "form";
     });
-    // ลิงก์ Google Sheet บนหน้ารายการ เป็นของขอใช้ไฟฟ้าเท่านั้น -- ซ่อนทั้งคอลัมน์ซ้าย
-    // ตอนดูงานขยายเขตฯ ไม่ใช่แค่ลิงก์ข้างใน ไม่งั้นจะเหลือคอลัมน์ว่างเปล่าอยู่
-    extendWorkSide.hidden = workKind !== "power";
+    // คอลัมน์ซ้าย (#extendWorkSide) อยู่เสมอทั้งสองประเภทงาน -- ลิงก์ Google Sheet
+    // เป็นของขอใช้ไฟฟ้าเท่านั้น จึงซ่อนแค่ตัวลิงก์ ส่วนงานขยายเขตฯ ปล่อยคอลัมน์ว่างไว้
+    extendListSheetLink.hidden = workKind !== "power";
   }
 
   /**

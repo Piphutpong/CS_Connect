@@ -24,7 +24,7 @@
 <title>CS Connect</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=Sarabun:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=20260914l">
+<link rel="stylesheet" href="style.css?v=20260914m">
 </head>
 <body>
 
@@ -1147,15 +1147,16 @@
   </header>
 
   <div id="extendWorkListMode">
-    <!-- แบ่งจอเป็น 2 คอลัมน์: แถบซ้าย (#extendWorkSide) มีแค่ลิงก์ Google Sheet
-         ของงานขอใช้ไฟฟ้า (ดู setWorkKind ใน app.js -- ซ่อนทั้งแถบตอนดูงานขยายเขตฯ
-         เพราะลิงก์นี้เป็นของขอใช้ไฟฟ้าเท่านั้น ไม่ให้เหลือคอลัมน์ว่างเปล่า) ส่วน
-         .work-main เป็นเนื้อหารายการงานเหมือนเดิมทั้งหมด ใช้คลาส .service-link-item
-         ชุดเดียวกับหน้าการ์ด KPI/งานธุรกิจเสริม เพื่อให้หน้าตาลิงก์แบบนี้เหมือน
-         กันทั้งแอป -->
+    <!-- แบ่งจอเป็น 2 คอลัมน์เสมอ ไม่ว่าดูงานขอใช้ไฟฟ้าหรืองานขยายเขตฯ: แถบซ้าย
+         (#extendWorkSide) มีลิงก์ Google Sheet ของงานขอใช้ไฟฟ้า (ดู setWorkKind
+         ใน app.js -- ซ่อนเฉพาะตัวลิงก์ตอนดูงานขยายเขตฯ เพราะลิงก์นี้เป็นของ
+         ขอใช้ไฟฟ้าเท่านั้น ส่วนแถบซ้ายเองปล่อยว่างไว้ก่อนแทนที่จะซ่อนทั้งคอลัมน์
+         รอมีเนื้อหาของงานขยายเขตฯ มาเติมทีหลัง) ส่วน .work-main เป็นเนื้อหารายการ
+         งานเหมือนเดิมทั้งหมด ใช้คลาส .service-link-item ชุดเดียวกับหน้าการ์ด
+         KPI/งานธุรกิจเสริม เพื่อให้หน้าตาลิงก์แบบนี้เหมือนกันทั้งแอป -->
     <div class="work-list-layout">
-      <aside id="extendWorkSide" class="work-list-side" hidden>
-        <a id="extendListSheetLink" class="service-link-item work-sheet-link" target="_blank" rel="noopener"></a>
+      <aside id="extendWorkSide" class="work-list-side">
+        <a id="extendListSheetLink" class="service-link-item work-sheet-link" target="_blank" rel="noopener" hidden></a>
       </aside>
   <main class="work-main">
     <div class="requests-content-heading">
@@ -1592,6 +1593,6 @@
      **ต้องเปลี่ยนเลขนี้ทุกครั้งที่แก้ app.js / style.css / track.js / qr.js**
      ไม่งั้นผู้ใช้บางคนจะยังได้ไฟล์เก่าไปอีกพักใหญ่ -->
 <script src="vendor/supabase.js?v=2.116.0"></script>
-<script src="app.js?v=20260914l"></script>
+<script src="app.js?v=20260914m"></script>
 </body>
 </html>
