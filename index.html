@@ -24,7 +24,7 @@
 <title>CS Connect</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=Sarabun:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=20260914d">
+<link rel="stylesheet" href="style.css?v=20260914e">
 </head>
 <body>
 
@@ -1565,6 +1565,10 @@
            ของแผนก) -- การ์ดที่ยังไม่มีอะไรจริงอย่าง Solar ไม่ตั้งค่านี้ ปุ่มจึงซ่อน -->
       <a href="#" id="serviceLinkBtn" class="btn btn-primary" target="_blank" rel="noopener" hidden></a>
       <p id="serviceNote" class="placeholder-note">หน้านี้อยู่ระหว่างการพัฒนา — เร็ว ๆ นี้จะสามารถยื่นคำร้องและติดตามสถานะได้จากหน้านี้</p>
+      <!-- โบรชัวร์ (เฉพาะการ์ดที่มี SERVICES[key].images ใน app.js เช่น งานธุรกิจเสริม)
+           รูปตั้ง src ด้วย JS ตอนคลิกการ์ดเท่านั้น ไม่ใส่ไว้ใน markup ตรง ๆ เพื่อไม่ให้
+           เบราว์เซอร์โหลดรูปทั้งหมดไว้ล่วงหน้าตั้งแต่เปิดหน้าแรกทั้งที่อาจไม่มีใครกดดู -->
+      <div id="serviceGallery" class="service-gallery" hidden></div>
       <button class="btn btn-ghost" id="backToHomeBtn">กลับสู่หน้าหลัก</button>
     </div>
   </main>
@@ -1578,6 +1582,6 @@
      **ต้องเปลี่ยนเลขนี้ทุกครั้งที่แก้ app.js / style.css / track.js / qr.js**
      ไม่งั้นผู้ใช้บางคนจะยังได้ไฟล์เก่าไปอีกพักใหญ่ -->
 <script src="vendor/supabase.js?v=2.116.0"></script>
-<script src="app.js?v=20260914d"></script>
+<script src="app.js?v=20260914e"></script>
 </body>
 </html>

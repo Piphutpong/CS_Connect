@@ -851,6 +851,38 @@ button:active {
   line-height: 1.6;
 }
 
+/* โบรชัวร์ของการ์ดที่มีรูป (เช่นงานธุรกิจเสริม) -- การ์ดปกติกว้างแค่ 460px
+   ซึ่งแคบเกินไปสำหรับภาพโบรชัวร์แนวตั้ง จึงขยายเฉพาะตอนที่มีรูปจริงอยู่ข้างใน
+   ด้วย :has() แทนการเพิ่มคลาสแยกจาก JS -- กว้างเท่าฟอร์มคำร้อง (720px) ซึ่งเผื่อ
+   พอสำหรับภาพสัดส่วนตั้งโดยไม่ล้นจอมือถือ (ยังมี max-width: 100% ที่ img กันไว้) */
+.placeholder-card:has(.service-gallery:not([hidden])) {
+  max-width: 720px;
+}
+
+.service-gallery {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  margin: 0 0 24px;
+  text-align: left;
+}
+
+.service-gallery img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
+.service-gallery figcaption {
+  margin-top: 8px;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--ink);
+  text-align: center;
+}
+
 /* ===== Requests workspace ===== */
 .requests-layout {
   display: flex;
