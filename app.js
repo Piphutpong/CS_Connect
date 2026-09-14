@@ -161,9 +161,9 @@
       // โบรชัวร์ 3 ใบที่เจ้าของระบบส่งมาให้แปะไว้ -- ไฟล์อยู่ใน assets/ (ดู
       // .service-gallery ใน style.css ที่ไม่ eager-load รูปพวกนี้ตอนเปิดหน้าแรก)
       images: [
-        { src: "assets/side-business-maintenance.png", alt: "บริการบำรุงรักษาระบบไฟฟ้า", caption: "1. บริการบำรุงรักษาระบบไฟฟ้า" },
-        { src: "assets/side-business-transformer.png", alt: "บริการบำรุงรักษาหม้อแปลงไฟฟ้า", caption: "2. บริการบำรุงรักษาหม้อแปลงไฟฟ้า" },
-        { src: "assets/side-business-thermal.png", alt: "บริการตรวจสอบจุดร้อน", caption: "3. บริการตรวจสอบจุดร้อน" }
+        { src: "assets/side-business-maintenance.png", alt: "บริการบำรุงรักษาระบบไฟฟ้า" },
+        { src: "assets/side-business-transformer.png", alt: "บริการบำรุงรักษาหม้อแปลงไฟฟ้า" },
+        { src: "assets/side-business-thermal.png", alt: "บริการตรวจสอบจุดร้อน" }
       ]
     }
   };
@@ -3118,15 +3118,13 @@
       gallery.innerHTML = "";
       if (service.images && service.images.length) {
         service.images.forEach(item => {
-          const figure = document.createElement("figure");
+          // ไม่มีข้อความใต้รูปโดยตั้งใจ -- ตัวโบรชัวร์เองมีหัวข้อ/เนื้อหาอยู่แล้ว
+          // ชื่อไฟล์ซ้ำซ้อนกับสิ่งที่เห็นในภาพ item.alt ยังใช้ประโยชน์ (screen reader)
           const img = document.createElement("img");
           img.src = item.src;
           img.alt = item.alt || "";
           img.loading = "lazy";
-          const caption = document.createElement("figcaption");
-          caption.textContent = item.caption || item.alt || "";
-          figure.append(img, caption);
-          gallery.appendChild(figure);
+          gallery.appendChild(img);
         });
         gallery.hidden = false;
       } else {

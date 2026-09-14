@@ -923,14 +923,6 @@ button:active {
   border-radius: 12px;
 }
 
-.service-gallery figcaption {
-  margin-top: 8px;
-  font-size: 13.5px;
-  font-weight: 600;
-  color: var(--ink);
-  text-align: center;
-}
-
 /* ===== Requests workspace ===== */
 .requests-layout {
   display: flex;
