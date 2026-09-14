@@ -175,9 +175,9 @@
     }
   }
 
-  // Offline fallback for working on the UI with no network (SHEETS_ENDPOINT
+  // Offline fallback for working on the UI with no network (SUPABASE_URL
   // set to ""). Its auth is plain-text and deliberately dev-only -- the real
-  // deployment hashes passwords inside Apps Script.
+  // deployment authenticates with Supabase Auth.
   const localBackend = {
     async load() {
       return {
@@ -247,6 +247,23 @@
     },
 
     async logout() {},
+
+    async hasSession() {
+      return true;
+    },
+
+    // โหมดออฟไลน์ไม่มี Storage -- ค่าที่เก็บไว้ถูกใช้เป็น URL ตรง ๆ
+    async fileUrls(kind, paths) {
+      return new Map(paths.filter(Boolean).map(p => [p, p]));
+    },
+
+    async listApplicants() {
+      throw new Error("โหมดออฟไลน์ไม่รองรับการอนุมัติผู้สมัคร");
+    },
+
+    async decideApplicant() {
+      throw new Error("โหมดออฟไลน์ไม่รองรับการอนุมัติผู้สมัคร");
+    },
 
     // โหมดออฟไลน์ไม่มี session ฝั่งเซิร์ฟเวอร์ให้ยกเลิก -- มีไว้เพื่อให้หน้าเว็บ
     // เรียกได้เหมือนกันโดยไม่พัง (ปุ่มนี้ซ่อนอยู่แล้วถ้าไม่ใช่ผู้ดูแลระบบ)
@@ -320,13 +337,68 @@
     // short link/QR code, independent of this app's login gate.
   };
 
-  // Google Apps Script web app in front of a Google Sheet. Set to "" to fall
-  // back to localBackend (useful for offline work on the UI).
-  const SHEETS_ENDPOINT = "https://script.google.com/macros/s/AKfycbw6Ri7ctu5guRHj3MJupkt0DJcgaht2-RHhhT9_YVNjnme4x1CbMl2SnC5hKO_OH_o/exec";
+  // Supabase (Postgres + Auth + Storage) -- ตั้งค่าว่างทั้งคู่เพื่อถอยไปใช้
+  // localBackend (ทำงานกับหน้าจอแบบออฟไลน์)
+  //
+  // anon key เปิดเผยได้โดยการออกแบบ: ความปลอดภัยทั้งหมดอยู่ที่ RLS และ RPC ฝั่ง
+  // ฐานข้อมูล (ดู supabase/migrations) ไม่ใช่ที่การซ่อน key นี้ -- ต้องตรงกับ
+  // SUPABASE_URL ใน track.js และ qr.js ด้วย (ไม่มี build step ให้แชร์ค่ากัน)
+  const SUPABASE_URL = "https://zsctqxfdxxkssmqfkqdh.supabase.co";
+  const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpzY3RxeGZkeHhrc3NtcWZrcWRoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODkzMjg0NzAsImV4cCI6MjEwNDkwNDQ3MH0.89mcdAJiFiFgke_Q8SU85laE1gf_C7w5A-j2zO0Hrn0";
 
-  const sheetsBackend = (() => {
-    // What the sheet is believed to already hold, so a save can send only the
-    // records that actually changed instead of re-uploading every row.
+  const supabaseBackend = (() => {
+    // ยังไม่ได้โหลด vendor/supabase.js หรือยังไม่ได้ตั้งค่า -- คืน null ให้ตัวเลือก
+    // backend ด้านล่างถอยไปใช้ localBackend แทนการพังทั้งหน้า
+    if (!SUPABASE_URL || !SUPABASE_ANON_KEY || !window.supabase?.createClient) return null;
+
+    /**
+     * ที่เก็บ session ของ Supabase Auth -- ทำตามช่อง "จำรหัสผ่าน" แบบเดียวกับ
+     * setSession(): ติ๊กไว้ = localStorage (อยู่ข้ามการปิดเบราว์เซอร์), ไม่ติ๊ก =
+     * sessionStorage (หายเมื่อปิด) ค่าที่ต้องการถูกตั้งไว้ใน authRemember ก่อน
+     * ล็อกอิน และตอนเปิดเว็บครั้งถัดไปอ่านจากว่า session ของแอปอยู่ฝั่งไหน
+     */
+    let authRemember = null;
+    const memoryAuth = {};
+    const authStorage = {
+      getItem(key) {
+        try {
+          return localStorage.getItem(key) ?? sessionStorage.getItem(key);
+        } catch {
+          return memoryAuth[key] ?? null;
+        }
+      },
+      setItem(key, value) {
+        try {
+          const remember = authRemember ?? sessionIsRemembered();
+          (remember ? localStorage : sessionStorage).setItem(key, value);
+          (remember ? sessionStorage : localStorage).removeItem(key);
+        } catch {
+          memoryAuth[key] = value;
+        }
+      },
+      removeItem(key) {
+        try {
+          localStorage.removeItem(key);
+          sessionStorage.removeItem(key);
+        } catch {
+          // storage ใช้ไม่ได้ -- ลบจากหน่วยความจำอย่างเดียว
+        }
+        delete memoryAuth[key];
+      }
+    };
+
+    const client = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+      auth: {
+        storage: authStorage,
+        storageKey: "csconnect_auth",
+        persistSession: true,
+        autoRefreshToken: true,
+        detectSessionInUrl: false
+      }
+    });
+
+    // What the database is believed to already hold, so a save can send only
+    // the records that actually changed instead of re-uploading every row.
     let savedRequests = new Map();
 
     function snapshot(records) {
@@ -336,107 +408,93 @@
     }
 
     /**
-     * คำสั่งที่ "ยิงซ้ำแล้วผลเท่าเดิม" จึงลองใหม่เองได้อย่างปลอดภัย
-     *
-     * ทุกคำสั่งที่ POST ไป /exec ถูก Apps Script ตอบเป็น 302 ไปยัง
-     * script.googleusercontent.com เสมอ และปลายทางนั้นหลุดเป็น 404 เป็นครั้งคราว
-     * ทั้งที่สคริปต์ฝั่งกูเกิลทำงานจนจบไปแล้ว -- ข้อมูลเข้าชีตเรียบร้อยแต่เบราว์เซอร์
-     * เห็นว่าล้มเหลว ซึ่งเป็นที่มาของทั้งข้อความ HTTP 404 และคำร้องที่ซ้ำกันเมื่อ
-     * เจ้าหน้าที่กดบันทึกใหม่
+     * RPC ที่ "ยิงซ้ำแล้วผลเท่าเดิม" จึงลองใหม่เองได้เมื่อเครือข่ายสะดุด
      *
      * เป็น allowlist ไม่ใช่ blocklist โดยตั้งใจ -- คำสั่งใหม่ที่ยังไม่ได้พิจารณา
-     * จะไม่ถูกยิงซ้ำเอง ซึ่งเป็นด้านที่ปลอดภัยกว่าเมื่อเดาผิด
+     * จะไม่ถูกยิงซ้ำเอง ที่ไม่อยู่ในรายการและเหตุผล:
+     *   assign_requests      ต่อคอมเมนต์ "จ่ายงานให้ ..." ทุกครั้งที่เรียก
+     *   save_dispatch        (upsert ด้วย id ก็จริง แต่ไม่มีเหตุให้เสี่ยง)
+     *   save_estimate_kit    ชุดใหม่ที่ไม่มี id จะได้ชุดซ้ำ
+     *   ทุกคำสั่งเรื่องบัญชี/รหัสผ่าน
      *
-     * ที่ไม่อยู่ในรายการนี้ และเหตุผล:
-     *   assignRequests     ต่อคอมเมนต์ "จ่ายงานให้ ..." ทุกครั้งที่เรียก
-     *   saveExtendFile     อัปโหลดไฟล์ขึ้น Drive ใหม่ทุกครั้ง
-     *   saveMeterDispatch  เพิ่มสมุดคุมเล่มใหม่ทุกครั้ง
-     *   login / register / changePassword / adminResetPassword
-     *
-     * saveRequests ยิงซ้ำได้เพราะฝั่งเซิร์ฟเวอร์ upsert ด้วย id -- เขียนทับแถวเดิม
-     * ไม่ใช่ต่อแถวใหม่ ซึ่งจะจริงก็ต่อเมื่อ id ของคำร้องใหม่คงที่ข้ามการลองใหม่ด้วย
-     * (ดู pendingNewId)
+     * save_requests ยิงซ้ำได้เพราะ upsert ด้วย id และเลขที่คำร้องที่มีแล้วไม่ถูก
+     * ออกใหม่ -- จริงก็ต่อเมื่อ id ของใบใหม่คงที่ข้ามการลองใหม่ด้วย (ดู pendingNewId)
      */
-    const RETRYABLE_ACTIONS = new Set([
-      "loadRequests", "saveRequests", "searchArchivedRequests",
-      "listStaff", "listEstimateItems", "listEstimateLists"
+    const RETRYABLE_RPCS = new Set([
+      "load_workspace", "save_requests", "search_archived", "list_staff", "estimate_catalog"
     ]);
 
     const RETRY_ATTEMPTS = 3;
 
-    async function call(payload) {
-      let lastError = null;
-
-      for (let attempt = 1; attempt <= RETRY_ATTEMPTS; attempt++) {
-        let transient = false;
-
-        try {
-          // text/plain on purpose: an application/json body would trigger a CORS
-          // preflight, which Apps Script web apps cannot answer.
-          const response = await fetch(SHEETS_ENDPOINT, {
-            method: "POST",
-            headers: { "Content-Type": "text/plain;charset=utf-8" },
-            body: JSON.stringify(payload)
-          });
-
-          if (!response.ok) {
-            // 404 คือปลายทาง redirect หลุด, 429/5xx คือฝั่งกูเกิลรับไม่ไหวชั่วคราว
-            // -- ลองใหม่แล้วมีโอกาสผ่าน ต่างจาก 401/403 ที่ลองกี่ครั้งก็ได้คำตอบเดิม
-            transient = response.status === 404 || response.status === 429 || response.status >= 500;
-            throw new Error(`เชื่อมต่อฐานข้อมูลไม่สำเร็จ (HTTP ${response.status})`);
-          }
-
-          const body = await response.json();
-
-          // ตอบกลับเป็น JSON ที่อ่านได้ = สคริปต์ทำงานแล้วและตัดสินใจแล้ว ไม่ใช่
-          // ปัญหาการเชื่อมต่อ จึงไม่ลองใหม่ ต่อให้ ok เป็น false
-          if (!body.ok) throw new Error(body.error || "ฐานข้อมูลตอบกลับผิดพลาด");
-          return body.data;
-        } catch (err) {
-          // fetch โยน error เอง = เครือข่ายไม่ถึงปลายทาง (ออฟไลน์, DNS, ตัดกลางคัน)
-          if (err instanceof TypeError) transient = true;
-
-          lastError = err;
-
-          const canRetry = transient
-            && attempt < RETRY_ATTEMPTS
-            && RETRYABLE_ACTIONS.has(payload.action);
-
-          if (!canRetry) throw err;
-
-          // ถอยห่างขึ้นเรื่อย ๆ แทนที่จะยิงรัว -- ถ้าปลายทางกำลังไม่ไหว
-          // การยิงซ้ำทันทีคือการซ้ำเติม
-          await new Promise(resolve => setTimeout(resolve, 400 * attempt));
-          console.warn(`CS Connect: ${payload.action} ล้มเหลวชั่วคราว กำลังลองใหม่`, err);
-        }
-      }
-
-      throw lastError;
+    function isTransient(error) {
+      const status = Number(error?.status) || 0;
+      const message = String(error?.message || "");
+      return status === 0 || status === 408 || status === 429 || status >= 500
+        || /Failed to fetch|NetworkError|Load failed|fetch failed/i.test(message);
     }
 
     /**
-     * Data calls carry the login token; the backend rejects them without it.
-     *
+     * ข้อความ error ของ PostgREST ที่แปลว่า "ไม่ได้ล็อกอินอยู่แล้ว" -- ตอน session
+     * ถูกเตะออก (revoke_all_sessions / ผู้ดูแลรีเซ็ตรหัส) supabase-js ต่ออายุ token
+     * ไม่ได้ แล้วยิงต่อด้วยสิทธิ์ anon ซึ่งไม่มีสิทธิ์เรียกฟังก์ชันเลย -- ต้องนับเป็น
+     * AUTH_REQUIRED เหมือนกัน ไม่งั้นผู้ใช้เห็น "permission denied" ที่อ่านไม่รู้เรื่อง
+     */
+    function normalizeError(error) {
+      const message = String(error?.message || "");
+      if (error?.code === "42501" || /permission denied for function|JWT expired|invalid JWT|JWSError/i.test(message)) {
+        return new Error("AUTH_REQUIRED");
+      }
+      return new Error(message || "ฐานข้อมูลตอบกลับผิดพลาด");
+    }
+
+    async function rpc(name, args) {
+      let lastError = null;
+
+      for (let attempt = 1; attempt <= RETRY_ATTEMPTS; attempt++) {
+        let data;
+        let error;
+        try {
+          ({ data, error } = await client.rpc(name, args || {}));
+        } catch (err) {
+          error = err;
+        }
+
+        if (!error) return data;
+
+        lastError = error;
+        const canRetry = isTransient(error) && attempt < RETRY_ATTEMPTS && RETRYABLE_RPCS.has(name);
+        if (!canRetry) break;
+
+        // ถอยห่างขึ้นเรื่อย ๆ แทนที่จะยิงรัว
+        console.warn(`CS Connect: ${name} ล้มเหลวชั่วคราว กำลังลองใหม่`, error);
+        await new Promise(resolve => setTimeout(resolve, 400 * attempt));
+      }
+
+      if (isTransient(lastError)) {
+        throw new Error("เชื่อมต่อฐานข้อมูลไม่สำเร็จ กรุณาตรวจสอบอินเทอร์เน็ตแล้วลองใหม่อีกครั้ง");
+      }
+      throw normalizeError(lastError);
+    }
+
+    /**
      * ทุกคำสั่งที่ต้องล็อกอินผ่านที่นี่ที่เดียว จึงเป็นจุดเดียวที่ต้องดัก
-     * AUTH_REQUIRED -- แทนที่จะไปไล่ใส่ในทุก catch ของทุกฟอร์ม
+     * AUTH_REQUIRED / PASSWORD_CHANGE_REQUIRED -- แทนที่จะไปไล่ใส่ในทุก catch
      *
      * ยัง throw ต่อเสมอ ไม่กลืน error ทิ้ง: ผู้เรียกต้องรู้ว่างานไม่สำเร็จ เพื่อจะ
-     * ได้ไม่ไปอัปเดต cache หรือปิดฟอร์มราวกับบันทึกผ่านแล้ว (ดู saveRequests ที่
-     * ต้อง roll back cache กลับ) -- ข้อความที่ผู้เรียกเอาไปแสดงจะอยู่บนหน้าจอที่
-     * ถูกซ่อนไปแล้ว ผู้ใช้จึงเห็นแต่ข้อความเซสชันหมดอายุที่หน้า login
+     * ได้ roll back cache และไม่ปิดฟอร์มราวกับบันทึกผ่านแล้ว
      */
-    async function callAsUser(payload) {
+    async function callAsUser(run) {
       try {
-        return await call({ ...payload, token: getSession()?.token });
+        return await run();
       } catch (err) {
         const message = String(err && err.message);
 
         if (message.includes("AUTH_REQUIRED")) {
+          client.auth.signOut({ scope: "local" }).catch(() => {});
           handleAuthExpired();
         } else if (message.includes("PASSWORD_CHANGE_REQUIRED")) {
-          // ด่านฝั่งเซิร์ฟเวอร์ปฏิเสธมา -- แปลว่าหน้าจอกับความจริงไม่ตรงกัน
-          // (เช่นแอดมินเพิ่งรีเซ็ตรหัสให้ระหว่างที่เปิดเว็บค้างไว้) พากลับไป
-          // หน้าตั้งรหัสใหม่ ซึ่งเป็นสิ่งเดียวที่บัญชีนี้ทำได้ตอนนี้
+          // ด่านฝั่งฐานข้อมูลปฏิเสธมา -- หน้าจอกับความจริงไม่ตรงกัน (เช่นแอดมิน
+          // เพิ่งรีเซ็ตรหัสให้ระหว่างที่เปิดเว็บค้างไว้) พากลับไปหน้าตั้งรหัสใหม่
           const session = getSession();
           if (session) {
             session.mustChangePassword = true;
@@ -445,6 +503,7 @@
           requestsCache = [];
           dispatchesCache = [];
           generalDispatchesCache = [];
+          revenueDispatchesCache = [];
           document.getElementById("bootOverlay").hidden = true;
           openAccountView(true);
         }
@@ -453,14 +512,110 @@
       }
     }
 
+    /** Edge Function staff-admin -- รูปคำตอบ { ok, data, error } แบบเดียวกับระบบเดิม */
+    async function invoke(body) {
+      const { data, error } = await client.functions.invoke("staff-admin", { body });
+      if (error) {
+        // ฟังก์ชันตอบ 200 เสมอเมื่อทำงานจบ -- มาถึงตรงนี้คือเครือข่าย/ตัวฟังก์ชันล่ม
+        let detail = "";
+        try {
+          detail = (await error.context?.json?.())?.error || "";
+        } catch {
+          detail = "";
+        }
+        throw new Error(detail || "เชื่อมต่อระบบไม่สำเร็จ กรุณาลองใหม่อีกครั้ง");
+      }
+      if (!data || !data.ok) throw new Error(data?.error || "เกิดข้อผิดพลาด");
+      return data.data;
+    }
+
+    // ---------- ไฟล์แนบ ----------
+    const IMAGE_MAX_EDGE = 1600;
+    const IMAGE_QUALITY = 0.85;
+
+    function dataUrlToBlob(dataUrl) {
+      const match = /^data:([^;,]+);base64,(.*)$/s.exec(String(dataUrl || ""));
+      if (!match) throw new Error("ไฟล์ไม่ถูกต้อง กรุณาแนบไฟล์ใหม่อีกครั้ง");
+      const binary = atob(match[2]);
+      const bytes = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+      return new Blob([bytes], { type: match[1].toLowerCase() });
+    }
+
+    /**
+     * ย่อรูปถ่ายก่อนอัปโหลด -- Storage ของ free plan มี 1 GB รวมทั้งระบบ รูปจาก
+     * มือถือไฟล์ละ 3-5 MB หมดโควตาได้ในไม่กี่ร้อยรูป ขณะที่ 1600px ยังอ่านรายละเอียด
+     * หน้างานและพิมพ์ลง A4 ได้ชัด HEIC/PDF ส่งตามเดิม (เบราว์เซอร์ส่วนใหญ่วาด HEIC ไม่ได้)
+     */
+    async function shrinkImage(blob) {
+      if (!/^image\/(jpeg|jpg|png|webp)$/.test(blob.type)) return blob;
+      try {
+        const bitmap = await createImageBitmap(blob);
+        const scale = Math.min(1, IMAGE_MAX_EDGE / Math.max(bitmap.width, bitmap.height));
+        if (scale === 1 && blob.size < 1024 * 1024) return blob;
+
+        const canvas = document.createElement("canvas");
+        canvas.width = Math.round(bitmap.width * scale);
+        canvas.height = Math.round(bitmap.height * scale);
+        canvas.getContext("2d").drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+        bitmap.close?.();
+
+        const out = await new Promise(resolve => canvas.toBlob(resolve, "image/jpeg", IMAGE_QUALITY));
+        return out && out.size < blob.size ? out : blob;
+      } catch {
+        return blob;
+      }
+    }
+
+    function extensionFor(type) {
+      return { "image/png": "png", "image/webp": "webp", "image/heic": "heic", "image/heif": "heif", "application/pdf": "pdf" }[type] || "jpg";
+    }
+
+    function randomSuffix() {
+      return Math.random().toString(36).slice(2, 10);
+    }
+
+    function isStoredPath(value) {
+      return Boolean(value) && !/^https?:\/\//i.test(String(value));
+    }
+
+    // signed URL อายุ 1 ชั่วโมง เก็บไว้ในหน่วยความจำ 50 นาทีเพื่อไม่ต้องขอใหม่ทุกครั้งที่วาด
+    const SIGNED_URL_SECONDS = 60 * 60;
+    const signedUrlCache = new Map();
+
+    async function signedUrls(bucket, paths) {
+      const now = Date.now();
+      const result = new Map();
+      const missing = [];
+
+      paths.filter(Boolean).forEach(path => {
+        if (!isStoredPath(path)) {
+          result.set(path, path);
+          return;
+        }
+        const cached = signedUrlCache.get(`${bucket}/${path}`);
+        if (cached && cached.expiresAt > now) result.set(path, cached.url);
+        else if (!missing.includes(path)) missing.push(path);
+      });
+
+      if (missing.length) {
+        const { data, error } = await client.storage.from(bucket).createSignedUrls(missing, SIGNED_URL_SECONDS);
+        if (error) throw normalizeError(error);
+        (data || []).forEach(item => {
+          if (!item.signedUrl) return;
+          signedUrlCache.set(`${bucket}/${item.path}`, { url: item.signedUrl, expiresAt: now + 50 * 60 * 1000 });
+          result.set(item.path, item.signedUrl);
+        });
+      }
+
+      return result;
+    }
+
     return {
-      // Dispatch books ride along on the same call rather than getting their
-      // own round trip: there is one row per printed book (not per request),
-      // so the payload is small, and having them in memory is what makes the
-      // history searchable instantly and lets a request link back to the book
-      // it went out on without another fetch.
+      client,
+
       async load() {
-        const data = await callAsUser({ action: "loadRequests" });
+        const data = await callAsUser(() => rpc("load_workspace"));
         const requests = data.requests || [];
         savedRequests = snapshot(requests);
         return {
@@ -475,165 +630,231 @@
         const changed = requests.filter(r => savedRequests.get(String(r.id)) !== JSON.stringify(r));
         if (!changed.length) return [];
 
-        const res = await callAsUser({ action: "saveRequests", records: changed });
+        const res = await callAsUser(() => rpc("save_requests", { p_records: changed }));
 
-        // เลขที่คำร้อง (ระบบ) ออกจากฝั่งเซิร์ฟเวอร์ใต้ล็อกของชีต (ดู saveRequests_
-        // ใน Code.gs) ฉบับที่ถูกต้องจึงเป็นฉบับที่มันคืนมา ไม่ใช่ฉบับที่เราส่งไป
-        // -- ต้องเก็บฉบับนั้นลง snapshot ด้วย ไม่งั้นการบันทึกครั้งถัดไปจะเห็น
-        // เลขต่างจากที่จำไว้แล้วส่งซ้ำทั้งที่ไม่มีอะไรเปลี่ยน
-        //
-        // สคริปต์เวอร์ชันที่ยังไม่ได้ดีพลอยจะไม่คืน records มา -- ถอยไปใช้ฉบับที่
-        // ส่งไป ผลลัพธ์จึงเท่ากับพฤติกรรมเดิมทุกประการ ไม่ใช่วันดีเดย์ที่ต้อง
-        // อัปเดตสองฝั่งพร้อมกัน
-        const saved = (res && Array.isArray(res.records) && res.records.length === changed.length)
-          ? res.records
-          : changed;
-
+        // เลขที่คำร้อง (ระบบ) ออกจากฝั่งฐานข้อมูลใต้ล็อก ฉบับที่ถูกต้องจึงเป็นฉบับที่
+        // คืนมา ไม่ใช่ฉบับที่ส่งไป -- ต้องเก็บฉบับนั้นลง snapshot ด้วย
+        const saved = Array.isArray(res?.records) ? res.records : changed;
         saved.forEach(r => savedRequests.set(String(r.id), JSON.stringify(r)));
         return saved;
       },
 
       async saveMeterDispatch(dispatch) {
-        await callAsUser({ action: "saveMeterDispatch", record: dispatch });
+        await callAsUser(() => rpc("save_dispatch", { p_kind: "meter", p_record: dispatch }));
       },
 
       async saveRevenueDispatch(dispatch) {
-        await callAsUser({ action: "saveRevenueDispatch", record: dispatch });
+        await callAsUser(() => rpc("save_dispatch", { p_kind: "revenue", p_record: dispatch }));
       },
 
       async saveGeneralDispatch(dispatch) {
-        await callAsUser({ action: "saveGeneralDispatch", record: dispatch });
+        await callAsUser(() => rpc("save_dispatch", { p_kind: "general", p_record: dispatch }));
       },
 
-      // Passwords never leave the browser except over the wire to the script,
-      // which is the only place that hashes or compares them.
+      // สมัครผ่าน Edge Function เท่านั้น (ตรวจรหัสเชิญก่อน) -- signUp ของ Auth ปิดไว้
       async register(user) {
-        return call({ action: "register", user });
-      },
-
-      async login(email, password) {
-        return call({ action: "login", email, password });
-      },
-
-      async logout(token) {
-        return call({ action: "logout", token });
+        return invoke({ action: "register", user });
       },
 
       /**
-       * ทิ้งสำเนาที่ใช้เทียบว่าคำร้องใบไหนเปลี่ยนไปบ้าง
+       * ล็อกอินกับ Supabase Auth แล้วถามสถานะบัญชีจากตาราง staff
        *
-       * อยู่ที่นี่เพราะ savedRequests เป็นของ backend ไม่ใช่ของหน้าจอ -- ที่อื่น
-       * ในแอปไม่ควรรู้ด้วยซ้ำว่ามันมีอยู่ (ดูหลักการ "ความรู้เรื่องที่เก็บข้อมูล
-       * อยู่ในอ็อบเจกต์ backend เท่านั้น")
+       * บัญชีที่รออนุมัติ/ถูกปฏิเสธล็อกอินกับ Auth ผ่าน (รหัสผ่านถูก) แต่ใช้ข้อมูล
+       * อะไรไม่ได้เลย เพราะทุก RPC ตรวจ approval_status เอง -- ที่นี่แค่บอกเหตุผล
+       * ที่ถูกต้องให้ผู้ใช้ แล้วทิ้ง session นั้นไป
        */
+      async login(email, password, remember) {
+        authRemember = Boolean(remember);
+        const { error } = await client.auth.signInWithPassword({ email, password });
+        if (error) {
+          if (Number(error.status) === 429) throw new Error("พยายามหลายครั้งเกินไป กรุณารอสักครู่แล้วลองใหม่อีกครั้ง");
+          if (isTransient(error)) throw new Error("เชื่อมต่อระบบไม่สำเร็จ กรุณาตรวจสอบอินเทอร์เน็ตแล้วลองใหม่อีกครั้ง");
+          // ข้อความเดียวกันไม่ว่าอีเมลหรือรหัสผ่านผิด
+          throw new Error("อีเมลหรือรหัสผ่านไม่ถูกต้อง");
+        }
+
+        let profile;
+        try {
+          profile = await rpc("my_profile", { p_login: true });
+        } catch (err) {
+          await client.auth.signOut({ scope: "local" }).catch(() => {});
+          throw err;
+        }
+
+        if (profile.status !== "approved") {
+          await client.auth.signOut({ scope: "local" }).catch(() => {});
+          throw new Error(profile.status === "rejected"
+            ? "บัญชีนี้ไม่ได้รับการอนุมัติให้ใช้งาน กรุณาติดต่อผู้ดูแลระบบ"
+            : "บัญชีของคุณอยู่ระหว่างรอการอนุมัติจากผู้ดูแลระบบ กรุณาติดต่อผู้ดูแลระบบ");
+        }
+
+        return profile;
+      },
+
+      /** มี session ของ Auth ค้างอยู่จริงไหม -- ใช้ตอนเปิดเว็บ ก่อนเชื่อ session ของแอป */
+      async hasSession() {
+        const { data } = await client.auth.getSession();
+        return Boolean(data?.session);
+      },
+
+      // ออกจาก session ของเครื่องนี้เท่านั้น (scope local) -- เหมือนระบบเดิมที่ลบแค่ token เดียว
+      async logout() {
+        await client.auth.signOut({ scope: "local" });
+      },
+
       forgetCached() {
         savedRequests = new Map();
+        signedUrlCache.clear();
       },
 
-      // ผู้ดูแลระบบเท่านั้น -- ฝั่ง Apps Script ตรวจด้วย requireAdmin_ อีกชั้น
       async revokeAllSessions() {
-        return callAsUser({ action: "revokeAllSessions" });
+        const result = await callAsUser(() => rpc("revoke_all_sessions"));
+        await client.auth.signOut({ scope: "local" }).catch(() => {});
+        return result;
       },
 
-      // รหัสผ่านทั้งเดิมและใหม่ถูกส่งไปให้ Apps Script ตรวจและแฮชที่นั่น -- ห้าม
-      // แฮชฝั่งนี้เด็ดขาด ไม่งั้นค่าที่แฮชแล้วจะกลายเป็นรหัสผ่านตัวจริงไปเอง
+      /**
+       * ตั้งรหัสใหม่แล้ว Auth ลบ session ทุกอันของบัญชีนี้ รวมถึงอันที่ใช้อยู่ -- Edge
+       * Function จึงออก session ใหม่ให้ ต้องรับมาใช้แทนทันที ไม่งั้นคำสั่งถัดไปหลุดไปหน้า login
+       */
       async changePassword(currentPassword, newPassword) {
-        return callAsUser({ action: "changePassword", currentPassword, newPassword });
+        const result = await callAsUser(() => invoke({ action: "changePassword", currentPassword, newPassword }));
+        if (result?.session) {
+          const { error } = await client.auth.setSession(result.session);
+          if (error) console.warn("CS Connect: รับ session ใหม่หลังเปลี่ยนรหัสไม่สำเร็จ", error);
+        }
+        return { changed: result?.changed, otherSessionsRevoked: result?.otherSessionsRevoked };
       },
 
-      // ผู้ดูแลระบบเท่านั้น -- คืนรหัสผ่านชั่วคราวกลับมาแสดงครั้งเดียว ไม่มีที่ไหนเก็บ
       async adminResetPassword(email) {
-        return callAsUser({ action: "adminResetPassword", email });
+        return callAsUser(() => invoke({ action: "adminResetPassword", email }));
       },
 
-      // ผู้ดูแลระบบเท่านั้น -- ทุกแถวของทุกแท็บในก้อนเดียว (รหัสผ่านถูกตัดออก
-      // ฝั่งเซิร์ฟเวอร์เสมอ ดู EXPORT_EXCLUDED_USER_COLUMNS)
       async exportAll() {
-        return callAsUser({ action: "exportAll" });
+        return callAsUser(() => rpc("export_all"));
       },
 
-      // รหัสเชิญ -- ผู้ดูแลระบบเท่านั้น ทั้งสามคำสั่งกันด้วย requireAdmin_
       async getInviteCode() {
-        return callAsUser({ action: "getInviteCode" });
+        return callAsUser(() => rpc("get_invite_code"));
       },
 
       async createInviteCode() {
-        return callAsUser({ action: "createInviteCode" });
+        return callAsUser(() => rpc("create_invite_code"));
       },
 
       async revokeInviteCode() {
-        return callAsUser({ action: "revokeInviteCode" });
+        return callAsUser(() => rpc("revoke_invite_code"));
       },
 
-      // รายชื่อเจ้าหน้าที่สำหรับหน้าจ่ายงาน -- ฝั่งเซิร์ฟเวอร์ส่งกลับแค่ชื่อ/อีเมล/
-      // ตำแหน่ง/สิทธิ์ (ดู listStaff_) ไม่ใช่ทั้งแถวผู้ใช้ซึ่งมีแฮชรหัสผ่านอยู่ด้วย
+      // ผู้สมัครที่รออนุมัติ -- แทนลิงก์อนุมัติทางอีเมลของระบบเดิม
+      async listApplicants() {
+        return callAsUser(() => rpc("list_applicants"));
+      },
+
+      async decideApplicant(email, decision) {
+        return callAsUser(() => rpc("decide_applicant", { p_email: email, p_decision: decision }));
+      },
+
       async listStaff() {
-        return callAsUser({ action: "listStaff" });
+        return callAsUser(() => rpc("list_staff"));
       },
 
-      // หัวหน้างานเท่านั้น -- ฝั่งเซิร์ฟเวอร์เป็นคนเขียนฟิลด์การจ่ายงานเอง แล้วส่ง
-      // เรกคอร์ดที่อัปเดตแล้วกลับมาให้ทับใน cache (ไม่ต้องโหลดใหม่ทั้งชุด)
       async assignRequests(ids, assigneeEmail) {
-        const data = await callAsUser({ action: "assignRequests", ids, assigneeEmail });
+        const data = await callAsUser(() => rpc("assign_requests", { p_ids: ids, p_assignee_email: assigneeEmail }));
         const updated = data.requests || [];
-        // สำเนาที่ใช้เทียบว่า "อะไรเปลี่ยน" ต้องรู้ค่าใหม่ด้วย ไม่งั้นการบันทึก
-        // ครั้งถัดไปจะส่งเรกคอร์ดเหล่านี้ซ้ำโดยไม่จำเป็น
         updated.forEach(r => savedRequests.set(String(r.id), JSON.stringify(r)));
         return updated;
       },
 
-      // แค็ตตาล็อกรายการประมาณการ -- ข้อมูลตั้งต้น ดึงครั้งเดียวต่อการเปิดเว็บ
       async listEstimateItems() {
-        return callAsUser({ action: "listEstimateItems" });
+        return callAsUser(() => rpc("estimate_catalog"));
       },
 
       async saveEstimateKit(kit) {
-        return callAsUser({ action: "saveEstimateKit", kit });
+        return callAsUser(() => rpc("save_estimate_kit", { p_kit: kit }));
       },
 
       async deleteEstimateKit(id) {
-        return callAsUser({ action: "deleteEstimateKit", id });
+        return callAsUser(() => rpc("delete_estimate_kit", { p_id: id }));
       },
 
-      // แนบไฟล์ของงานขอขยายเขตฯ (แผนผัง / ภาพสถานที่ / ภาพเส้นทาง) -- ฝั่ง
-      // เซิร์ฟเวอร์อัปขึ้น Drive เอง และเดินสถานะให้เฉพาะกรณีแผนผัง
-      // คืนคำร้องที่อัปเดตแล้วกลับมาเพื่อเอาไปทับใน cache
+      /**
+       * แนบไฟล์ของงานขอขยายเขตฯ -- อัปขึ้น Storage ก่อน แล้วค่อยให้ RPC ผูกเข้าคำร้อง
+       * (RPC ตรวจว่าไฟล์อยู่บน Storage จริง และเดินสถานะให้เฉพาะกรณีแผนผัง)
+       *
+       * รับ data URL เหมือนเดิม หน้าจอที่เรียกจึงไม่ต้องเปลี่ยน
+       */
       async saveExtendFile(id, kind, file) {
-        const data = await callAsUser({ action: "saveExtendFile", id, kind, file });
-        const updated = data.request;
-        if (updated) savedRequests.set(String(updated.id), JSON.stringify(updated));
-        return updated;
+        return callAsUser(async () => {
+          const blob = await shrinkImage(dataUrlToBlob(file));
+          const folder = kind === "plan" ? "plans" : "photos";
+          const path = `${folder}/${id}/${kind}-${Date.now()}-${randomSuffix()}.${extensionFor(blob.type)}`;
+
+          const upload = await client.storage.from("request-files").upload(path, blob, {
+            contentType: blob.type, upsert: false
+          });
+          if (upload.error) {
+            const message = String(upload.error.message || "");
+            if (/size|large/i.test(message)) throw new Error("ไฟล์ใหญ่เกินไป");
+            if (/mime|type/i.test(message)) throw new Error("รองรับเฉพาะไฟล์ PDF หรือรูปภาพ (JPG, PNG, WEBP, HEIC) เท่านั้น");
+            throw normalizeError(upload.error);
+          }
+
+          let data;
+          try {
+            data = await rpc("attach_request_file", { p_id: id, p_kind: kind, p_path: path });
+          } catch (err) {
+            // ผูกไม่สำเร็จ = ไฟล์กำพร้า ลบทิ้งทันที (policy อนุญาตเพราะยังไม่มีใครอ้างถึง)
+            await client.storage.from("request-files").remove([path]).catch(() => {});
+            throw err;
+          }
+
+          // ภาพที่ถูกแทนที่ไม่มีคำร้องไหนอ้างถึงแล้ว -- ลบไม่สำเร็จไม่ทำให้การแนบล้ม
+          if (isStoredPath(data.removedPath)) {
+            client.storage.from("request-files").remove([data.removedPath])
+              .then(({ error }) => { if (error) console.warn("CS Connect: ลบไฟล์เดิมไม่สำเร็จ", error); });
+          }
+
+          const updated = data.request;
+          if (updated) savedRequests.set(String(updated.id), JSON.stringify(updated));
+          return updated;
+        });
       },
 
-      // ลบไฟล์แนบทีละไฟล์ (แนบผิดไฟล์) -- คืนคำร้องที่อัปเดตแล้วกลับมา
       async deleteExtendFile(id, kind, url) {
-        const data = await callAsUser({ action: "deleteExtendFile", id, kind, url });
-        const updated = data.request;
-        if (updated) savedRequests.set(String(updated.id), JSON.stringify(updated));
-        return updated;
+        return callAsUser(async () => {
+          const data = await rpc("detach_request_file", { p_id: id, p_kind: kind, p_path: url });
+          if (isStoredPath(data.removedPath)) {
+            const { error } = await client.storage.from("request-files").remove([data.removedPath]);
+            if (error) console.warn("CS Connect: ลบไฟล์บน Storage ไม่สำเร็จ", error);
+          }
+          const updated = data.request;
+          if (updated) savedRequests.set(String(updated.id), JSON.stringify(updated));
+          return updated;
+        });
       },
 
-      // ผู้ดูแลระบบเท่านั้น -- ตั้ง/ถอดสิทธิ์หัวหน้างาน
       async setUserRole(email, role) {
-        return callAsUser({ action: "setUserRole", email, role });
+        return callAsUser(() => rpc("set_user_role", { p_email: email, p_role: role }));
       },
 
-      // loadRequests() (above) only returns still-open requests plus recently
-      // closed ones -- see loadRequestsForStaff_ in Code.gs. This is the
-      // escape hatch for the rare "find that old closed request" lookup: it
-      // searches the full sheet server-side instead of ever pulling the
-      // whole history into every staff member's browser.
       async searchArchived(query) {
-        const data = await callAsUser({ action: "searchArchivedRequests", query });
+        const data = await callAsUser(() => rpc("search_archived", { p_query: query }));
         return data.requests || [];
-      }
+      },
 
-      // track()/uploadSlip() live in track.js now -- see the note on
-      // localBackend above.
+      /**
+       * แปลงค่าที่เก็บในคำร้อง (path ใน Storage) เป็น URL ที่ <img>/<a> เปิดได้
+       * kind: "slip" = สลิป (bucket slips), อื่น ๆ = แผนผัง/ภาพหน้างาน
+       * คืน Map ของ path -> URL; ตัวที่ขอ URL ไม่ได้จะไม่อยู่ใน Map
+       */
+      async fileUrls(kind, paths) {
+        return signedUrls(kind === "slip" ? "slips" : "request-files", paths);
+      }
     };
   })();
 
-  const backend = SHEETS_ENDPOINT ? sheetsBackend : localBackend;
+  const backend = supabaseBackend || localBackend;
 
   // ---------- data cache ----------
   // Reads are served synchronously from memory so rendering, filtering and
@@ -720,11 +941,11 @@
   }
 
   function setSession(user, remember) {
-    // The token is what actually authorises data calls -- the rest is display.
+    // ข้อมูลสำหรับแสดงผลเท่านั้น -- สิทธิ์จริงมาจาก session ของ Supabase Auth
+    // (supabaseBackend เก็บเอง) และทุก RPC ตรวจสิทธิ์ใหม่จากตาราง staff ทุกครั้ง
     const session = {
       email: user.email,
       name: user.name,
-      token: user.token,
       isAdmin: Boolean(user.isAdmin),
       // ใช้ตัดสินแค่ว่าจะโชว์แผงจ่ายงานไหม -- ด่านจริงอยู่ฝั่งเซิร์ฟเวอร์ และ
       // ตรวจสิทธิ์ใหม่ทุกครั้งที่สั่งจ่ายงาน แก้ค่านี้ในเบราว์เซอร์ก็ไม่ผ่าน
@@ -845,19 +1066,22 @@
     return div.innerHTML;
   }
 
-  // Google Drive's old-style `uc?export=view&id=...` link (what saveSlip_
-  // used to return, and what's still stored on any slip uploaded before that
-  // changed) frequently refuses to serve as a bare <img src> -- Drive shows
-  // an interstitial/warning page instead of the image bytes, so the print
-  // page and the tracking page's preview both come out blank. `thumbnail?id=`
-  // is what Drive's own UI hotlinks with and reliably returns actual image
-  // bytes. Re-deriving it here at render time (instead of only fixing new
-  // uploads in Code.gs) also fixes every slip already on file, since it's
-  // the same underlying file id either way.
-  function driveThumbnailUrl(url) {
-    if (!url) return url;
-    const match = String(url).match(/[?&]id=([a-zA-Z0-9_-]+)/) || String(url).match(/\/d\/([a-zA-Z0-9_-]+)/);
-    return match ? `https://drive.google.com/thumbnail?id=${match[1]}&sz=w1600` : url;
+  /**
+   * ไฟล์แนบ (สลิป/แผนผัง/ภาพหน้างาน) เก็บเป็น path ใน Supabase Storage แบบ private
+   * ไม่ใช่ลิงก์สาธารณะแบบ Drive เดิม -- ต้องขอ signed URL อายุสั้นจาก backend ก่อน
+   * ใส่ลง <img>/<a> ทุกครั้ง (backend จำไว้ในหน่วยความจำ ไม่ได้ขอใหม่ทุกครั้งที่วาด)
+   *
+   * kind: "slip" หรือ "file" -- คืน null ถ้าขอ URL ไม่ได้ ผู้เรียกต้องรับมือเอง
+   */
+  async function fileUrl(kind, path) {
+    if (!path) return null;
+    try {
+      const urls = await backend.fileUrls(kind, [path]);
+      return urls.get(path) || null;
+    } catch (err) {
+      console.warn("CS Connect: ขอลิงก์ไฟล์แนบไม่สำเร็จ", err);
+      return null;
+    }
   }
 
   function printSlipImage(r) {
@@ -869,11 +1093,6 @@
     const customerName = escapeForPrint(r.customerName || r.requesterName || "-");
     // Older slips predate the paymentSlipAt column and have no value for it.
     const slipAttachedAt = escapeForPrint(r.paymentSlipAt ? formatThaiDateTime(r.paymentSlipAt) : "-");
-    // ผ่าน escapeForPrint เหมือนทุกค่าอื่นในฟังก์ชันนี้ — ค่านี้เคยเป็นข้อยกเว้นเดียว
-    // ทั้งที่มันถูกวางใน attribute ของ HTML ที่สร้างด้วย document.write() เหมือนกัน
-    // ตัวค่ามาจากลูกค้าผ่าน uploadSlip -- ฝั่ง Code.gs กรองด้วย SLIP_URL_PATTERN
-    // แล้ว แต่คำร้องที่บันทึกไว้ก่อนการกรองนั้นยังค้างอยู่ในชีตได้ จึงต้องกันซ้ำที่นี่อีกชั้น
-    const slipSrc = escapeForPrint(driveThumbnailUrl(r.paymentSlip));
 
     printWindow.document.write(`
       <html>
@@ -907,7 +1126,7 @@
               <span><b>วันที่แนบสลิป:</b> ${slipAttachedAt}</span>
             </div>
           </div>
-          <img id="slipImage" src="${slipSrc}" alt="สลิปการชำระเงิน">
+          <img id="slipImage" alt="สลิปการชำระเงิน">
         </body>
       </html>
     `);
@@ -921,13 +1140,19 @@
     // ดัก error ด้วย ไม่ใช่แค่ load: เดิมถ้ารูปสลิปโหลดไม่ขึ้น (ลิงก์เสีย/เน็ตหลุด)
     // กล่องพิมพ์จะไม่เด้งขึ้นมาเลย เจ้าหน้าที่ค้างอยู่กับหน้าเปล่าโดยไม่มีอะไรบอก
     // ว่าเกิดอะไรขึ้น -- ให้พิมพ์ไปเลยดีกว่า อย่างน้อยหัวกระดาษก็ยังใช้ได้
+    //
+    // หน้าต่างถูกเปิดไปก่อนแล้วตอนคลิก ค่อยขอ signed URL ของสลิปทีหลัง -- ถ้าขอ URL
+    // ก่อนแล้วค่อย window.open ตัวบล็อก popup จะมองว่าไม่ได้เกิดจากการคลิกแล้วบล็อกทิ้ง
     const slipImg = printWindow.document.getElementById("slipImage");
-    if (!slipImg || slipImg.complete) {
-      printWindow.print();
-    } else {
+    fileUrl("slip", r.paymentSlip).then(url => {
+      if (!slipImg || !url) {
+        printWindow.print();
+        return;
+      }
       slipImg.addEventListener("load", () => printWindow.print());
       slipImg.addEventListener("error", () => printWindow.print());
-    }
+      slipImg.src = url;
+    });
   }
 
   /**
@@ -1831,6 +2056,7 @@
     requestsCache = [];
     dispatchesCache = [];
     generalDispatchesCache = [];
+    revenueDispatchesCache = [];
     clearSensitiveScreens();
 
     document.getElementById("bootOverlay").hidden = true;
@@ -1919,13 +2145,15 @@
         return;
       }
 
-      // Hashing runs server-side and takes a moment, so make the wait visible
-      // and block a second submit rather than letting it look unresponsive.
+      // Make the wait visible and block a second submit rather than letting
+      // it look unresponsive.
       setBusy(submitBtn, true, "กำลังเข้าสู่ระบบ...");
 
       // The backend decides -- it never tells us whether it was the email or
       // the password that was wrong, and we pass that through unchanged.
-      const user = await backend.login(email, password);
+      // remember ส่งไปด้วยเพราะ session ของ Supabase Auth ต้องเก็บฝั่งเดียวกับ
+      // session ของแอป (localStorage หรือ sessionStorage)
+      const user = await backend.login(email, password, remember);
 
       setSession(user, remember);
       loginForm.reset();
@@ -2023,7 +2251,7 @@
       // Not "กรุณาเข้าสู่ระบบ" -- the account can't log in yet. registerUser_
       // creates it as "pending" and emails the admin an approve/reject link;
       // login is blocked server-side until one of those is clicked.
-      registerSuccess.textContent = "สมัครสมาชิกสำเร็จ ระบบได้ส่งคำขอไปให้ผู้ดูแลระบบอนุมัติแล้ว กรุณารอผลการอนุมัติทางอีเมล";
+      registerSuccess.textContent = "สมัครสมาชิกสำเร็จ ระบบได้ส่งคำขอไปให้ผู้ดูแลระบบอนุมัติแล้ว กรุณารอผู้ดูแลระบบอนุมัติก่อนเข้าสู่ระบบ";
       registerSuccess.hidden = false;
 
       setTimeout(() => {
@@ -2094,6 +2322,7 @@
 
     resetInvitePanel();
     resetRolesPanel();
+    resetApplicantsPanel();
 
     document.getElementById("revokeAllBtn").hidden = true;
     document.getElementById("userGreeting").textContent = "";
@@ -2185,14 +2414,14 @@
   function logout() {
     // Revoke server-side too, so a copied token can't outlive the sign-out.
     // Fire and forget: the local session goes regardless of whether the call
-    // lands, and a stranded token expires on its own.
-    const token = getSession()?.token;
-    if (token) backend.logout(token).catch(err => console.warn("CS Connect logout:", err));
+    // lands, and a stranded session is rejected after SESSION_DAYS anyway.
+    backend.logout().catch(err => console.warn("CS Connect logout:", err));
 
     clearSession();
     requestsCache = [];
     dispatchesCache = [];
     generalDispatchesCache = [];
+    revenueDispatchesCache = [];
     clearSensitiveScreens();
     showView("login");
   }
@@ -2223,7 +2452,12 @@
     rolesCurrent: document.getElementById("adminRolesCurrent"),
     roleUser: document.getElementById("adminRoleUser"),
     rolesError: document.getElementById("adminRolesError"),
-    rolesResult: document.getElementById("adminRolesResult")
+    rolesResult: document.getElementById("adminRolesResult"),
+    applicantsSection: document.getElementById("adminApplicantsSection"),
+    applicantsList: document.getElementById("adminApplicantsList"),
+    applicantsEmpty: document.getElementById("adminApplicantsEmpty"),
+    applicantsError: document.getElementById("adminApplicantsError"),
+    applicantsResult: document.getElementById("adminApplicantsResult")
   };
 
   /**
@@ -2259,6 +2493,10 @@
     accountView.rolesSection.hidden = !session?.isAdmin || mustChange;
     resetRolesPanel();
     if (session?.isAdmin && !mustChange) refreshRolesPanel();
+
+    accountView.applicantsSection.hidden = !session?.isAdmin || mustChange;
+    resetApplicantsPanel();
+    if (session?.isAdmin && !mustChange) refreshApplicantsPanel();
     accountView.forceNotice.hidden = !mustChange;
     accountView.backRow.hidden = mustChange;
     // ปุ่มมุมซ้ายบนต้องหายไปพร้อมกัน ไม่งั้นด่านบังคับตั้งรหัสใหม่มีทางออก
@@ -2339,9 +2577,11 @@
         accountView.backupSection.hidden = !session.isAdmin;
         accountView.inviteSection.hidden = !session.isAdmin;
         accountView.rolesSection.hidden = !session.isAdmin;
+        accountView.applicantsSection.hidden = !session.isAdmin;
         if (session.isAdmin) {
           refreshInviteStatus();
           refreshRolesPanel();
+          refreshApplicantsPanel();
         }
 
         // ตอนล็อกอิน บัญชีนี้ถูกพามาที่นี่โดยไม่ได้โหลดข้อมูลเลย (loadRequests
@@ -2558,6 +2798,91 @@
     }
   }
 
+  /**
+   * ผู้สมัครที่รออนุมัติ -- แทนลิงก์อนุมัติ/ปฏิเสธที่ระบบเดิมส่งทางอีเมล
+   * การตัดสินจริงอยู่ที่ decide_applicant ในฐานข้อมูล (require_admin)
+   */
+  function resetApplicantsPanel() {
+    accountView.applicantsList.innerHTML = "";
+    accountView.applicantsEmpty.textContent = "";
+    accountView.applicantsResult.hidden = true;
+    hideError(accountView.applicantsError);
+  }
+
+  function renderApplicants(applicants) {
+    accountView.applicantsList.innerHTML = "";
+    accountView.applicantsEmpty.textContent = applicants.length
+      ? `รออนุมัติ ${applicants.length} บัญชี`
+      : "ไม่มีผู้สมัครที่รออนุมัติ";
+
+    applicants.forEach(person => {
+      const row = document.createElement("div");
+      row.className = "applicant-row";
+
+      const info = document.createElement("div");
+      info.className = "applicant-info";
+      const name = document.createElement("strong");
+      name.textContent = person.name || "-";
+      const meta = document.createElement("span");
+      meta.textContent = [person.position, person.email, person.createdAt ? formatThaiDateTime(person.createdAt) : ""]
+        .filter(Boolean).join(" · ");
+      info.append(name, meta);
+
+      const actions = document.createElement("div");
+      actions.className = "batch-toolbar";
+      const approve = document.createElement("button");
+      approve.type = "button";
+      approve.className = "btn btn-primary";
+      approve.textContent = "อนุมัติ";
+      const reject = document.createElement("button");
+      reject.type = "button";
+      reject.className = "btn btn-ghost btn-danger-ghost";
+      reject.textContent = "ปฏิเสธ";
+      approve.addEventListener("click", () => decideApplicant(approve, person, "approve"));
+      reject.addEventListener("click", () => decideApplicant(reject, person, "reject"));
+      actions.append(approve, reject);
+
+      row.append(info, actions);
+      accountView.applicantsList.appendChild(row);
+    });
+  }
+
+  async function refreshApplicantsPanel() {
+    try {
+      const data = await backend.listApplicants();
+      renderApplicants(data.applicants || []);
+    } catch (err) {
+      console.error("CS Connect applicants error:", err);
+      showError(accountView.applicantsError, friendlyError(err, "โหลดรายชื่อผู้สมัครไม่สำเร็จ"));
+    }
+  }
+
+  async function decideApplicant(button, person, decision) {
+    hideError(accountView.applicantsError);
+    accountView.applicantsResult.hidden = true;
+
+    const who = person.name || person.email;
+    const ok = window.confirm(decision === "approve"
+      ? `ยืนยันอนุมัติ ${who} (${person.email}) ให้เข้าใช้งานระบบ?`
+      : `ยืนยันปฏิเสธ ${who} (${person.email})?`);
+    if (!ok) return;
+
+    setBusy(button, true, "กำลังบันทึก...");
+    try {
+      const data = await backend.decideApplicant(person.email, decision);
+      renderApplicants(data.applicants || []);
+      accountView.applicantsResult.textContent = decision === "approve"
+        ? `อนุมัติ ${who} แล้ว เข้าสู่ระบบได้ทันที`
+        : `ปฏิเสธ ${who} แล้ว`;
+      accountView.applicantsResult.hidden = false;
+      if (decision === "approve") refreshRolesPanel();
+    } catch (err) {
+      console.error("CS Connect decide applicant error:", err);
+      showError(accountView.applicantsError, friendlyError(err, "บันทึกผลการพิจารณาไม่สำเร็จ"));
+      setBusy(button, false);
+    }
+  }
+
   document.getElementById("adminRoleGrantBtn")
     .addEventListener("click", (e) => changeUserRole(e.currentTarget, "supervisor"));
 
@@ -2677,6 +3002,7 @@
       requestsCache = [];
       dispatchesCache = [];
       generalDispatchesCache = [];
+      revenueDispatchesCache = [];
       clearSensitiveScreens();
       showView("login");
       showError(
@@ -3543,8 +3869,17 @@
       preview.hidden = !url;
       empty.hidden = Boolean(url);
 
+      // จำไว้ว่ากำลังรอ URL ของไฟล์ไหน -- ถ้าเปิดคำร้องใบอื่นก่อน URL มาถึง
+      // ห้ามเอารูปของใบเก่าไปใส่ทับใบใหม่
+      preview.dataset.path = url || "";
+
       if (url) {
-        preview.src = driveThumbnailUrl(url);
+        preview.removeAttribute("src");
+        fileUrl("file", url).then(src => {
+          if (preview.dataset.path !== url) return;
+          if (src) preview.src = src;
+          else preview.hidden = true;
+        });
       } else {
         // ล้าง src ทิ้งด้วย ไม่ใช่แค่ซ่อน -- ไม่งั้นภาพของคำร้องใบก่อนยังค้าง
         // อยู่ใน DOM (เคยเป็นบั๊กจริงมาแล้วกับสลิปในหน้าติดตามสถานะ)
@@ -3591,23 +3926,31 @@
       const item = document.createElement("div");
       item.className = "plan-item";
 
-      // ลิงก์แบบ thumbnail เรนเดอร์ได้ทั้งไฟล์ภาพและ PDF (PDF ได้ภาพหน้าแรก)
-      // จึงไม่ต้องแยกเส้นทางตามชนิดไฟล์ ส่วนไฟล์ที่ Drive ทำภาพตัวอย่างไม่ได้
-      // ตัวรูปจะซ่อนตัวเอง เหลือลิงก์เปิดไฟล์
+      // ภาพตัวอย่างแสดงได้เฉพาะไฟล์รูป -- Storage ไม่ทำภาพหน้าแรกของ PDF ให้
+      // เหมือน Drive (และการแปลงรูปเป็นฟีเจอร์ของ Pro plan) PDF จึงเหลือแค่ลิงก์เปิดไฟล์
       const preview = document.createElement("img");
       preview.className = "plan-preview";
       preview.alt = `ตัวอย่างแผนผังไฟล์ที่ ${index + 1}`;
-      preview.src = driveThumbnailUrl(file.url);
+      preview.hidden = true;
       preview.addEventListener("error", () => { preview.hidden = true; });
 
       const foot = document.createElement("div");
       foot.className = "plan-item-foot";
 
       const link = document.createElement("a");
-      link.href = file.url;
+      link.href = "#";
       link.target = "_blank";
       link.rel = "noopener";
       link.textContent = `เปิดไฟล์ที่ ${index + 1}`;
+
+      fileUrl("file", file.url).then(src => {
+        if (!src) return;
+        link.href = src;
+        if (!/\.pdf($|\?)/i.test(file.url)) {
+          preview.src = src;
+          preview.hidden = false;
+        }
+      });
 
       const when = document.createElement("span");
       when.className = "plan-item-when";
@@ -3756,7 +4099,7 @@
       // loadRequestsForStaff_ in Code.gs) -- an empty result while searching
       // doesn't rule out an older, already-closed record, so offer to check
       // the full history on the server instead of silently saying "not found".
-      if (currentSearchQuery && backend === sheetsBackend) {
+      if (currentSearchQuery && backend === supabaseBackend) {
         const archiveBtn = document.createElement("button");
         archiveBtn.type = "button";
         archiveBtn.className = "btn btn-ghost request-archive-search-btn";
@@ -4453,7 +4796,7 @@
   async function searchArchivedAndMerge(query, triggerBtn) {
     setBusy(triggerBtn, true, "กำลังค้นหา...");
     try {
-      const found = await sheetsBackend.searchArchived(query);
+      const found = await backend.searchArchived(query);
       if (!found.length) {
         triggerBtn.textContent = "ไม่พบคำร้องที่ตรงกันในคำร้องเก่า";
         triggerBtn.disabled = true;
@@ -6480,8 +6823,9 @@
     if (!win) return;
 
     const wbs = escapeForPrint(record.wbs || "-");
-    const site = record.sitePhoto ? driveThumbnailUrl(record.sitePhoto) : "";
-    const route = record.routePhoto ? driveThumbnailUrl(record.routePhoto) : "";
+    // src ใส่ทีหลังเมื่อได้ signed URL (ดูท้ายฟังก์ชัน) -- ตรงนี้แค่บอกว่ามีภาพไหม
+    const site = record.sitePhoto || "";
+    const route = record.routePhoto || "";
 
     const lat = parseFloat(record.lat);
     const lng = parseFloat(record.lng);
@@ -6496,7 +6840,7 @@
 
     const photoBlock = (label, url) => url
       ? `<figure class="shot"><figcaption>${escapeForPrint(label)}</figcaption>
-           <div class="frame"><img src="${escapeForPrint(url)}" alt="${escapeForPrint(label)}"></div>
+           <div class="frame"><img data-path="${escapeForPrint(url)}" alt="${escapeForPrint(label)}"></div>
          </figure>`
       : `<figure class="shot"><figcaption>${escapeForPrint(label)}</figcaption>
            <div class="frame empty">ยังไม่ได้แนบภาพ</div>
@@ -6558,17 +6902,21 @@
 
     // รอให้ภาพโหลดเสร็จก่อนสั่งพิมพ์ ไม่งั้นกล่องพิมพ์เปิดมาพร้อมกรอบว่าง
     // นับทั้งภาพที่โหลดไม่ขึ้นด้วย (error) ไม่งั้นภาพเสียหนึ่งใบจะทำให้ไม่มีวันพิมพ์
+    // ขอ signed URL หลังเปิดหน้าต่างแล้ว (เปิดก่อนตอนคลิก ไม่งั้นโดนบล็อก popup)
     const images = Array.from(win.document.images);
-    let pending = images.filter(img => !img.complete).length;
-    if (!pending) {
+    if (!images.length) {
       win.print();
       return;
     }
+    let pending = images.length;
+    const done = () => { if (--pending === 0) win.print(); };
     images.forEach(img => {
-      if (img.complete) return;
-      const done = () => { if (--pending === 0) win.print(); };
       img.addEventListener("load", done);
       img.addEventListener("error", done);
+      fileUrl("file", img.dataset.path).then(src => {
+        if (src) img.src = src;
+        else done();
+      });
     });
   }
 
@@ -9142,7 +9490,14 @@ ${sheetHtml}
     .addEventListener("click", () => location.reload());
 
   async function init() {
-    const session = getSession();
+    let session = getSession();
+
+    // session ของแอปเป็นแค่ข้อมูลแสดงผล -- ถ้า session ของ Auth หายไปแล้ว (ถูกเตะ
+    // ออก / ล้างข้อมูลเว็บ) ให้ทิ้งของแอปด้วย ไม่ต้องยิงโหลดที่รู้ว่าจะล้ม
+    if (session && !(await backend.hasSession())) {
+      clearSession();
+      session = null;
+    }
 
     // A visitor who isn't signed in (e.g. someone here only to track a
     // request) never loads the request table at all -- they have no token,

@@ -11,8 +11,9 @@
   const TRACK_URL = "https://piphutpong.github.io/CS_Connect/track.html";
 
   // สำเนาที่สามของค่านี้ (app.js, track.js, และที่นี่) -- โปรเจกต์นี้ไม่มีขั้นตอน
-  // build จึงแชร์เป็นโมดูลไม่ได้ ถ้า URL เปลี่ยนต้องแก้ทั้งสามที่
-  const SHEETS_ENDPOINT = "https://script.google.com/macros/s/AKfycbw6Ri7ctu5guRHj3MJupkt0DJcgaht2-RHhhT9_YVNjnme4x1CbMl2SnC5hKO_OH_o/exec";
+  // build จึงแชร์เป็นโมดูลไม่ได้ ถ้าเปลี่ยนโปรเจกต์ต้องแก้ทั้งสามที่
+  const SUPABASE_URL = "https://zsctqxfdxxkssmqfkqdh.supabase.co";
+  const PUBLIC_ENDPOINT = SUPABASE_URL + "/functions/v1/public";
 
   // ?tn= รับได้ทั้งเลขเดียวและหลายเลขคั่นด้วยจุลภาค (คำร้องกลุ่ม) -- ใช้การ์ด
   // ใบเดียวกันทั้งสองแบบ ต่างกันแค่ตรงบรรทัดเลขที่คำร้อง
@@ -94,16 +95,16 @@
   }
 
   /**
-   * ชื่อแผนกและเบอร์โทรที่พิมพ์ลงบนป้าย -- ดึงมาจาก Apps Script แทนที่จะฝังไว้ในนี้
+   * ชื่อแผนกและเบอร์โทรที่พิมพ์ลงบนป้าย -- ดึงมาจากฐานข้อมูล (app.config) แทนที่จะฝังไว้ในนี้
    *
    * หน้านี้เคยไม่เรียกหลังบ้านเลย ซึ่งเป็นข้อดีด้านความปลอดภัยที่เสียไปกับการ
    * เปลี่ยนนี้ (ดู CLAUDE.md) แลกกับการที่เบอร์ไม่ต้องอยู่ในไฟล์ที่เผยแพร่
    *
    * ล้มเหลวแบบเงียบโดยตั้งใจ: ถ้าหลังบ้านช้าหรือล่ม ป้ายต้องพิมพ์ได้อยู่ดี แค่
    * ไม่มีบรรทัดเบอร์ -- ดีกว่าค้างรอ หรือพิมพ์บรรทัดว่างเปล่าออกมา
-   * ใช้ GET เฉย ๆ ไม่ต้องมี body จึงไม่โดน CORS preflight ที่ Apps Script ตอบไม่ได้
+   * ใช้ GET เฉย ๆ ไม่ต้องมี body จึงไม่มี CORS preflight
    */
-  fetch(SHEETS_ENDPOINT)
+  fetch(PUBLIC_ENDPOINT)
     .then(response => (response.ok ? response.json() : null))
     .then(body => {
       const contact = body && body.ok && body.data && body.data.contact;

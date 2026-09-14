@@ -5,19 +5,16 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <!-- Content-Security-Policy: ชั้นสุดท้ายที่ทำให้ "ต่อให้มีช่องโหว่จนแทรก
      สคริปต์ได้ ก็ส่งข้อมูลออกไปไหนไม่ได้" -- script-src กันสคริปต์ที่ไม่ได้มาจาก
-     ไฟล์ของเราเอง และ connect-src อนุญาตให้ยิงได้เฉพาะ Apps Script
-     ต้องมี script.googleusercontent.com ด้วย ไม่ใช่แค่ script.google.com:
-     Apps Script ตอบทุก POST ด้วย 302 ไปโฮสต์นั้น และ CSP ตรวจปลายทางของ
-     redirect ด้วย ไม่ใช่แค่ URL แรก ถ้าขาดไป ทุกคำสั่งจะล้มด้วยข้อความ
-     "NetworkError when attempting to fetch resource" โดยไม่บอกว่าเป็นเพราะ CSP
+     ไฟล์ของเราเอง และ connect-src/img-src อนุญาตเฉพาะโปรเจกต์ Supabase ของเรา
+     (Edge Function public และ signed URL ของสลิปอยู่โฮสต์เดียวกัน)
      หมายเหตุ: frame-ancestors ใช้ผ่าน <meta> ไม่ได้ (ต้องเป็น HTTP header ซึ่ง
      GitHub Pages ตั้งให้ไม่ได้) การกันการถูกฝังใน iframe จึงยังทำไม่ได้ที่นี่ -->
 <meta http-equiv="Content-Security-Policy" content="default-src 'none';
         script-src 'self';
         style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
         font-src https://fonts.gstatic.com;
-        img-src 'self' data: https://drive.google.com https://*.googleusercontent.com;
-        connect-src https://script.google.com https://script.googleusercontent.com;
+        img-src 'self' data: https://zsctqxfdxxkssmqfkqdh.supabase.co;
+        connect-src https://zsctqxfdxxkssmqfkqdh.supabase.co;
         form-action 'none';
         base-uri 'none';
         object-src 'none'">
@@ -25,7 +22,7 @@
 <title>ติดตามสถานะคำร้อง - CS Connect</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=Sarabun:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=20260913o">
+<link rel="stylesheet" href="style.css?v=20260914b">
 </head>
 <body>
 
@@ -68,7 +65,7 @@
 
       <!-- อยู่นอก <dl> โดยตั้งใจ: เป็นข้อความทั้งบรรทัด ไม่ใช่คู่หัวข้อ-ค่า และ
            จะได้ไม่ติดกฎ display: flex ของแถวใน .track-result-details
-           เนื้อหามาจาก Apps Script ตามสถานะ (ดู STATUS_CONTACTS ใน Code.gs) -->
+           เนื้อหามาจากฐานข้อมูลตามสถานะ (app.config: status_contacts) -->
       <p id="trackStatusNote" class="track-status-note" hidden></p>
 
       <div id="trackPaymentSection" class="track-payment" hidden>
@@ -121,6 +118,6 @@
      ที่หาสาเหตุยากมาก
      **ต้องเปลี่ยนเลขนี้ทุกครั้งที่แก้ app.js / style.css / track.js / qr.js**
      ไม่งั้นผู้ใช้บางคนจะยังได้ไฟล์เก่าไปอีกพักใหญ่ -->
-<script src="track.js?v=20260913o"></script>
+<script src="track.js?v=20260914b"></script>
 </body>
 </html>

@@ -1,11 +1,11 @@
 (() => {
   "use strict";
 
-  // Same Apps Script Web App the main app (app.js) uses. This is a second
-  // standalone page with its own script rather than a shared module (no
-  // build step in this project), so if this URL ever changes, update it in
-  // BOTH app.js and here.
-  const SHEETS_ENDPOINT = "https://script.google.com/macros/s/AKfycbw6Ri7ctu5guRHj3MJupkt0DJcgaht2-RHhhT9_YVNjnme4x1CbMl2SnC5hKO_OH_o/exec";
+  // Edge Function "public" ของโปรเจกต์ Supabase เดียวกับที่ app.js ใช้ -- หน้านี้
+  // เป็นสคริปต์แยก ไม่ใช่โมดูลร่วม (โปรเจกต์ไม่มี build step) ถ้าเปลี่ยนโปรเจกต์
+  // ต้องแก้ทั้ง app.js, track.js, qr.js และ CSP ในทั้งสามหน้า
+  const SUPABASE_URL = "https://zsctqxfdxxkssmqfkqdh.supabase.co";
+  const PUBLIC_ENDPOINT = SUPABASE_URL + "/functions/v1/public";
 
   // Kept in sync with JOB_STATUS_TONE in app.js -- update both if a status is
   // added or its tone changes.
@@ -38,16 +38,6 @@
     "อื่นๆ (หมายเหตุเพิ่มเติม)": "info",
     "หมดกำหนดยืนราคา": "danger"
   };
-
-  // Kept in sync with driveThumbnailUrl() in app.js -- Drive's old-style
-  // `uc?export=view&id=...` link (what old slips may still have stored)
-  // often refuses to serve as a bare <img src>, leaving this preview blank.
-  // thumbnail?id= reliably returns actual image bytes for the same file.
-  function driveThumbnailUrl(url) {
-    if (!url) return url;
-    const match = String(url).match(/[?&]id=([a-zA-Z0-9_-]+)/) || String(url).match(/\/d\/([a-zA-Z0-9_-]+)/);
-    return match ? `https://drive.google.com/thumbnail?id=${match[1]}&sz=w1600` : url;
-  }
 
   function formatThaiDate(dateStr) {
     if (!dateStr) return "-";
@@ -82,7 +72,7 @@
   }
 
   /**
-   * The backend call takes a moment (hashing/lookups on the Apps Script side),
+   * The backend call takes a moment (lookups on the backend side),
    * so the button has to say something and stop accepting a second click
    * rather than looking unresponsive or letting an impatient double-submit
    * fire twice.
@@ -101,9 +91,9 @@
   }
 
   // text/plain on purpose: an application/json body would trigger a CORS
-  // preflight, which Apps Script web apps cannot answer.
+  // preflight -- ยังเป็น "simple request" จึงไม่ต้องเสียรอบ OPTIONS
   async function call(payload) {
-    const response = await fetch(SHEETS_ENDPOINT, {
+    const response = await fetch(PUBLIC_ENDPOINT, {
       method: "POST",
       headers: { "Content-Type": "text/plain;charset=utf-8" },
       body: JSON.stringify(payload)
@@ -251,7 +241,8 @@
     const slipImage = document.getElementById("trackSlipImage");
     slipImage.hidden = !hasSlip;
     if (hasSlip) {
-      slipImage.src = driveThumbnailUrl(match.paymentSlip);
+      // signed URL อายุสั้นที่ Edge Function สร้างให้แล้ว (bucket สลิปเป็น private)
+      slipImage.src = match.paymentSlip;
     } else {
       // Belt and braces alongside the [hidden] CSS fix -- clear the src so a
       // stale image from a previous lookup this session can never be what's

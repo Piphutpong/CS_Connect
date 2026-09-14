@@ -34,3 +34,11 @@ estimate-items.csv
 estimate-lists.csv
 estimate-items-template.csv
 estimate-groups-reference.csv
+
+# Supabase backend: migrations, RPC และ Edge Functions -- เหตุผลเดียวกับ apps-script/
+# (บอกโครงสิทธิ์และจุดอ่อนของระบบ ไม่จำเป็นต่อการเสิร์ฟหน้าเว็บ)
+supabase/
+
+# เครื่องมือย้ายข้อมูล: ค่าตั้งระบบจริง (เลขบัญชี), รายงาน และรหัสผ่านชั่วคราว
+tools/
+migration-output/

@@ -5,19 +5,18 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <!-- Content-Security-Policy: ชั้นสุดท้ายที่ทำให้ "ต่อให้มีช่องโหว่จนแทรก
      สคริปต์ได้ ก็ส่งข้อมูลออกไปไหนไม่ได้" -- script-src กันสคริปต์ที่ไม่ได้มาจาก
-     ไฟล์ของเราเอง และ connect-src อนุญาตให้ยิงได้เฉพาะ Apps Script
-     ต้องมี script.googleusercontent.com ด้วย ไม่ใช่แค่ script.google.com:
-     Apps Script ตอบทุก POST ด้วย 302 ไปโฮสต์นั้น และ CSP ตรวจปลายทางของ
-     redirect ด้วย ไม่ใช่แค่ URL แรก ถ้าขาดไป ทุกคำสั่งจะล้มด้วยข้อความ
-     "NetworkError when attempting to fetch resource" โดยไม่บอกว่าเป็นเพราะ CSP
+     ไฟล์ของเราเอง (supabase-js ถูกเก็บไว้ใน vendor/ ด้วยเหตุนี้) และ connect-src
+     อนุญาตให้ยิงได้เฉพาะโปรเจกต์ Supabase ของเรา (API, Auth, Storage, Functions
+     อยู่โฮสต์เดียวกันหมด) img-src ต้องมีโฮสต์เดียวกันเพราะรูปแนบเปิดผ่าน signed URL
+     ของ Storage -- เปลี่ยนโปรเจกต์ต้องแก้ทั้งสองบรรทัดนี้ในทั้งสามหน้า
      หมายเหตุ: frame-ancestors ใช้ผ่าน <meta> ไม่ได้ (ต้องเป็น HTTP header ซึ่ง
      GitHub Pages ตั้งให้ไม่ได้) การกันการถูกฝังใน iframe จึงยังทำไม่ได้ที่นี่ -->
 <meta http-equiv="Content-Security-Policy" content="default-src 'none';
         script-src 'self';
         style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
         font-src https://fonts.gstatic.com;
-        img-src 'self' data: https://drive.google.com https://*.googleusercontent.com;
-        connect-src https://script.google.com https://script.googleusercontent.com;
+        img-src 'self' data: https://zsctqxfdxxkssmqfkqdh.supabase.co;
+        connect-src https://zsctqxfdxxkssmqfkqdh.supabase.co;
         form-action 'none';
         base-uri 'none';
         object-src 'none'">
@@ -25,7 +24,7 @@
 <title>CS Connect</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=Sarabun:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=20260913o">
+<link rel="stylesheet" href="style.css?v=20260914b">
 </head>
 <body>
 
@@ -162,7 +161,19 @@
     </form>
 
     <!-- ผู้ดูแลระบบเท่านั้น -- app.js เปิดให้เห็นตาม isAdmin
-         การกันสิทธิ์จริงอยู่ที่ requireAdmin_ ฝั่ง Apps Script ไม่ใช่ที่ hidden นี้ -->
+         การกันสิทธิ์จริงอยู่ที่ require_admin ในฐานข้อมูล ไม่ใช่ที่ hidden นี้ -->
+    <div id="adminApplicantsSection" class="admin-panel" hidden>
+      <h2 class="admin-panel-title">ผู้สมัครรออนุมัติ</h2>
+      <p class="admin-panel-hint">
+        บัญชีที่สมัครด้วยรหัสเชิญแล้วจะยัง<strong>เข้าสู่ระบบไม่ได้</strong>จนกว่าจะอนุมัติที่นี่
+        ตรวจชื่อและตำแหน่งให้ตรงกับตัวบุคคลก่อนกดอนุมัติ
+      </p>
+      <p id="adminApplicantsEmpty" class="invite-status"></p>
+      <div id="adminApplicantsList" class="applicant-list"></div>
+      <p id="adminApplicantsError" class="form-error" hidden></p>
+      <p id="adminApplicantsResult" class="form-success" hidden></p>
+    </div>
+
     <div id="adminRolesSection" class="admin-panel" hidden>
       <h2 class="admin-panel-title">สิทธิ์หัวหน้างาน</h2>
       <p class="admin-panel-hint">
@@ -217,7 +228,7 @@
       <p class="admin-panel-hint">
         ดาวน์โหลดข้อมูลทุกแถวเป็นไฟล์ JSON หนึ่งไฟล์ (คำร้อง สมุดคุม บันทึกการเข้าถึง และรายชื่อผู้ใช้)
         <strong>ไม่มีรหัสผ่านอยู่ในไฟล์</strong> ระบบตัดออกให้เสมอ
-        ใช้ได้แม้ตอนที่เปิด Google ชีตหรือ Apps Script ไม่ได้ เพราะดึงผ่านระบบหลังบ้านโดยตรง
+        สำเนานอกระบบ -- Supabase free plan ไม่มีการสำรองข้อมูลอัตโนมัติ ควรดาวน์โหลดเก็บไว้เป็นระยะ
       </p>
       <button type="button" id="adminBackupBtn" class="btn btn-ghost btn-block">ดาวน์โหลดไฟล์สำรองข้อมูล</button>
       <p id="adminBackupError" class="form-error" hidden></p>
@@ -264,7 +275,7 @@
       <span id="userGreeting" class="user-greeting"></span>
       <button id="accountBtn" class="btn btn-ghost">บัญชีของฉัน</button>
       <!-- ผู้ดูแลระบบเท่านั้น -- app.js เปิดให้เห็นตาม isAdmin ที่ได้จากตอนล็อกอิน
-           การกันสิทธิ์จริงอยู่ที่ requireAdmin_ ฝั่ง Apps Script ไม่ใช่ที่ hidden นี้ -->
+           การกันสิทธิ์จริงอยู่ที่ require_admin ในฐานข้อมูล ไม่ใช่ที่ hidden นี้ -->
       <button id="revokeAllBtn" class="btn btn-ghost btn-danger-ghost" hidden>ออกจากระบบทุกอุปกรณ์</button>
       <button id="logoutBtn" class="btn btn-ghost">ออกจากระบบ</button>
     </div>
@@ -1517,6 +1528,7 @@
      ที่หาสาเหตุยากมาก
      **ต้องเปลี่ยนเลขนี้ทุกครั้งที่แก้ app.js / style.css / track.js / qr.js**
      ไม่งั้นผู้ใช้บางคนจะยังได้ไฟล์เก่าไปอีกพักใหญ่ -->
-<script src="app.js?v=20260913o"></script>
+<script src="vendor/supabase.js?v=2.116.0"></script>
+<script src="app.js?v=20260914b"></script>
 </body>
 </html>

@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <!-- Content-Security-Policy: ชั้นสุดท้ายที่ทำให้ "ต่อให้มีช่องโหว่จนแทรก
      สคริปต์ได้ ก็ส่งข้อมูลออกไปไหนไม่ได้" -- script-src กันสคริปต์ที่ไม่ได้มาจาก
-     ไฟล์ของเราเอง และ connect-src อนุญาตให้ยิงได้ที่เดียวคือ Apps Script
+     ไฟล์ของเราเอง และ connect-src อนุญาตให้ยิงได้ที่เดียวคือโปรเจกต์ Supabase ของเรา
      หมายเหตุ: frame-ancestors ใช้ผ่าน <meta> ไม่ได้ (ต้องเป็น HTTP header ซึ่ง
      GitHub Pages ตั้งให้ไม่ได้) การกันการถูกฝังใน iframe จึงยังทำไม่ได้ที่นี่ -->
 <meta http-equiv="Content-Security-Policy" content="default-src 'none';
@@ -13,7 +13,7 @@
         style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
         font-src https://fonts.gstatic.com;
         img-src 'self' data:;
-        connect-src https://script.google.com https://script.googleusercontent.com;
+        connect-src https://zsctqxfdxxkssmqfkqdh.supabase.co;
         form-action 'none';
         base-uri 'none';
         object-src 'none'">
@@ -21,7 +21,7 @@
 <title>พิมพ์ QR ตรวจสอบสถานะ - CS Connect</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=Sarabun:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=20260913o">
+<link rel="stylesheet" href="style.css?v=20260914b">
 </head>
 <body>
 
@@ -62,8 +62,8 @@
 
     <!-- อยู่ใน .qr-card จึงติดไปกับกระดาษที่ลูกค้าถือกลับ -- คนที่สแกนแล้วติดขัด
          ต้องมีที่ให้โทรถามบนแผ่นเดียวกัน ไม่ใช่ต้องกลับมาถามที่เคาน์เตอร์
-         เว้นว่างไว้ตั้งใจ: ชื่อแผนกและเบอร์มาจาก Apps Script ตอนโหลดหน้า จะได้
-         ไม่ต้องฝังไว้ในไฟล์ที่เผยแพร่บน GitHub (ดู CONTACT_INFO ใน Code.gs) -->
+         เว้นว่างไว้ตั้งใจ: ชื่อแผนกและเบอร์มาจากฐานข้อมูลตอนโหลดหน้า จะได้
+         ไม่ต้องฝังไว้ในไฟล์ที่เผยแพร่บน GitHub (ดู contact_info ใน app.config) -->
     <p class="qr-contact" id="qrContact" hidden></p>
   </section>
 
@@ -99,6 +99,6 @@
      ที่หาสาเหตุยากมาก
      **ต้องเปลี่ยนเลขนี้ทุกครั้งที่แก้ app.js / style.css / track.js / qr.js**
      ไม่งั้นผู้ใช้บางคนจะยังได้ไฟล์เก่าไปอีกพักใหญ่ -->
-<script src="qr.js?v=20260913o"></script>
+<script src="qr.js?v=20260914b"></script>
 </body>
 </html>
