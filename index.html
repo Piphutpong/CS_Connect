@@ -24,7 +24,7 @@
 <title>CS Connect</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=Sarabun:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=20260914f">
+<link rel="stylesheet" href="style.css?v=20260914g">
 </head>
 <body>
 
@@ -1148,6 +1148,11 @@
 
   <div id="extendWorkListMode">
   <main class="work-main">
+    <!-- งานขอใช้ไฟฟ้าเท่านั้น (ดู setWorkKind ใน app.js) -- ย้ายมาจากแถบซ้าย
+         ของหน้ารายละเอียดคำร้อง มาไว้ที่หน้ารายการนี้แทนตามที่ขอ ใช้คลาส
+         .service-link-item ชุดเดียวกับหน้าการ์ด KPI/งานธุรกิจเสริม เพื่อให้
+         หน้าตาลิงก์แบบนี้เหมือนกันทั้งแอป ไม่ต้องคิดสไตล์ใหม่ -->
+    <a id="extendListSheetLink" class="service-link-item work-sheet-link" target="_blank" rel="noopener" hidden></a>
     <div class="requests-content-heading">
       <div class="requests-content-heading-row">
         <div>
@@ -1198,17 +1203,6 @@
           <svg viewBox="0 0 24 24" fill="none"><path d="M7 3h8l4 4v14H7V3Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M15 3v4h4M9 12h6M9 16h6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
           รายละเอียดคำร้อง
         </button>
-        <!-- งานขอใช้ไฟฟ้าเท่านั้น (ตรงข้ามกับสามแท็บล่างที่เป็นของขอขยายเขตฯ
-             เท่านั้น) -- ลิงก์ออกไปหา Google Sheet ของแผนก ไม่ใช่แท็บของหน้านี้
-             จริง ๆ จึงเป็น <a> ธรรมดา ไม่มี data-extend-pane และไม่ผ่าน
-             showExtendPane เลย (คลิกแล้วไม่ต้องสลับอะไรในหน้านี้) ที่ยังใช้คลาส
-             .requests-nav-item เพราะอยากให้หน้าตาเรียงเป็นแท็บเดียวกัน สลับ
-             โชว์/ซ่อนตาม workKind ใน setWorkKind (app.js) เหมือนแท็บอื่น ๆ -->
-        <a href="https://docs.google.com/spreadsheets/d/1C9F_aCpQBImgn4_Eb0t5pPQrJUZjC06U0IyEK1LxX_w/edit?usp=sharing"
-           target="_blank" rel="noopener" class="requests-nav-item" id="extendSheetLinkBtn" hidden>
-          <svg viewBox="0 0 24 24" fill="none"><path d="M5 3h14v18H5z" stroke="currentColor" stroke-width="1.6"/><path d="M8 8h8M8 12h8M8 16h5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
-          Google Sheet
-        </a>
         <button type="button" class="requests-nav-item" data-extend-pane="plan">
           <svg viewBox="0 0 24 24" fill="none"><path d="M4 5h16v14H4z" stroke="currentColor" stroke-width="1.6"/><path d="M4 10h16M9 5v14" stroke="currentColor" stroke-width="1.6"/></svg>
           แนบแผนผัง
@@ -1585,6 +1579,6 @@
      **ต้องเปลี่ยนเลขนี้ทุกครั้งที่แก้ app.js / style.css / track.js / qr.js**
      ไม่งั้นผู้ใช้บางคนจะยังได้ไฟล์เก่าไปอีกพักใหญ่ -->
 <script src="vendor/supabase.js?v=2.116.0"></script>
-<script src="app.js?v=20260914f"></script>
+<script src="app.js?v=20260914g"></script>
 </body>
 </html>

@@ -168,6 +168,24 @@
     }
   };
 
+  /**
+   * แถวลิงก์เดียวมาตรฐาน (ไอคอนเอกสาร + ชื่อ) -- ใช้ร่วมกันทั้งรายการลิงก์ของ
+   * #serviceView (อาจมีหลายแถว) และลิงก์เดี่ยวในหน้ารายการงานขอใช้ไฟฟ้า
+   * (#extendListSheetLink) จะได้ไม่ต้องคง markup เดียวกันไว้สองที่
+   */
+  function buildServiceLinkItem(label, url) {
+    const a = document.createElement("a");
+    a.className = "service-link-item";
+    a.href = url;
+    a.target = "_blank";
+    a.rel = "noopener";
+    a.innerHTML = '<svg viewBox="0 0 24 24" fill="none"><path d="M5 3h14v18H5z" stroke="currentColor" stroke-width="1.6"/><path d="M8 8h8M8 12h8M8 16h5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>';
+    const span = document.createElement("span");
+    span.textContent = label;
+    a.appendChild(span);
+    return a;
+  }
+
   // ---------- backend ----------
   // The only place that knows *where* data lives. Everything above this line
   // is UI; everything below talks to `backend` through the cache layer that
@@ -3085,16 +3103,7 @@
       linksEl.innerHTML = "";
       if (service.links && service.links.length) {
         service.links.forEach(link => {
-          const a = document.createElement("a");
-          a.className = "service-link-item";
-          a.href = link.url;
-          a.target = "_blank";
-          a.rel = "noopener";
-          a.innerHTML = '<svg viewBox="0 0 24 24" fill="none"><path d="M5 3h14v18H5z" stroke="currentColor" stroke-width="1.6"/><path d="M8 8h8M8 12h8M8 16h5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>';
-          const label = document.createElement("span");
-          label.textContent = link.label;
-          a.appendChild(label);
-          linksEl.appendChild(a);
+          linksEl.appendChild(buildServiceLinkItem(link.label, link.url));
         });
         linksEl.hidden = false;
         noteEl.hidden = true;
@@ -8760,7 +8769,17 @@ ${sheetHtml}
   const extendDetailTitle = document.getElementById("extendDetailTitle");
   const extendDetailSubtitle = document.getElementById("extendDetailSubtitle");
   const extendPaneItems = document.querySelectorAll("[data-extend-pane]");
-  const extendSheetLinkBtn = document.getElementById("extendSheetLinkBtn");
+  // เนื้อหาคงที่ ไม่ได้ผูกกับคำร้องใบไหน จึงแทนที่ธาตุว่างในหน้าด้วยเนื้อหาจริง
+  // ครั้งเดียวตรงนี้ (ใช้ buildServiceLinkItem ตัวเดียวกับหน้าการ์ด) แล้ว
+  // setWorkKind() แค่สลับ hidden เอาตามประเภทงานที่กำลังดูอยู่
+  const extendListSheetLink = buildServiceLinkItem(
+    "Google Sheet: งานขอใช้ไฟฟ้า",
+    "https://docs.google.com/spreadsheets/d/1C9F_aCpQBImgn4_Eb0t5pPQrJUZjC06U0IyEK1LxX_w/edit?usp=sharing"
+  );
+  extendListSheetLink.id = "extendListSheetLink";
+  extendListSheetLink.className = "service-link-item work-sheet-link";
+  extendListSheetLink.hidden = true;
+  document.getElementById("extendListSheetLink").replaceWith(extendListSheetLink);
   const extendPaneNotice = document.getElementById("extendPaneNotice");
   const extendWorkChips = document.getElementById("extendWorkChips");
   const extendWorkTitle = document.getElementById("extendWorkTitle");
@@ -8848,10 +8867,8 @@ ${sheetHtml}
     extendPaneItems.forEach(item => {
       item.hidden = workKind !== "extend" && item.dataset.extendPane !== "form";
     });
-    // ตรงข้ามกับสามแท็บบนที่เป็นของขอขยายเขตฯ เท่านั้น -- ลิงก์ Google Sheet นี้
-    // เป็นของขอใช้ไฟฟ้าเท่านั้น ไม่ได้อยู่ใน extendPaneItems เพราะไม่ใช่แท็บจริง
-    // (ดูหมายเหตุใน index.html)
-    extendSheetLinkBtn.hidden = workKind !== "power";
+    // ลิงก์ Google Sheet บนหน้ารายการ เป็นของขอใช้ไฟฟ้าเท่านั้น
+    extendListSheetLink.hidden = workKind !== "power";
   }
 
   /**
