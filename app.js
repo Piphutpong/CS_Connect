@@ -3220,6 +3220,8 @@
   const requestsSearchInput = document.getElementById("requestsSearchInput");
   const requestsSortBtn = document.getElementById("requestsSortBtn");
   const requestsSortLabel = document.getElementById("requestsSortLabel");
+  const extendWorkSortBtn = document.getElementById("extendWorkSortBtn");
+  const extendWorkSortLabel = document.getElementById("extendWorkSortLabel");
   const navBadges = document.querySelectorAll(".nav-badge");
 
   // แจ้งเตือนการรับชำระเงิน isn't its own data -- it's ขอใช้ไฟฟ้า records still
@@ -5068,16 +5070,30 @@
     renderRequestsList();
   });
 
-  function updateRequestsSortBtn() {
-    requestsSortBtn.setAttribute("aria-pressed", String(requestsSortAscending));
-    requestsSortLabel.textContent = requestsSortAscending ? "เก่า → ใหม่" : "ใหม่ → เก่า";
+  /**
+   * ปุ่มเดียวกันมีสองชุด (งานรับคำร้อง กับ งานขอใช้ไฟฟ้า/งานขยายเขตฯ) เพราะอยู่
+   * คนละหน้า แต่ผูกกับตัวแปรทิศทางเดียวกัน (requestsSortAscending) -- สลับที่
+   * หน้าไหนก็ให้อีกหน้าจำทิศทางเดิมไว้ด้วย จึงต้องอัปเดตทั้งคู่พร้อมกันทุกครั้ง
+   * ที่ค่าเปลี่ยน ไม่ว่าจะเปลี่ยนจากปุ่มไหน
+   */
+  function updateSortButtons() {
+    [[requestsSortBtn, requestsSortLabel], [extendWorkSortBtn, extendWorkSortLabel]].forEach(([btn, label]) => {
+      btn.setAttribute("aria-pressed", String(requestsSortAscending));
+      label.textContent = requestsSortAscending ? "เก่า → ใหม่" : "ใหม่ → เก่า";
+    });
   }
-  updateRequestsSortBtn();
+  updateSortButtons();
 
   requestsSortBtn.addEventListener("click", () => {
     requestsSortAscending = !requestsSortAscending;
-    updateRequestsSortBtn();
+    updateSortButtons();
     renderRequestsList();
+  });
+
+  extendWorkSortBtn.addEventListener("click", () => {
+    requestsSortAscending = !requestsSortAscending;
+    updateSortButtons();
+    renderExtendWork();
   });
 
   meterPrintBtn.addEventListener("click", async () => {
@@ -8776,8 +8792,8 @@ ${sheetHtml}
   );
   extendListSheetLink.id = "extendListSheetLink";
   extendListSheetLink.className = "service-link-item work-sheet-link";
-  extendListSheetLink.hidden = true;
   document.getElementById("extendListSheetLink").replaceWith(extendListSheetLink);
+  const extendWorkSide = document.getElementById("extendWorkSide");
   const extendPaneNotice = document.getElementById("extendPaneNotice");
   const extendWorkChips = document.getElementById("extendWorkChips");
   const extendWorkTitle = document.getElementById("extendWorkTitle");
@@ -8865,8 +8881,9 @@ ${sheetHtml}
     extendPaneItems.forEach(item => {
       item.hidden = workKind !== "extend" && item.dataset.extendPane !== "form";
     });
-    // ลิงก์ Google Sheet บนหน้ารายการ เป็นของขอใช้ไฟฟ้าเท่านั้น
-    extendListSheetLink.hidden = workKind !== "power";
+    // ลิงก์ Google Sheet บนหน้ารายการ เป็นของขอใช้ไฟฟ้าเท่านั้น -- ซ่อนทั้งคอลัมน์ซ้าย
+    // ตอนดูงานขยายเขตฯ ไม่ใช่แค่ลิงก์ข้างใน ไม่งั้นจะเหลือคอลัมน์ว่างเปล่าอยู่
+    extendWorkSide.hidden = workKind !== "power";
   }
 
   /**
@@ -9265,8 +9282,7 @@ ${sheetHtml}
 
       const body = document.createElement("div");
       body.className = "status-group-body";
-      group
-        .sort((a, b) => b.createdAt - a.createdAt)
+      sortRequestsForDisplay(group)
         .forEach(record => body.appendChild(renderExtendCard(record)));
 
       // จำการย่อแยกตามประเภทงาน -- สองประเภทมีสถานะชื่อซ้ำกัน (รอเอกสารเพิ่มเติม
@@ -9511,10 +9527,9 @@ ${sheetHtml}
     const jobs = extendJobs();
     renderExtendChips(jobs);
 
-    const filtered = jobs
+    const filtered = sortRequestsForDisplay(jobs
       .filter(extendFilterMatches)
-      .filter(r => matchesSearch(r, extendSearchQuery))
-      .sort((a, b) => b.createdAt - a.createdAt);
+      .filter(r => matchesSearch(r, extendSearchQuery)));
 
     // งานที่เลือกไว้แล้วหลุดออกจากมุมมองปัจจุบัน (เช่นมีคนอื่นเปลี่ยนสถานะไป)
     // ต้องหลุดจากการเลือกด้วย ไม่งั้นจะจ่ายงานใบที่มองไม่เห็นบนจอไปโดยไม่รู้ตัว

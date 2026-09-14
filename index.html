@@ -24,7 +24,7 @@
 <title>CS Connect</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=Sarabun:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=20260914k">
+<link rel="stylesheet" href="style.css?v=20260914l">
 </head>
 <body>
 
@@ -1147,14 +1147,16 @@
   </header>
 
   <div id="extendWorkListMode">
-    <!-- งานขอใช้ไฟฟ้าเท่านั้น (ดู setWorkKind ใน app.js) -- อยู่นอก .work-main
-         โดยตั้งใจ: .work-main กว้างสูงสุด 1100px แล้ว margin: 0 auto กลาง
-         หน้าจอ ซึ่งชิดซ้ายไม่ตรงกับปุ่มย้อนกลับของ topbar (padding คงที่ 28px)
-         เมื่อจอกว้างกว่า 1100px -- ไว้นอก .work-main แล้วกำหนด margin เอง
-         จึงชิดกับปุ่มย้อนกลับเป๊ะไม่ว่าจอกว้างแค่ไหน ใช้คลาส .service-link-item
+    <!-- แบ่งจอเป็น 2 คอลัมน์: แถบซ้าย (#extendWorkSide) มีแค่ลิงก์ Google Sheet
+         ของงานขอใช้ไฟฟ้า (ดู setWorkKind ใน app.js -- ซ่อนทั้งแถบตอนดูงานขยายเขตฯ
+         เพราะลิงก์นี้เป็นของขอใช้ไฟฟ้าเท่านั้น ไม่ให้เหลือคอลัมน์ว่างเปล่า) ส่วน
+         .work-main เป็นเนื้อหารายการงานเหมือนเดิมทั้งหมด ใช้คลาส .service-link-item
          ชุดเดียวกับหน้าการ์ด KPI/งานธุรกิจเสริม เพื่อให้หน้าตาลิงก์แบบนี้เหมือน
          กันทั้งแอป -->
-    <a id="extendListSheetLink" class="service-link-item work-sheet-link" target="_blank" rel="noopener" hidden></a>
+    <div class="work-list-layout">
+      <aside id="extendWorkSide" class="work-list-side" hidden>
+        <a id="extendListSheetLink" class="service-link-item work-sheet-link" target="_blank" rel="noopener"></a>
+      </aside>
   <main class="work-main">
     <div class="requests-content-heading">
       <div class="requests-content-heading-row">
@@ -1166,6 +1168,13 @@
 
       <div class="requests-search">
         <input type="search" id="extendWorkSearch" placeholder="ค้นหาด้วยเลขที่คำร้อง, ชื่อลูกค้า, เบอร์โทร, สถานที่, ผู้รับผิดชอบ...">
+        <!-- ปุ่มเดียวกับหน้างานรับคำร้อง (#requestsSortBtn) แค่คนละ id เพราะอยู่
+             คนละหน้า -- ทั้งคู่ผูกกับตัวแปรทิศทางเดียวกันใน app.js (updateSortButtons)
+             สลับที่หน้าไหนก็จำไว้ใช้กับอีกหน้าด้วย ไม่ใช้เฉพาะแยกกันคนละหน้า -->
+        <button type="button" id="extendWorkSortBtn" class="requests-sort-btn" aria-pressed="false">
+          <span class="requests-sort-icon" aria-hidden="true">↓</span>
+          <span id="extendWorkSortLabel">ใหม่ → เก่า</span>
+        </button>
       </div>
 
       <!-- ชิปกรองสถานะ -- คลิกเดียวเปลี่ยนมุมมอง วาดจาก app.js เพราะจำนวนและ
@@ -1192,6 +1201,7 @@
 
     <div id="extendWorkList" class="request-list"></div>
   </main>
+    </div>
   </div>
 
   <!-- หน้ารายละเอียดของงานหนึ่งใบ -- อยู่ในโมดูลนี้ ไม่กระโดดไปหน้างานรับคำร้อง
@@ -1582,6 +1592,6 @@
      **ต้องเปลี่ยนเลขนี้ทุกครั้งที่แก้ app.js / style.css / track.js / qr.js**
      ไม่งั้นผู้ใช้บางคนจะยังได้ไฟล์เก่าไปอีกพักใหญ่ -->
 <script src="vendor/supabase.js?v=2.116.0"></script>
-<script src="app.js?v=20260914k"></script>
+<script src="app.js?v=20260914l"></script>
 </body>
 </html>

@@ -891,16 +891,35 @@ button:active {
   flex: 1;
 }
 
+/* หน้ารายการงานขอใช้ไฟฟ้า/ขยายเขตฯ แบ่งเป็น 2 คอลัมน์: แถบซ้าย .work-list-side
+   (มีแค่ลิงก์ Google Sheet ของขอใช้ไฟฟ้า) กับ .work-main (เนื้อหารายการเดิม)
+   ดู index.html สำหรับ markup และ setWorkKind() ใน app.js สำหรับการซ่อน/โชว์
+   แถบซ้ายตามประเภทงาน -- ไม่ใส่ display ที่ไม่มีเงื่อนไขให้ .work-list-side จึงไม่
+   ต้องมี [hidden] override (ดู Gotcha ใน CLAUDE.md) */
+.work-list-layout {
+  display: flex;
+  align-items: flex-start;
+  gap: 24px;
+}
+
+.work-list-side {
+  flex: 0 0 260px;
+  padding: 28px 0 0 28px;
+}
+
 /* ใช้ .service-link-item ตัวเดิมแต่นอกกล่อง .service-links (คนละหน้า, คนละ
-   parent) -- ต้องกำหนด width เองเพราะ display: flex ไม่ได้แปลว่าหดตามเนื้อหา
-   ให้อัตโนมัติ ปล่อยไว้เฉยๆ จะกว้างเต็มหน้าเหมือน div ธรรมดา
-   อยู่นอก .work-main (ดูหมายเหตุใน index.html) จึงกำหนด margin ซ้าย/ขวาเอง
-   ให้เท่ากับ padding ของ .topbar (28px) พอดี ชิดกับปุ่มย้อนกลับเสมอไม่ว่าจอ
-   จะกว้างแค่ไหน ต่างจาก .work-main ที่ชิดซ้ายไม่ตรงกันเมื่อจอกว้างกว่า 1100px
-   เพราะมันกึ่งกลางตัวเองด้วย margin: 0 auto */
-.work-sheet-link {
-  width: fit-content;
-  margin: 20px 28px 0;
+   parent) -- ในคอลัมน์ซ้ายนี้ให้กว้างเต็มคอลัมน์แทนที่จะหดตามเนื้อหา */
+.work-list-side .work-sheet-link {
+  width: 100%;
+}
+
+/* .work-main เดิมกึ่งกลางตัวเองด้วย margin: 0 auto (ยังใช้แบบนั้นในหน้าประมาณการ)
+   แต่ในเลย์เอาต์ 2 คอลัมน์นี้ต้องเป็นคอลัมน์ขวาที่ยืดเต็มพื้นที่ที่เหลือแทน */
+.work-list-layout .work-main {
+  max-width: none;
+  margin: 0;
+  min-width: 0;
+  flex: 1;
 }
 
 /* โบรชัวร์ของการ์ดที่มีรูป (เช่นงานธุรกิจเสริม) -- การ์ดปกติกว้างแค่ 460px
@@ -2882,6 +2901,21 @@ span.estimate-crumb {
 }
 
 @media (max-width: 1024px) {
+  /* จอแคบวางแถบลิงก์ไว้เหนือรายการงานแทนที่จะเป็นคอลัมน์ซ้าย -- 260px คงที่
+     บีบเนื้อหารายการแคบเกินไปบนจอเล็ก */
+  .work-list-layout {
+    flex-direction: column;
+    gap: 0;
+  }
+
+  .work-list-side {
+    flex-basis: auto;
+    width: 100%;
+    /* ซ้าย/ขวาตาม padding ของ .work-main (28px) เสมอ จะได้ชิดกับเนื้อหารายการ
+       ด้านล่างพอดีตอนวางซ้อนกันแนวตั้ง */
+    padding: 16px 28px 0;
+  }
+
   .requests-sidebar {
     width: 200px;
     padding: 20px 8px;
@@ -2970,12 +3004,6 @@ span.estimate-crumb {
 
   .topbar {
     padding: 12px 16px;
-  }
-
-  /* ต้องตามค่า padding ของ .topbar ข้างบนเสมอ -- ชิดปุ่มย้อนกลับพอดีทั้งจอกว้าง
-     และจอแคบ */
-  .work-sheet-link {
-    margin: 16px 16px 0;
   }
 
   .user-greeting {
