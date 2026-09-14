@@ -893,10 +893,14 @@ button:active {
 
 /* ใช้ .service-link-item ตัวเดิมแต่นอกกล่อง .service-links (คนละหน้า, คนละ
    parent) -- ต้องกำหนด width เองเพราะ display: flex ไม่ได้แปลว่าหดตามเนื้อหา
-   ให้อัตโนมัติ ปล่อยไว้เฉยๆ จะกว้างเต็ม .work-main เหมือน div ธรรมดา */
+   ให้อัตโนมัติ ปล่อยไว้เฉยๆ จะกว้างเต็มหน้าเหมือน div ธรรมดา
+   อยู่นอก .work-main (ดูหมายเหตุใน index.html) จึงกำหนด margin ซ้าย/ขวาเอง
+   ให้เท่ากับ padding ของ .topbar (28px) พอดี ชิดกับปุ่มย้อนกลับเสมอไม่ว่าจอ
+   จะกว้างแค่ไหน ต่างจาก .work-main ที่ชิดซ้ายไม่ตรงกันเมื่อจอกว้างกว่า 1100px
+   เพราะมันกึ่งกลางตัวเองด้วย margin: 0 auto */
 .work-sheet-link {
   width: fit-content;
-  margin-bottom: 16px;
+  margin: 20px 28px 0;
 }
 
 /* โบรชัวร์ของการ์ดที่มีรูป (เช่นงานธุรกิจเสริม) -- การ์ดปกติกว้างแค่ 460px
@@ -2966,6 +2970,12 @@ span.estimate-crumb {
 
   .topbar {
     padding: 12px 16px;
+  }
+
+  /* ต้องตามค่า padding ของ .topbar ข้างบนเสมอ -- ชิดปุ่มย้อนกลับพอดีทั้งจอกว้าง
+     และจอแคบ */
+  .work-sheet-link {
+    margin: 16px 16px 0;
   }
 
   .user-greeting {

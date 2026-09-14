@@ -8771,7 +8771,7 @@ ${sheetHtml}
   // ครั้งเดียวตรงนี้ (ใช้ buildServiceLinkItem ตัวเดียวกับหน้าการ์ด) แล้ว
   // setWorkKind() แค่สลับ hidden เอาตามประเภทงานที่กำลังดูอยู่
   const extendListSheetLink = buildServiceLinkItem(
-    "Google Sheet: งานขอใช้ไฟฟ้า",
+    "Google Sheet: สถานะงานขอติดตั้งมิเตอร์หม้อแปลงผู้ใช้ไฟเฉพาะราย",
     "https://docs.google.com/spreadsheets/d/1C9F_aCpQBImgn4_Eb0t5pPQrJUZjC06U0IyEK1LxX_w/edit?usp=sharing"
   );
   extendListSheetLink.id = "extendListSheetLink";

@@ -24,7 +24,7 @@
 <title>CS Connect</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=Sarabun:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=20260914j">
+<link rel="stylesheet" href="style.css?v=20260914k">
 </head>
 <body>
 
@@ -1147,12 +1147,15 @@
   </header>
 
   <div id="extendWorkListMode">
-  <main class="work-main">
-    <!-- งานขอใช้ไฟฟ้าเท่านั้น (ดู setWorkKind ใน app.js) -- ย้ายมาจากแถบซ้าย
-         ของหน้ารายละเอียดคำร้อง มาไว้ที่หน้ารายการนี้แทนตามที่ขอ ใช้คลาส
-         .service-link-item ชุดเดียวกับหน้าการ์ด KPI/งานธุรกิจเสริม เพื่อให้
-         หน้าตาลิงก์แบบนี้เหมือนกันทั้งแอป ไม่ต้องคิดสไตล์ใหม่ -->
+    <!-- งานขอใช้ไฟฟ้าเท่านั้น (ดู setWorkKind ใน app.js) -- อยู่นอก .work-main
+         โดยตั้งใจ: .work-main กว้างสูงสุด 1100px แล้ว margin: 0 auto กลาง
+         หน้าจอ ซึ่งชิดซ้ายไม่ตรงกับปุ่มย้อนกลับของ topbar (padding คงที่ 28px)
+         เมื่อจอกว้างกว่า 1100px -- ไว้นอก .work-main แล้วกำหนด margin เอง
+         จึงชิดกับปุ่มย้อนกลับเป๊ะไม่ว่าจอกว้างแค่ไหน ใช้คลาส .service-link-item
+         ชุดเดียวกับหน้าการ์ด KPI/งานธุรกิจเสริม เพื่อให้หน้าตาลิงก์แบบนี้เหมือน
+         กันทั้งแอป -->
     <a id="extendListSheetLink" class="service-link-item work-sheet-link" target="_blank" rel="noopener" hidden></a>
+  <main class="work-main">
     <div class="requests-content-heading">
       <div class="requests-content-heading-row">
         <div>
@@ -1579,6 +1582,6 @@
      **ต้องเปลี่ยนเลขนี้ทุกครั้งที่แก้ app.js / style.css / track.js / qr.js**
      ไม่งั้นผู้ใช้บางคนจะยังได้ไฟล์เก่าไปอีกพักใหญ่ -->
 <script src="vendor/supabase.js?v=2.116.0"></script>
-<script src="app.js?v=20260914j"></script>
+<script src="app.js?v=20260914k"></script>
 </body>
 </html>
