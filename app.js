@@ -156,7 +156,7 @@
       desc: "PEA Engineering Service — บริการตรวจสอบและบำรุงรักษาระบบไฟฟ้าแบบครบวงจร (บำรุงรักษาหม้อแปลง, ตรวจจุดร้อนด้วยกล้องอินฟราเรด)",
       icon: '<svg viewBox="0 0 24 24" fill="none"><rect x="3" y="7" width="18" height="13" rx="2" stroke="currentColor" stroke-width="1.6"/><path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M3 12h18" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>',
       links: [
-        { label: "Google Sheet: งานธุรกิจเสริม", url: "https://docs.google.com/spreadsheets/d/1Ys-uVEzhEOJIS5MbxdoXYWrfR2UwXX70r-mzQE9yAJg/edit?usp=sharing" }
+        { label: "Google Sheet: Check list จ้างเหมา Turnkey", url: "https://docs.google.com/spreadsheets/d/1Ys-uVEzhEOJIS5MbxdoXYWrfR2UwXX70r-mzQE9yAJg/edit?usp=sharing" }
       ],
       // โบรชัวร์ 3 ใบที่เจ้าของระบบส่งมาให้แปะไว้ -- ไฟล์อยู่ใน assets/ (ดู
       // .service-gallery ใน style.css ที่ไม่ eager-load รูปพวกนี้ตอนเปิดหน้าแรก)
