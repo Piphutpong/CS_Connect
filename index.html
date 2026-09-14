@@ -24,7 +24,7 @@
 <title>CS Connect</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=Sarabun:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=20260914c">
+<link rel="stylesheet" href="style.css?v=20260914d">
 </head>
 <body>
 
@@ -321,6 +321,24 @@
         <span class="service-title">Solar</span>
         <span class="service-desc">คำร้องเกี่ยวกับระบบผลิตไฟฟ้าพลังงานแสงอาทิตย์</span>
       </button>
+
+      <!-- ลิงก์ออกไปยัง Google Sheet ของแผนก ไม่มีข้อมูลของตัวเองในระบบนี้เลย --
+           ใช้ #serviceView เดิมเป็นหน้ากลาง (ดู SERVICES ใน app.js) -->
+      <button class="service-card" data-service="kpi">
+        <span class="service-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none"><path d="M4 20V10m6 10V4m6 16v-7m6 7V13" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </span>
+        <span class="service-title">KPI แผนกบริการและลูกค้าสัมพันธ์</span>
+        <span class="service-desc">ตัวชี้วัดผลการดำเนินงานของแผนก (Google Sheet)</span>
+      </button>
+
+      <button class="service-card" data-service="sideBusiness">
+        <span class="service-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none"><rect x="3" y="7" width="18" height="13" rx="2" stroke="currentColor" stroke-width="1.6"/><path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M3 12h18" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </span>
+        <span class="service-title">งานธุรกิจเสริม</span>
+        <span class="service-desc">PEA Engineering Service — บริการตรวจสอบและบำรุงรักษาระบบไฟฟ้า</span>
+      </button>
     </div>
   </main>
 </section>
@@ -427,6 +445,12 @@
           </div>
           <div class="requests-search">
             <input type="search" id="requestsSearchInput" placeholder="ค้นหาด้วยเลขที่คำร้อง, ชื่อลูกค้า, เบอร์โทร, บ้านเลขที่, เลขที่โฉนด...">
+            <!-- เรียงตามวันที่รับคำร้อง แล้วตัดสินด้วยเลขที่คำร้องเมื่อวันที่ตรงกัน
+                 ดีฟอลต์ใหม่-เก่า (aria-pressed บอกทิศทางปัจจุบันไว้ด้วยสำหรับ screen reader) -->
+            <button type="button" id="requestsSortBtn" class="requests-sort-btn" aria-pressed="false">
+              <span id="requestsSortIcon" class="requests-sort-icon" aria-hidden="true">↓</span>
+              <span id="requestsSortLabel">ใหม่ → เก่า</span>
+            </button>
           </div>
         </div>
         <div id="requestsList" class="request-list"></div>
@@ -620,6 +644,10 @@
               <p class="field-hint">ระบบใส่ค่าธรรมเนียมมาตรฐานให้ตามความประสงค์และขนาดมิเตอร์ พิมพ์ทับได้</p>
             </div>
           </div>
+          <label class="checkbox-field">
+            <input type="checkbox" id="reqEvCircuit2">
+            <span>EV วงจรที่ 2</span>
+          </label>
           <!-- ปุ่มสร้างคำร้องขยายเขตฯ อยู่ข้างสถานะงานโดยตั้งใจ เพราะมันโผล่มาตอน
                สถานะเป็น "รอขยายเขตฯ" พอดี -- คือจังหวะที่เจ้าหน้าที่เพิ่งกลับจาก
                สำรวจแล้วพบว่าต้องขยายเขตก่อนติดตั้งมิเตอร์ได้ ดู syncExtendLinkButton -->
@@ -643,6 +671,13 @@
               + สร้างคำร้องขยายเขตฯ
             </button>
             </div>
+          </div>
+          <!-- ขึ้นเมื่อสถานะเป็น "ชำระเงินแล้ว" เท่านั้น -- ดีฟอลต์เป็นวันนี้ตอนเปลี่ยน
+               สถานะมา (ดู syncPaidDateField) แต่แก้ไขเองได้อิสระเหมือนวันที่อื่นในฟอร์ม
+               ไม่ใช่ค่าที่ระบบหวงแบบค่าธรรมเนียมอัตโนมัติ -->
+          <div class="field" id="reqPaidDateField" hidden>
+            <label for="reqPaidDate">วันที่ชำระ</label>
+            <input type="date" id="reqPaidDate">
           </div>
           <!-- ผู้รับผิดชอบ -- เขียนได้ทางเดียวคือหัวหน้าจ่ายงานจากหน้า "งานขอใช้ไฟฟ้า"
                (assignRequests ฝั่งเซิร์ฟเวอร์) ช่องนี้แสดงอย่างเดียว และไม่ถูกส่งไปกับ
@@ -1163,6 +1198,17 @@
           <svg viewBox="0 0 24 24" fill="none"><path d="M7 3h8l4 4v14H7V3Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M15 3v4h4M9 12h6M9 16h6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
           รายละเอียดคำร้อง
         </button>
+        <!-- งานขอใช้ไฟฟ้าเท่านั้น (ตรงข้ามกับสามแท็บล่างที่เป็นของขอขยายเขตฯ
+             เท่านั้น) -- ลิงก์ออกไปหา Google Sheet ของแผนก ไม่ใช่แท็บของหน้านี้
+             จริง ๆ จึงเป็น <a> ธรรมดา ไม่มี data-extend-pane และไม่ผ่าน
+             showExtendPane เลย (คลิกแล้วไม่ต้องสลับอะไรในหน้านี้) ที่ยังใช้คลาส
+             .requests-nav-item เพราะอยากให้หน้าตาเรียงเป็นแท็บเดียวกัน สลับ
+             โชว์/ซ่อนตาม workKind ใน setWorkKind (app.js) เหมือนแท็บอื่น ๆ -->
+        <a href="https://docs.google.com/spreadsheets/d/1C9F_aCpQBImgn4_Eb0t5pPQrJUZjC06U0IyEK1LxX_w/edit?usp=sharing"
+           target="_blank" rel="noopener" class="requests-nav-item" id="extendSheetLinkBtn" hidden>
+          <svg viewBox="0 0 24 24" fill="none"><path d="M5 3h14v18H5z" stroke="currentColor" stroke-width="1.6"/><path d="M8 8h8M8 12h8M8 16h5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+          Google Sheet
+        </a>
         <button type="button" class="requests-nav-item" data-extend-pane="plan">
           <svg viewBox="0 0 24 24" fill="none"><path d="M4 5h16v14H4z" stroke="currentColor" stroke-width="1.6"/><path d="M4 10h16M9 5v14" stroke="currentColor" stroke-width="1.6"/></svg>
           แนบแผนผัง
@@ -1515,8 +1561,11 @@
       <span class="placeholder-icon" id="servicePlaceholderIcon" aria-hidden="true"></span>
       <h2 id="serviceTitle">ชื่องาน</h2>
       <p id="serviceDesc" class="placeholder-desc">รายละเอียดงานบริการ</p>
-      <p class="placeholder-note">หน้านี้อยู่ระหว่างการพัฒนา — เร็ว ๆ นี้จะสามารถยื่นคำร้องและติดตามสถานะได้จากหน้านี้</p>
-      <button class="btn btn-primary" id="backToHomeBtn">กลับสู่หน้าหลัก</button>
+      <!-- ขึ้นเฉพาะการ์ดที่มีลิงก์ (SERVICES[key].url ใน app.js เช่น Google Sheet
+           ของแผนก) -- การ์ดที่ยังไม่มีอะไรจริงอย่าง Solar ไม่ตั้งค่านี้ ปุ่มจึงซ่อน -->
+      <a href="#" id="serviceLinkBtn" class="btn btn-primary" target="_blank" rel="noopener" hidden></a>
+      <p id="serviceNote" class="placeholder-note">หน้านี้อยู่ระหว่างการพัฒนา — เร็ว ๆ นี้จะสามารถยื่นคำร้องและติดตามสถานะได้จากหน้านี้</p>
+      <button class="btn btn-ghost" id="backToHomeBtn">กลับสู่หน้าหลัก</button>
     </div>
   </main>
 </section>
@@ -1529,6 +1578,6 @@
      **ต้องเปลี่ยนเลขนี้ทุกครั้งที่แก้ app.js / style.css / track.js / qr.js**
      ไม่งั้นผู้ใช้บางคนจะยังได้ไฟล์เก่าไปอีกพักใหญ่ -->
 <script src="vendor/supabase.js?v=2.116.0"></script>
-<script src="app.js?v=20260914c"></script>
+<script src="app.js?v=20260914d"></script>
 </body>
 </html>

@@ -137,6 +137,25 @@
       title: "Solar",
       desc: "คำร้องเกี่ยวกับระบบผลิตไฟฟ้าพลังงานแสงอาทิตย์",
       icon: '<svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="4" stroke="currentColor" stroke-width="1.6"/><path d="M12 2v2.5M12 19.5V22M22 12h-2.5M4.5 12H2M19.07 4.93l-1.77 1.77M6.7 17.3l-1.77 1.77M19.07 19.07l-1.77-1.77M6.7 6.7 4.93 4.93" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>'
+    },
+    // การ์ดสองใบนี้ไม่มีข้อมูลของตัวเองในระบบนี้เลย -- แค่ลิงก์ออกไปหา Google
+    // Sheet ที่แผนกทำไว้อยู่แล้ว "url" ที่มีค่าเป็นสิ่งที่ #serviceView ใช้ตัดสิน
+    // ว่าจะโชว์ปุ่มเปิดลิงก์แทนข้อความ "อยู่ระหว่างการพัฒนา" (ดู event listener
+    // ของ .service-card ด้านล่าง) -- ตั้งใจไม่ฝังตารางราคา/รายละเอียดจากโบรชัวร์
+    // ไว้ตรงนี้ เพราะ Sheet ต้นทางแก้ได้เอง ไม่ต้องรอแก้โค้ดทุกครั้งที่ราคาขยับ
+    kpi: {
+      title: "KPI แผนกบริการและลูกค้าสัมพันธ์",
+      desc: "ตัวชี้วัดผลการดำเนินงานของแผนกบริการและลูกค้าสัมพันธ์",
+      icon: '<svg viewBox="0 0 24 24" fill="none"><path d="M4 20V10m6 10V4m6 16v-7m6 7V13" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+      url: "https://docs.google.com/spreadsheets/d/1oM1UKwlCWXu_gGXJcXtO4DuSTilz2H42ex5Nb1dYM_A/edit?usp=sharing",
+      linkLabel: "เปิด Google Sheet"
+    },
+    sideBusiness: {
+      title: "งานธุรกิจเสริม",
+      desc: "PEA Engineering Service — บริการตรวจสอบและบำรุงรักษาระบบไฟฟ้าแบบครบวงจร (บำรุงรักษาหม้อแปลง, ตรวจจุดร้อนด้วยกล้องอินฟราเรด)",
+      icon: '<svg viewBox="0 0 24 24" fill="none"><rect x="3" y="7" width="18" height="13" rx="2" stroke="currentColor" stroke-width="1.6"/><path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M3 12h18" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+      url: "https://docs.google.com/spreadsheets/d/1Ys-uVEzhEOJIS5MbxdoXYWrfR2UwXX70r-mzQE9yAJg/edit?usp=sharing",
+      linkLabel: "เปิด Google Sheet"
     }
   };
 
@@ -3047,6 +3066,23 @@
       document.getElementById("serviceDesc").textContent = service.desc;
       document.getElementById("servicePlaceholderIcon").innerHTML = service.icon;
 
+      // การ์ดที่มี url (เช่น KPI/งานธุรกิจเสริม -- ลิงก์ออกไปหา Google Sheet)
+      // โชว์ปุ่มเปิดลิงก์แทนข้อความ "อยู่ระหว่างการพัฒนา" ซึ่งไม่จริงสำหรับการ์ด
+      // พวกนี้ -- ตั้งใจเช็คด้วย Boolean(service.url) ไม่ใช่แค่ตรวจว่ามี key
+      // เพราะการ์ดอย่าง Solar ยังไม่มีอะไรจริงให้เปิดเลย
+      const linkBtn = document.getElementById("serviceLinkBtn");
+      const noteEl = document.getElementById("serviceNote");
+      if (service.url) {
+        linkBtn.href = service.url;
+        linkBtn.textContent = service.linkLabel || "เปิดลิงก์";
+        linkBtn.hidden = false;
+        noteEl.hidden = true;
+      } else {
+        linkBtn.hidden = true;
+        linkBtn.removeAttribute("href");
+        noteEl.hidden = false;
+      }
+
       showView("service");
     });
   });
@@ -3134,6 +3170,8 @@
   const generalModes = document.getElementById("generalModes");
   const generalModeBtns = generalModes.querySelectorAll(".requests-mode-btn");
   const requestsSearchInput = document.getElementById("requestsSearchInput");
+  const requestsSortBtn = document.getElementById("requestsSortBtn");
+  const requestsSortLabel = document.getElementById("requestsSortLabel");
   const navBadges = document.querySelectorAll(".nav-badge");
 
   // แจ้งเตือนการรับชำระเงิน isn't its own data -- it's ขอใช้ไฟฟ้า records still
@@ -3249,6 +3287,9 @@
   const reqPurposeOtherField = document.getElementById("reqPurposeOtherField");
   const reqPurposeOther = document.getElementById("reqPurposeOther");
   const reqDate = document.getElementById("reqDate");
+  const reqJobStatus = document.getElementById("reqJobStatus");
+  const reqPaidDateField = document.getElementById("reqPaidDateField");
+  const reqPaidDate = document.getElementById("reqPaidDate");
   const reqCreateExtendBtn = document.getElementById("reqCreateExtendBtn");
   const reqCoord = document.getElementById("reqCoord");
   const reqMapBtn = document.getElementById("reqMapBtn");
@@ -3348,6 +3389,10 @@
   // ที่ฟัง change อยู่ (เช่นค่าธรรมเนียมอัตโนมัติ) ต้องไม่ทำงานในช่วงนั้น
   let fillingForm = false;
   let currentSearchQuery = "";
+  // ทิศทางเรียงของ #requestsList -- false (ดีฟอลต์) = ใหม่-เก่า, true = เก่า-ใหม่
+  // เป็นค่ากลางของทั้งแอป ไม่รีเซ็ตตอนสลับแท็บ (ต่างจาก currentSearchQuery)
+  // เพราะเป็นความชอบเรื่องการแสดงผล ไม่ใช่ข้อมูลเฉพาะแท็บใดแท็บหนึ่ง
+  let requestsSortAscending = false;
 
   // Which half of the คุมคำร้องส่งแผนกมิเตอร์ tab is showing: "pending" (the
   // requests still waiting to go out) or "history" (books already printed).
@@ -3464,6 +3509,20 @@
   }
 
   /**
+   * บังคับให้ขึ้นทศนิยม 2 ตำแหน่งเสมอ -- STANDARD_FEES เก็บค่าไม่เท่ากัน
+   * ("749" ไม่มีทศนิยม, "4012.50" มี) และคำร้องเก่าที่บันทึกไว้ก่อนกฎนี้ก็เช่นกัน
+   * จัดรูปตรงนี้ที่เดียวตอนแสดงผล แทนที่จะไปไล่แก้ค่าตั้งต้นให้ครบทุกคู่
+   *
+   * ค่าที่แปลงเป็นตัวเลขไม่ได้ (ว่าง หรือพิมพ์ผิด) คืนค่าเดิมกลับไปเฉย ๆ ไม่เดา
+   */
+  function formatFeeValue(value) {
+    const text = String(value == null ? "" : value).trim();
+    if (!text) return "";
+    const amount = Number(text.replace(/,/g, ""));
+    return isFinite(amount) ? amount.toFixed(2) : text;
+  }
+
+  /**
    * เติมค่าธรรมเนียมให้อัตโนมัติเมื่อเลือกความประสงค์คู่กับขนาดมิเตอร์
    *
    * กฎเดียวที่ต้องจำ: **ระบบแตะเฉพาะค่าที่ระบบเป็นคนใส่เอง** ถ้าเจ้าหน้าที่พิมพ์
@@ -3487,7 +3546,7 @@
 
       if (fee !== undefined) {
         if (!feeEl.value || feeEl.dataset.autoFee === "1") {
-          feeEl.value = fee;
+          feeEl.value = formatFeeValue(fee);
           feeEl.dataset.autoFee = "1";
         }
         return;
@@ -3627,6 +3686,25 @@
   wireLocationCascade(reqDistrict, reqSubdistrict, reqZipcode);
   wireLocationCascade(extDistrict, extSubdistrict, extZipcode);
   wireFeeAutofill(reqPurpose, document.getElementById("reqMeterSize"), document.getElementById("reqFee"));
+
+  /**
+   * ขึ้นเมื่อสถานะงานเป็น "ชำระเงินแล้ว" -- ดีฟอลต์เป็นวันนี้ให้ตอนสลับมาที่สถานะนี้
+   * เท่านั้น (ไม่ทับค่าที่มีอยู่แล้ว ไม่ว่าจะเป็นค่าที่ระบบเคยใส่ให้หรือที่พิมพ์เอง
+   * -- ต่างจากค่าธรรมเนียมอัตโนมัติ ช่องนี้ไม่มี data-auto ธงให้ต้องตาม เพราะ
+   * เขียนทับแค่ตอนช่องยังว่างอยู่พอดี ก็ปลอดภัยพอแล้ว)
+   *
+   * ยังโชว์ต่อไปถ้ามีค่าอยู่แล้วแม้สถานะจะเปลี่ยนไปเป็นอย่างอื่นในภายหลัง (เช่น
+   * แก้สถานะกลับไปเป็นอย่างอื่นหลังบันทึกวันที่ชำระไว้แล้ว) กันไม่ให้ค่าที่กรอก
+   * ไว้หายไปจากสายตาทั้งที่ยังอยู่ในฟอร์ม -- เหมือนเงื่อนไขของ extApprovalField
+   */
+  function syncPaidDateField() {
+    const isPaid = reqJobStatus.value === "ชำระเงินแล้ว";
+    reqPaidDateField.hidden = !isPaid && !reqPaidDate.value;
+    if (isPaid && !reqPaidDate.value) {
+      reqPaidDate.value = todayDateString();
+    }
+  }
+  reqJobStatus.addEventListener("change", syncPaidDateField);
 
   reqPurpose.addEventListener("change", () => {
     reqPurposeOtherField.hidden = reqPurpose.value !== "other";
@@ -4007,6 +4085,38 @@
     });
   }
 
+  /**
+   * เรียงตามวันที่รับคำร้อง (ตัวหลัก) แล้วตัดสินด้วยเลขที่คำร้อง (ตัวรอง) เมื่อ
+   * วันที่ตรงกัน -- สองฟิลด์นี้เป็นสิ่งที่เจ้าหน้าที่มองเวลาไล่หาคำร้อง ไม่ใช่
+   * createdAt (เวลาบันทึกจริง ซึ่งอาจต่างจากวันที่รับคำร้องได้ถ้าพิมพ์ย้อนหลัง)
+   *
+   * receivedDate เป็นข้อความรูปแบบ YYYY-MM-DD อยู่แล้ว เทียบแบบ string ได้ตรง
+   * ลำดับเวลาพอดี ไม่ต้อง parse เป็น Date ส่วนเลขที่คำร้องเป็นข้อความอิสระที่
+   * เจ้าหน้าที่พิมพ์เอง (คนละรูปแบบกันไปตามประเภทคำร้อง) เทียบแบบ string เช่นกัน
+   *
+   * ค่าที่ไม่มี (ว่าง) ถือว่า "เก่าที่สุด" เสมอไม่ว่าจะเรียงทิศไหน กันไม่ให้คำร้อง
+   * เก่าที่ยังไม่มีข้อมูลกระโดดไปโผล่เป็นรายการบนสุดตอนเรียงใหม่-เก่า
+   */
+  function compareRequestsByReceivedThenNumber(a, b) {
+    const dateA = a.receivedDate || "";
+    const dateB = b.receivedDate || "";
+    if (dateA !== dateB) return dateA < dateB ? -1 : 1;
+
+    const numA = String(a.requestNumber || "");
+    const numB = String(b.requestNumber || "");
+    if (numA !== numB) return numA < numB ? -1 : 1;
+
+    // เสมอกันทั้งคู่ -- ใช้เวลาบันทึกตัดสินสุดท้าย กันไม่ให้ลำดับสลับไปมาระหว่าง
+    // การ render แต่ละครั้งโดยไม่มีเหตุผล (การเรียงที่ไม่นิ่งทำให้ดูเหมือนบั๊ก)
+    return (a.createdAt || 0) - (b.createdAt || 0);
+  }
+
+  function sortRequestsForDisplay(records) {
+    const sorted = records.slice().sort(compareRequestsByReceivedThenNumber);
+    if (!requestsSortAscending) sorted.reverse();
+    return sorted;
+  }
+
   function renderRequestsList() {
     requestsFormMode.hidden = true;
     requestsListMode.hidden = false;
@@ -4017,10 +4127,11 @@
     updateTabBadges();
 
     const derivedFilter = DERIVED_TAB_FILTERS[currentRequestFilter];
-    const filtered = getRequests()
-      .filter(derivedFilter || (r => r.type === currentRequestFilter))
-      .filter(r => matchesSearch(r, currentSearchQuery))
-      .sort((a, b) => b.createdAt - a.createdAt);
+    const filtered = sortRequestsForDisplay(
+      getRequests()
+        .filter(derivedFilter || (r => r.type === currentRequestFilter))
+        .filter(r => matchesSearch(r, currentSearchQuery))
+    );
 
     requestsListTitle.textContent = REQUEST_TYPES[currentRequestFilter];
     requestsListCount.textContent = `ทั้งหมด ${filtered.length} รายการ`;
@@ -4909,6 +5020,18 @@
     renderRequestsList();
   });
 
+  function updateRequestsSortBtn() {
+    requestsSortBtn.setAttribute("aria-pressed", String(requestsSortAscending));
+    requestsSortLabel.textContent = requestsSortAscending ? "เก่า → ใหม่" : "ใหม่ → เก่า";
+  }
+  updateRequestsSortBtn();
+
+  requestsSortBtn.addEventListener("click", () => {
+    requestsSortAscending = !requestsSortAscending;
+    updateRequestsSortBtn();
+    renderRequestsList();
+  });
+
   meterPrintBtn.addEventListener("click", async () => {
     const selected = getRequests().filter(r => meterSelection.has(r.id));
     if (!selected.length) return;
@@ -4966,8 +5089,14 @@
     }
 
     document.getElementById("reqMeterSize").value = r.meterSize || "";
-    document.getElementById("reqFee").value = r.fee || "";
+    document.getElementById("reqFee").value = formatFeeValue(r.fee);
+    document.getElementById("reqEvCircuit2").checked = Boolean(r.evCircuit2);
+    // ต้องตั้งค่าวันที่ชำระไว้ "ก่อน" เปลี่ยนสถานะแล้วยิง change -- syncPaidDateField
+    // เติมวันนี้ให้เฉพาะตอนช่องยังว่าง ถ้าตั้งค่าทีหลัง วันที่เดิมของคำร้องจะโดนข้าม
+    // ไปแล้วช่องจะยังว่างตอนที่ change ทำงาน กลายเป็นเขียนวันนี้ทับของเดิม
+    reqPaidDate.value = r.paidDate || "";
     document.getElementById("reqJobStatus").value = r.jobStatus || "รอตรวจสอบ";
+    reqJobStatus.dispatchEvent(new Event("change"));
     document.getElementById("reqNote").value = r.note || "";
 
     reqCoord.value = formatCoordText(r.lat, r.lng);
@@ -5645,6 +5774,10 @@
     resetLocationFields();
     resetPurposeFields();
     setDefaultRequestDate();
+    // ต้องเรียกหลัง reset() เสมอ -- native reset ล้างช่องวันที่ชำระและคืนสถานะ
+    // งานกลับไปตัวเลือกแรก (รอตรวจสอบ) แต่ "ไม่" ไปแตะ [hidden] ของ div ที่ห่อ
+    // ช่องนั้น ซึ่งเป็นแค่สถานะที่ syncPaidDateField ตั้งไว้เอง reset() มองไม่เห็น
+    syncPaidDateField();
     updateReqCoords();
     updateReqPhonePrimaryCall();
     updateReqPhoneSecondaryCall();
@@ -5948,7 +6081,11 @@
       const purposeOther = document.getElementById("reqPurposeOther").value.trim();
       const meterSize = document.getElementById("reqMeterSize").value;
       const fee = document.getElementById("reqFee").value.trim();
+      const evCircuit2 = document.getElementById("reqEvCircuit2").checked;
       const jobStatus = document.getElementById("reqJobStatus").value;
+      // ว่างได้เสมอแม้สถานะเป็น "ชำระเงินแล้ว" -- ช่องนี้เป็นความสะดวก ไม่ใช่กฎบังคับ
+      // แบบเดียวกับ approvalDate ของขอขยายเขตฯ (ไม่มีการตรวจฝั่งเซิร์ฟเวอร์ผูกไว้)
+      const paidDate = document.getElementById("reqPaidDate").value;
       const note = document.getElementById("reqNote").value.trim();
       const coord = readCoordField(reqCoord);
 
@@ -6048,7 +6185,9 @@
         purpose,
         meterSize,
         fee,
+        evCircuit2,
         jobStatus,
+        paidDate,
         note,
         lat: coord.lat,
         lng: coord.lng
@@ -8580,6 +8719,7 @@ ${sheetHtml}
   const extendDetailTitle = document.getElementById("extendDetailTitle");
   const extendDetailSubtitle = document.getElementById("extendDetailSubtitle");
   const extendPaneItems = document.querySelectorAll("[data-extend-pane]");
+  const extendSheetLinkBtn = document.getElementById("extendSheetLinkBtn");
   const extendPaneNotice = document.getElementById("extendPaneNotice");
   const extendWorkChips = document.getElementById("extendWorkChips");
   const extendWorkTitle = document.getElementById("extendWorkTitle");
@@ -8667,6 +8807,10 @@ ${sheetHtml}
     extendPaneItems.forEach(item => {
       item.hidden = workKind !== "extend" && item.dataset.extendPane !== "form";
     });
+    // ตรงข้ามกับสามแท็บบนที่เป็นของขอขยายเขตฯ เท่านั้น -- ลิงก์ Google Sheet นี้
+    // เป็นของขอใช้ไฟฟ้าเท่านั้น ไม่ได้อยู่ใน extendPaneItems เพราะไม่ใช่แท็บจริง
+    // (ดูหมายเหตุใน index.html)
+    extendSheetLinkBtn.hidden = workKind !== "power";
   }
 
   /**

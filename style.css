@@ -379,6 +379,13 @@ button:active {
   border-radius: 10px;
   font-size: 14.5px;
   font-family: inherit;
+  /* ไม่ตั้งไว้แต่เดิมเลยตกไปใช้ line-height เริ่มต้นของเบราว์เซอร์ (~1.15) ซึ่ง
+     แคบเกินไปสำหรับสระบน-ล่างของภาษาไทย (อุ/อู/สระบน/วรรณยุกต์) -- กล่อง input
+     สูงพอดีเนื้อบรรทัดแคบ ๆ นั้น ส่วนที่ยื่นเกินขึ้นบน-ลงล่างของตัวอักษรจึงโดน
+     ตัดขอบกล่องไปเงียบ ๆ (เห็นชัดกับ "นายณัฐวุฒิ" ที่สระอุหายไปครึ่งหนึ่ง)
+     1.5 ให้พื้นที่พอสำหรับสระซ้อนสองชั้น ตรงกับ line-height ของข้อความเนื้อหา
+     ที่ใช้อยู่แล้วในไฟล์นี้ */
+  line-height: 1.5;
   color: var(--ink);
   background: var(--white);
   outline: none;
@@ -1274,11 +1281,16 @@ button:active {
 
 .requests-search {
   margin-top: 16px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
 }
 
 .requests-search input {
   width: 100%;
   max-width: 360px;
+  flex: 1;
   padding: 10px 14px;
   border: 1px solid var(--border);
   border-radius: 10px;
@@ -1293,6 +1305,41 @@ button:active {
 .requests-search input:focus {
   border-color: var(--volt-300);
   box-shadow: 0 0 0 3px var(--volt-100);
+}
+
+/* สลับทิศทางเรียง (วันที่รับคำร้อง แล้วเลขที่คำร้อง) -- ปุ่มเดียวสลับสองสถานะ
+   แทนที่จะเป็นคู่ปุ่มแบบ .requests-mode-btn เพราะมีแค่สองทิศทางให้เลือก
+   ไม่ใช่สามโหมดขึ้นไปแบบ รอส่ง/ประวัติการส่ง */
+.requests-sort-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--white);
+  color: var(--ink);
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease;
+  flex-shrink: 0;
+}
+
+.requests-sort-btn:hover {
+  border-color: var(--volt-300);
+  color: var(--volt-700);
+}
+
+.requests-sort-icon {
+  font-family: var(--font-mono);
+  transition: transform 0.15s ease;
+}
+
+/* กด = กำลังเรียงเก่า-ใหม่ (aria-pressed="true") -- ลูกศรพลิกหัวแทนการวาดไอคอนสองชุด */
+.requests-sort-btn[aria-pressed="true"] .requests-sort-icon {
+  transform: rotate(180deg);
 }
 
 .requests-count {
