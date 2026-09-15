@@ -3443,6 +3443,11 @@
   // เป็นค่ากลางของทั้งแอป ไม่รีเซ็ตตอนสลับแท็บ (ต่างจาก currentSearchQuery)
   // เพราะเป็นความชอบเรื่องการแสดงผล ไม่ใช่ข้อมูลเฉพาะแท็บใดแท็บหนึ่ง
   let requestsSortAscending = false;
+  // ยังไม่เคยกดปุ่มเรียงเลย -- ค่าเริ่มต้นก่อนกดคือเรียงตามลำดับที่เพิ่งบันทึก
+  // เข้าระบบจริง (createdAt) ใหม่สุดอยู่บนสุดเสมอ เพราะเลขที่คำร้องที่เจ้าหน้าที่
+  // พิมพ์เองไม่จำเป็นต้องเรียงตามลำดับที่บันทึกจริง (ดู sortRequestsForDisplay)
+  // กดปุ่มครั้งแรกแล้วจึงเปลี่ยนไปเรียงตามวันที่รับคำร้อง+เลขที่คำร้องตามที่ปุ่มบอก
+  let requestsSortTouched = false;
 
   // Which half of the คุมคำร้องส่งแผนกมิเตอร์ tab is showing: "pending" (the
   // requests still waiting to go out) or "history" (books already printed).
@@ -4162,6 +4167,12 @@
   }
 
   function sortRequestsForDisplay(records) {
+    // ยังไม่เคยกดปุ่มเรียง -- เรียงตามลำดับบันทึกเข้าระบบจริง ใหม่สุดขึ้นบนสุดเสมอ
+    // ไม่ใช้วันที่รับคำร้อง/เลขที่คำร้อง เพราะสองค่านั้นพิมพ์เองและอาจไม่ตรงกับ
+    // ลำดับที่บันทึกจริง (เช่นเลขที่คำร้องที่เพิ่งพิมพ์อาจเรียงตัวอักษรมาก่อนใบเก่า)
+    if (!requestsSortTouched) {
+      return records.slice().sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+    }
     const sorted = records.slice().sort(compareRequestsByReceivedThenNumber);
     if (!requestsSortAscending) sorted.reverse();
     return sorted;
@@ -5086,12 +5097,14 @@
 
   requestsSortBtn.addEventListener("click", () => {
     requestsSortAscending = !requestsSortAscending;
+    requestsSortTouched = true;
     updateSortButtons();
     renderRequestsList();
   });
 
   extendWorkSortBtn.addEventListener("click", () => {
     requestsSortAscending = !requestsSortAscending;
+    requestsSortTouched = true;
     updateSortButtons();
     renderExtendWork();
   });
