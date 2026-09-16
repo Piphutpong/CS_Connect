@@ -1381,20 +1381,42 @@
    * request objects, so a reprint renders exactly what was signed for even
    * if the underlying requests have been edited since.
    */
+  // จำนวนแถวสูงสุดต่อแผ่น A4 หนึ่งแผ่น -- ประมาณแบบเผื่อเหลือเผื่อขาด (ฟอนต์ 12pt
+  // + หัวตาราง + บล็อกลงชื่อ 2 ช่อง + เลขแผ่น ต้องพอดีใน ~26.7cm ที่เหลือจาก
+  // margin บน-ล่างของ @page) ตั้งใจให้น้อยกว่าที่คำนวณได้จริงไว้ก่อน เพราะข้อความ
+  // บางช่อง (ชื่อลูกค้า/เรื่อง) อาจตัดขึ้นบรรทัดใหม่ได้ ถ้าพิมพ์จริงแล้วยังเหลือที่
+  // ว่างเยอะปรับตัวเลขนี้ขึ้นได้
+  const DISPATCH_ROWS_PER_PAGE = 16;
+
   function writeDispatchDocument(printWindow, { title, columns, rows, printedAt, sender, senderOptions, receiver, editable, actionLabel, actionNote }) {
     const editAttr = editable ? ' contenteditable="true"' : "";
-
-    const bodyRows = rows.map((row, i) => `
-      <tr>
-        <td class="col-index">${i + 1}</td>
-        ${columns.map(col => `<td${col.className ? ` class="${col.className}"` : ""}>${escapeForPrint(col.cell(row))}</td>`).join("")}
-        <td${editAttr}>${escapeForPrint(row.note || "")}</td>
-      </tr>
-    `).join("");
 
     const signedDate = escapeForPrint(
       new Date(printedAt).toLocaleDateString("th-TH", { day: "numeric", month: "short", year: "numeric" })
     );
+
+    function buildTable(chunk, startIndex) {
+      const bodyRows = chunk.map((row, i) => `
+        <tr>
+          <td class="col-index">${startIndex + i + 1}</td>
+          ${columns.map(col => `<td${col.className ? ` class="${col.className}"` : ""}>${escapeForPrint(col.cell(row))}</td>`).join("")}
+          <td${editAttr}>${escapeForPrint(row.note || "")}</td>
+        </tr>
+      `).join("");
+
+      return `
+        <table>
+          <thead>
+            <tr>
+              <th class="col-index">ลำดับที่</th>
+              ${columns.map(col => `<th${col.className ? ` class="${col.className}"` : ""}>${escapeForPrint(col.label)}</th>`).join("")}
+              <th>หมายเหตุ</th>
+            </tr>
+          </thead>
+          <tbody>${bodyRows}</tbody>
+        </table>
+      `;
+    }
 
     /**
      * `pickerOptions` มีเฉพาะฝั่งผู้ส่ง (ไม่ใช่ผู้รับ) -- ผู้ส่งเป็นเจ้าหน้าที่
@@ -1406,9 +1428,17 @@
      * แล้วเหมือนเดิมทุกประการ (ดู listener ที่ผูกจากฝั่ง opener หลัง document.write
      * เพราะ CSP ของหน้าต่างนี้บล็อก inline script) ช่องยังแก้มือทับได้ต่อ เผื่อ
      * ตำแหน่งในระบบไม่ตรงกับที่ต้องเซ็นจริง ๆ
+     *
+     * `roleKey`/`isMaster`: เอกสารหลายแผ่นต้องมีลายเซ็นครบทุกแผ่น (เซ็นสดด้วย
+     * ปากกาบนกระดาษแต่ละแผ่นจริง ๆ) จึงวาดบล็อกนี้ซ้ำทุกหน้า แต่ให้แก้ไขได้
+     * (contenteditable + ดรอปดาวน์) เฉพาะแผ่นแรก (isMaster) เท่านั้น -- แผ่นอื่น
+     * เป็น "สำเนา" อ่านอย่างเดียวที่ wireSignatureMirroring() คอยคัดลอกค่าจาก
+     * แผ่นแรกมาเติมให้ตรงกันเสมอ ไม่งั้นแก้ชื่อในแผ่นแรกแล้วแผ่นหลังจะยังค้างค่าเดิม
+     * data-role ใช้แยกช่อง (ชื่อ/ตำแหน่ง ของผู้ส่ง/ผู้รับ) สำหรับสคริปต์นั้น
      */
-    function signatureBlock(role, person, pickerOptions) {
-      const picker = (editable && pickerOptions && pickerOptions.length)
+    function signatureBlock(role, roleKey, person, pickerOptions, isMaster) {
+      const fieldEditAttr = (editable && isMaster) ? ' contenteditable="true"' : "";
+      const picker = (isMaster && editable && pickerOptions && pickerOptions.length)
         ? `
           <select class="sig-picker">
             <option value="">-- เลือก${role} --</option>
@@ -1421,11 +1451,35 @@
         <div class="sig-block">
           <p class="sig-line">ลงชื่อ ....................................... ${role}</p>
           ${picker}
-          <p class="sig-name">(<span${editAttr} class="sig-fill js-name">${escapeForPrint(person.name || "")}</span>)</p>
-          <p class="sig-position"><span${editAttr} class="sig-fill js-position">${escapeForPrint(person.position || "")}</span></p>
+          <p class="sig-name">(<span${fieldEditAttr} class="sig-fill js-name" data-role="${roleKey}-name">${escapeForPrint(person.name || "")}</span>)</p>
+          <p class="sig-position"><span${fieldEditAttr} class="sig-fill js-position" data-role="${roleKey}-position">${escapeForPrint(person.position || "")}</span></p>
           <p class="sig-date">${signedDate}</p>
         </div>
       `;
+    }
+
+    const pageCount = Math.max(1, Math.ceil(rows.length / DISPATCH_ROWS_PER_PAGE));
+    const pages = [];
+    for (let p = 0; p < pageCount; p++) {
+      const start = p * DISPATCH_ROWS_PER_PAGE;
+      const chunk = rows.slice(start, start + DISPATCH_ROWS_PER_PAGE);
+      const isFirst = p === 0;
+      pages.push(`
+        <section class="print-page">
+          ${isFirst ? `
+            <h1>${escapeForPrint(title)}</h1>
+            <p class="printed-at">วันที่และเวลาพิมพ์: ${escapeForPrint(formatThaiDateTime(printedAt))}</p>
+          ` : ""}
+          ${buildTable(chunk, start)}
+          <div class="print-page-footer">
+            <div class="signatures">
+              ${signatureBlock("ผู้ส่ง", "sender", sender, senderOptions, isFirst)}
+              ${signatureBlock("ผู้รับ", "receiver", receiver, null, isFirst)}
+            </div>
+            ${pageCount > 1 ? `<p class="page-number">แผ่นที่ ${p + 1}/${pageCount}</p>` : ""}
+          </div>
+        </section>
+      `);
     }
 
     printWindow.document.write(`
@@ -1441,10 +1495,23 @@
             h1 { font-size: 20px; text-align: center; margin: 0 0 4px; }
             .printed-at { text-align: center; color: #6b5c82; font-size: 13px; margin: 0 0 20px; }
             table { width: 100%; border-collapse: collapse; margin-bottom: 32px; }
-            th, td { border: 1px solid #cdb9ea; padding: 8px 10px; font-size: 14px; text-align: left; vertical-align: top; }
+            /* ตัวหนังสือในตารางใช้ TH Sarabun New (ฟอนต์เอกสารราชการไทย) ขนาด
+               12pt โดยเฉพาะ เล็กกว่าฟอนต์ที่เหลือของเอกสาร (Sarabun ทั่วไป) ตาม
+               ที่ขอ -- ถ้าเครื่องที่พิมพ์ไม่มีฟอนต์นี้ติดตั้งไว้ จะ fallback ไปที่
+               Sarabun ที่โหลดจาก Google Fonts อยู่แล้วโดยอัตโนมัติ */
+            th, td { border: 1px solid #cdb9ea; padding: 8px 10px; font-family: "TH Sarabun New", Sarabun, sans-serif; font-size: 12pt; text-align: left; vertical-align: top; }
             th { background: #ece0f8; }
             .col-index { width: 60px; text-align: center; }
             .col-number { width: 120px; }
+            /* เอกสารยาวเกินหนึ่งแผ่นถูกแบ่งเป็นชิ้นตายตัวตอนสร้าง HTML เอง (ดู
+               DISPATCH_ROWS_PER_PAGE) ไม่ได้ปล่อยให้เบราว์เซอร์ตัดหน้าเอง -- แต่ละ
+               .print-page คือหนึ่งแผ่นจริง จึงบังคับขึ้นแผ่นใหม่ทุกก้อนยกเว้นก้อน
+               สุดท้าย ป้องกันไม่ให้ตารางแผ่นถัดไปมาต่อท้ายบนแผ่นเดียวกัน */
+            .print-page { page-break-after: always; break-after: page; }
+            .print-page:last-of-type { page-break-after: auto; break-after: auto; }
+            /* บล็อกลงชื่อ+วันที่+เลขแผ่นต้องอยู่แผ่นเดียวกันเสมอ ห้ามถูกตัดแยก
+               ระหว่างชื่อ/ตำแหน่ง/วันที่คนละแผ่น */
+            .print-page-footer { page-break-inside: avoid; break-inside: avoid; }
             [contenteditable="true"] { outline: 1px dashed #a877d6; outline-offset: 2px; min-height: 1.4em; }
             .signatures { display: flex; justify-content: space-between; gap: 40px; margin-top: 48px; }
             /* ระยะบรรทัดแบบ Word single (~1.15) และตัด margin ปริยายของ <p> ทิ้ง:
@@ -1488,6 +1555,10 @@
               border: 1px solid #cdb9ea;
               background: #fff;
             }
+            /* ขึ้นเฉพาะตอนเอกสารมีมากกว่า 1 แผ่น (เว้นว่างไว้เมื่อพอดีแผ่นเดียว
+               ดู writeDispatchDocument) บอกทั้งแผ่นปัจจุบันและจำนวนแผ่นทั้งหมด
+               เช่น "แผ่นที่ 2/3" จะได้รู้ว่าเอกสารชุดนี้มีกี่แผ่น */
+            .page-number { text-align: right; color: #6b5c82; font-size: 12px; margin: 10px 0 0; }
             .actions { text-align: center; margin-top: 40px; }
             .actions button {
               font: inherit; font-size: 15px; font-weight: 600; padding: 12px 28px;
@@ -1505,22 +1576,7 @@
           </style>
         </head>
         <body>
-          <h1>${escapeForPrint(title)}</h1>
-          <p class="printed-at">วันที่และเวลาพิมพ์: ${escapeForPrint(formatThaiDateTime(printedAt))}</p>
-          <table>
-            <thead>
-              <tr>
-                <th class="col-index">ลำดับที่</th>
-                ${columns.map(col => `<th${col.className ? ` class="${col.className}"` : ""}>${escapeForPrint(col.label)}</th>`).join("")}
-                <th>หมายเหตุ</th>
-              </tr>
-            </thead>
-            <tbody>${bodyRows}</tbody>
-          </table>
-          <div class="signatures">
-            ${signatureBlock("ผู้ส่ง", sender, senderOptions)}
-            ${signatureBlock("ผู้รับ", receiver)}
-          </div>
+          ${pages.join("")}
           <div class="actions">
             <button type="button" id="confirmBtn">${escapeForPrint(actionLabel)}</button>
             <p>${escapeForPrint(actionNote)}</p>
@@ -1535,6 +1591,9 @@
   function readDispatchDocument(printWindow) {
     const doc = printWindow.document;
     const text = (el) => (el ? el.textContent.trim() : "");
+    // เอกสารหลายแผ่นมี .sig-block ซ้ำทุกแผ่น (ดู writeDispatchDocument) แต่ตัว
+    // แรกในลำดับเอกสารเสมอคือของแผ่นแรก (แผ่นเดียวที่แก้ไขได้จริง) การ destructure
+    // สองตัวแรกจึงยังได้ค่าที่ถูกต้องเหมือนตอนมีแผ่นเดียว ไม่ต้องเปลี่ยนอะไร
     const [senderBlock, receiverBlock] = doc.querySelectorAll(".sig-block");
     // ช่องที่ยังไม่ได้กรอกเป็น element ว่างจริง ๆ -- จุดไข่ปลาที่เห็นบนจอมาจาก
     // .sig-fill:empty::before ซึ่ง textContent ไม่นับ จึงไม่ต้องมากรองข้อความ
@@ -1544,6 +1603,9 @@
       position: text(block && block.querySelector(".js-position"))
     });
 
+    // เอกสารหลายแผ่นมีหลาย <tbody> (หนึ่งอันต่อแผ่น) แต่ querySelectorAll คืนค่า
+    // ตามลำดับเอกสารเสมอ -- แถวของแผ่นแรกมาก่อนแผ่นสองเสมอ ผลลัพธ์จึงเรียงตรงกับ
+    // ลำดับเดิมใน rows ทุกประการ ไม่ต้องรวม/เรียงเองเพิ่ม
     const notes = Array.from(doc.querySelectorAll("tbody tr")).map(tr => {
       const cells = tr.querySelectorAll("td");
       return text(cells[cells.length - 1]);
@@ -1598,6 +1660,31 @@
   }
 
   /**
+   * เอกสารหลายแผ่นมีบล็อกลงชื่อซ้ำทุกแผ่น (ต้องเซ็นสดทุกแผ่นจริง) แต่แก้ไขได้
+   * เฉพาะแผ่นแรก -- ฟังก์ชันนี้คอยคัดลอกค่าจากช่องแก้ไขได้ของแผ่นแรกไปเติมช่อง
+   * "สำเนา" อ่านอย่างเดียวของแผ่นถัดไปให้ตรงกันเสมอ ทั้งตอนพิมพ์ (input บน
+   * contenteditable) และตอนเลือกจากดรอปดาวน์ผู้ส่ง (change ที่ wireSenderPicker
+   * เขียนทับ .js-name/.js-position ตรง ๆ โดยไม่ยิง input) ต้องเรียกหลัง
+   * wireSenderPicker เสมอ เพราะฟังทั้งสอง listener บน .sig-picker ตัวเดียวกัน
+   * ตามลำดับที่ผูกไว้ -- อันนี้ต้องอ่านค่าที่ wireSenderPicker เขียนไปแล้ว
+   */
+  function wireSignatureMirroring(printWindow) {
+    const doc = printWindow.document;
+    ["sender-name", "sender-position", "receiver-name", "receiver-position"].forEach(role => {
+      const fields = Array.from(doc.querySelectorAll(`[data-role="${role}"]`));
+      const master = fields[0];
+      const mirrors = fields.slice(1);
+      if (!master || !mirrors.length) return;
+      const sync = () => mirrors.forEach(el => { el.textContent = master.textContent; });
+      master.addEventListener("input", sync);
+      if (role === "sender-name" || role === "sender-position") {
+        const picker = doc.querySelector(".sig-picker");
+        if (picker) picker.addEventListener("change", sync);
+      }
+    });
+  }
+
+  /**
    * Opens a dispatch sheet for the checked records in a new tab -- editable in
    * place (contenteditable, not a separate form) so staff can fix a note or
    * fill in a name before it goes to a physical printer. Confirming prints
@@ -1642,6 +1729,7 @@
     });
 
     wireSenderPicker(printWindow, senderOptions);
+    wireSignatureMirroring(printWindow);
 
     const confirmBtn = printWindow.document.getElementById("confirmBtn");
     const confirmNote = printWindow.document.querySelector(".actions p");
@@ -1750,6 +1838,7 @@
     });
 
     wireSenderPicker(printWindow, senderOptions);
+    wireSignatureMirroring(printWindow);
 
     const confirmBtn = printWindow.document.getElementById("confirmBtn");
     const confirmNote = printWindow.document.querySelector(".actions p");
@@ -1816,6 +1905,7 @@
     });
 
     wireSenderPicker(printWindow, senderOptions);
+    wireSignatureMirroring(printWindow);
 
     const confirmBtn = printWindow.document.getElementById("confirmBtn");
     const confirmNote = printWindow.document.querySelector(".actions p");
