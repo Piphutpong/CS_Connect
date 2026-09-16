@@ -1710,7 +1710,9 @@
       trackingNumber: r.trackingNumber || "",
       customerName: r.customerName || r.requesterName || "",
       purpose: r.purpose || "",
-      note: r.note || ""
+      // หมายเหตุในสมุดคุมเป็นช่องให้พิมพ์เพิ่มตอนส่งจริง ไม่ใช่หมายเหตุที่บันทึก
+      // ไว้ในคำร้อง จึงเริ่มว่างเสมอ ไม่ดึงค่า r.note มาเติมล่วงหน้า
+      note: ""
     }));
 
     const { sender, senderOptions } = await resolveSenderInfo();
@@ -1819,7 +1821,9 @@
       requestId: r.id,
       subject: r.subject || "",
       customerName: r.customerName || "",
-      note: r.note || ""
+      // หมายเหตุในสมุดคุมเป็นช่องให้พิมพ์เพิ่มตอนส่งจริง ไม่ใช่หมายเหตุที่บันทึก
+      // ไว้ในคำร้อง จึงเริ่มว่างเสมอ ไม่ดึงค่า r.note มาเติมล่วงหน้า
+      note: ""
     }));
 
     const { sender, senderOptions } = await resolveSenderInfo();
@@ -1886,7 +1890,9 @@
       trackingNumber: r.trackingNumber || "",
       customerName: r.customerName || "",
       ca: r.ca || "",
-      note: r.note || ""
+      // หมายเหตุในสมุดคุมเป็นช่องให้พิมพ์เพิ่มตอนส่งจริง ไม่ใช่หมายเหตุที่บันทึก
+      // ไว้ในคำร้อง จึงเริ่มว่างเสมอ ไม่ดึงค่า r.note มาเติมล่วงหน้า
+      note: ""
     }));
 
     const { sender, senderOptions } = await resolveSenderInfo();
