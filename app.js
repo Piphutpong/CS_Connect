@@ -4346,6 +4346,19 @@
     return sorted;
   }
 
+  /**
+   * ต่อท้ายจำนวนที่เลือกไว้ลงในปุ่มพิมพ์สมุดคุม (เช่น "พิมพ์สมุดคุมส่งแผนกมิเตอร์
+   * (3)") ใช้ร่วมกันทั้ง meter/general/revenue -- จำข้อความดั้งเดิมของปุ่มไว้ใน
+   * data-base-label ครั้งแรกที่เรียก เพราะ .textContent จะถูกเขียนทับด้วยเลขนี้
+   * เอง ให้เห็นว่าเลือกสะสมไว้กี่ใบแล้วแม้จะค้นหาคำอื่นจนใบที่เลือกไว้ไม่อยู่ใน
+   * รายการที่เห็นบนจอตอนนี้ก็ตาม (เหมือนตะกร้าสินค้าเว็บขายของ -- ค้นหาต่อได้
+   * เรื่อย ๆ โดยของที่เลือกไว้ก่อนหน้าไม่หาย)
+   */
+  function updateSelectionButtonLabel(btn, count) {
+    if (btn.dataset.baseLabel === undefined) btn.dataset.baseLabel = btn.textContent;
+    btn.textContent = count > 0 ? `${btn.dataset.baseLabel} (${count})` : btn.dataset.baseLabel;
+  }
+
   function renderRequestsList() {
     requestsFormMode.hidden = true;
     requestsListMode.hidden = false;
@@ -4356,10 +4369,12 @@
     updateTabBadges();
 
     const derivedFilter = DERIVED_TAB_FILTERS[currentRequestFilter];
+    // ทั้งแท็บ ไม่กรองด้วยคำค้น -- ใช้ตัดสินว่า id ที่เลือกไว้ (ตะกร้าเช็คบ็อก)
+    // ยังอยู่ในแท็บนี้ไหม แยกจาก filtered ด้านล่างซึ่งกรองด้วยคำค้นด้วย เพื่อไม่ให้
+    // ค้นหาคำอื่นแล้วเลือกที่หน้าจอไม่เห็นชั่วคราวถูกตัดออกจากตะกร้าไปเงียบ ๆ
+    const eligibleForTab = getRequests().filter(derivedFilter || (r => r.type === currentRequestFilter));
     const filtered = sortRequestsForDisplay(
-      getRequests()
-        .filter(derivedFilter || (r => r.type === currentRequestFilter))
-        .filter(r => matchesSearch(r, currentSearchQuery))
+      eligibleForTab.filter(r => matchesSearch(r, currentSearchQuery))
     );
 
     requestsListTitle.textContent = REQUEST_TYPES[currentRequestFilter];
@@ -4381,11 +4396,12 @@
     if (isMeterTab) {
       // A record can only leave this tab by having its jobStatus changed
       // elsewhere (another tab, another staff member) -- drop any selected
-      // id that's no longer actually on this list rather than letting a
-      // stale selection silently include something no longer eligible.
-      const visibleIds = new Set(filtered.map(r => r.id));
-      meterSelection.forEach(id => { if (!visibleIds.has(id)) meterSelection.delete(id); });
+      // id that's no longer actually eligible for this tab (regardless of the
+      // search box), like a shopping cart that keeps items typed out of view.
+      const eligibleIds = new Set(eligibleForTab.map(r => r.id));
+      meterSelection.forEach(id => { if (!eligibleIds.has(id)) meterSelection.delete(id); });
       meterPrintBtn.disabled = meterSelection.size === 0;
+      updateSelectionButtonLabel(meterPrintBtn, meterSelection.size);
     }
 
     // เหมือน isMeterTab ข้างบนทุกประการตอนนี้ -- "คุมคำร้องส่งแผนกสนับสนุน" เป็น
@@ -4404,11 +4420,12 @@
     if (isGeneralTab) {
       // A record can only leave this tab by having its jobStatus changed
       // elsewhere (another tab, another staff member) -- drop any selected
-      // id that's no longer actually on this list rather than letting a
-      // stale selection silently include something no longer eligible.
-      const visibleIds = new Set(filtered.map(r => r.id));
-      generalSelection.forEach(id => { if (!visibleIds.has(id)) generalSelection.delete(id); });
+      // id that's no longer actually eligible for this tab (regardless of the
+      // search box), like a shopping cart that keeps items typed out of view.
+      const eligibleIds = new Set(eligibleForTab.map(r => r.id));
+      generalSelection.forEach(id => { if (!eligibleIds.has(id)) generalSelection.delete(id); });
       generalPrintBtn.disabled = generalSelection.size === 0;
+      updateSelectionButtonLabel(generalPrintBtn, generalSelection.size);
     }
 
     // เหมือน isGeneralTab ข้างบนทุกประการ แต่ของแท็บคุมคำร้องส่ง ผบร.
@@ -4422,9 +4439,10 @@
 
     revenuePrintBtn.hidden = !isRevenueTab;
     if (isRevenueTab) {
-      const visibleIds = new Set(filtered.map(r => r.id));
-      revenueSelection.forEach(id => { if (!visibleIds.has(id)) revenueSelection.delete(id); });
+      const eligibleIds = new Set(eligibleForTab.map(r => r.id));
+      revenueSelection.forEach(id => { if (!eligibleIds.has(id)) revenueSelection.delete(id); });
       revenuePrintBtn.disabled = revenueSelection.size === 0;
+      updateSelectionButtonLabel(revenuePrintBtn, revenueSelection.size);
     }
 
     requestsList.innerHTML = "";
@@ -4563,6 +4581,7 @@
           if (checkbox.checked) meterSelection.add(r.id);
           else meterSelection.delete(r.id);
           meterPrintBtn.disabled = meterSelection.size === 0;
+          updateSelectionButtonLabel(meterPrintBtn, meterSelection.size);
         });
         selectWrap.appendChild(checkbox);
         card.appendChild(selectWrap);
@@ -4586,6 +4605,7 @@
           if (checkbox.checked) generalSelection.add(r.id);
           else generalSelection.delete(r.id);
           generalPrintBtn.disabled = generalSelection.size === 0;
+          updateSelectionButtonLabel(generalPrintBtn, generalSelection.size);
         });
         selectWrap.appendChild(checkbox);
         card.appendChild(selectWrap);
@@ -4607,6 +4627,7 @@
           if (checkbox.checked) revenueSelection.add(r.id);
           else revenueSelection.delete(r.id);
           revenuePrintBtn.disabled = revenueSelection.size === 0;
+          updateSelectionButtonLabel(revenuePrintBtn, revenueSelection.size);
         });
         selectWrap.appendChild(checkbox);
         card.appendChild(selectWrap);
