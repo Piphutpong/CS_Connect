@@ -1076,6 +1076,46 @@
     views[name].hidden = false;
   }
 
+  /**
+   * ตำแหน่งหน้าจอปัจจุบันระดับบนสุด (การ์ดไหนบนหน้าแรก + แท็บไหนถ้าเป็นหน้า
+   * งานรับคำร้อง) เก็บใน sessionStorage เพื่อให้ "รีเฟรชแล้วอยู่หน้าเดิม" แทนที่
+   * จะกลับไปหน้าแรกเสมอ (init() ไม่มี routing จาก URL อยู่แล้วตามที่ตั้งใจไว้แต่แรก
+   * -- ดู CLAUDE.md -- ค่านี้จึงเป็นแค่ "จำตำแหน่งไว้ในเบราว์เซอร์เดียวกัน" ไม่ใช่
+   * URL ที่แชร์ต่อได้)
+   *
+   * **ตั้งใจไม่ครอบคลุมถึงหน้าที่ลึกกว่านี้** เช่นฟอร์มคำร้องใบใดใบหนึ่งที่กำลัง
+   * เปิดแก้ไขอยู่ (requestsFormMode), รายละเอียดงานใบใดใบหนึ่งในโมดูลงาน
+   * (extendDetailMode) หรือหน้าประมาณการ (estimateView) -- ข้อมูลของใบนั้นอาจ
+   * เปลี่ยนไปแล้วตอนโหลดหน้าใหม่ หรือฟอร์มมีค่าที่พิมพ์ค้างไว้ยังไม่ได้บันทึก
+   * การเดาคืนสภาพเดิมแบบนั้นเสี่ยงโชว์ข้อมูลผิด/ไม่ครบมากกว่าจะช่วยอะไร รีเฟรช
+   * จากหน้าลึกระดับนั้นจึงตกกลับไปที่ "รายการ" ของโมดูลเดียวกัน ไม่ใช่หน้าแรก --
+   * ยังถือว่า "อยู่หน้าเดิม" ในความหมายที่ผู้ใช้พูดถึง เพียงแค่ไม่ลึกเท่าที่ค้างไว้
+   */
+  function saveNavState(state) {
+    try {
+      sessionStorage.setItem("csconnect_lastView", JSON.stringify(state));
+    } catch (err) {
+      // sessionStorage อาจถูกบล็อก (โหมดส่วนตัว/ตั้งค่าเบราว์เซอร์) -- แค่จำ
+      // ตำแหน่งไม่ได้ ไม่ใช่ความผิดพลาดที่ควรบล็อกการทำงานอื่น
+    }
+  }
+
+  function readNavState() {
+    try {
+      return JSON.parse(sessionStorage.getItem("csconnect_lastView") || "null");
+    } catch (err) {
+      return null;
+    }
+  }
+
+  function clearNavState() {
+    try {
+      sessionStorage.removeItem("csconnect_lastView");
+    } catch (err) {
+      // เหมือนกับ saveNavState -- ไม่มีอะไรให้ล้างก็ไม่เป็นไร
+    }
+  }
+
   function isValidEmail(email) {
     return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
   }
@@ -2431,6 +2471,34 @@
   }
 
   /**
+   * เรียกจาก init() เท่านั้น หลัง enterApp() (ไม่ใช่จากปุ่ม "กลับหน้าแรก" -- ปุ่ม
+   * นั้นต้องพากลับหน้าแรกจริง ๆ เสมอ ไม่ใช่เดาสภาพเดิม) คืนตำแหน่งที่จำไว้จาก
+   * saveNavState() ด้วยการจำลองคลิกการ์ด/แท็บเดิมซ้ำ แทนที่จะเขียนโค้ดเปิดหน้า
+   * เองอีกชุด -- ถ้าจำไว้ไม่มี (เพิ่งล็อกอินใหม่ในแท็บนี้ครั้งแรก) หรือการ์ด/แท็บ
+   * ที่จำไว้หาไม่เจอแล้ว ก็ปล่อยให้อยู่หน้าแรกตามที่ enterApp() ตั้งไว้แต่แรก
+   */
+  function restoreNavState() {
+    const nav = readNavState();
+    if (!nav || !nav.card) return;
+
+    // "account" ไม่ใช่การ์ดบนหน้าแรก (เปิดจากปุ่มบนแถบบนแทน) จึงเรียกตรง ๆ
+    // ไม่ใช้วิธีจำลองคลิกการ์ดแบบที่เหลือ
+    if (nav.card === "account") {
+      openAccountView(false);
+      return;
+    }
+
+    const card = document.querySelector(`.service-card[data-service="${nav.card}"]`);
+    if (!card) return;
+    card.click();
+
+    if (nav.card === "requests" && nav.filter) {
+      const tab = Array.from(requestsNavItems).find(item => item.dataset.filter === nav.filter);
+      if (tab) tab.click();
+    }
+  }
+
+  /**
    * ล้างทุกอย่างบนหน้าจอที่เป็นของผู้ใช้คนก่อน -- เรียกตอนออกจากระบบ ตอนเซสชัน
    * หมดอายุ และตอนเตะทุกอุปกรณ์ออก
    *
@@ -2462,6 +2530,11 @@
     document.getElementById("userGreeting2").textContent = "";
     document.getElementById("userGreeting3").textContent = "";
     document.getElementById("userGreeting4").textContent = "";
+
+    // ตำแหน่งหน้าจอที่จำไว้เป็นของบัญชีที่เพิ่งออกจากระบบไป -- ถ้าไม่ล้าง คนถัดไป
+    // ที่ล็อกอินบนเครื่องเดียวกัน (หรือบัญชีเดิมล็อกอินใหม่หลัง session หมดอายุ)
+    // จะถูกพาตรงไปหน้าที่คนก่อนหน้าเปิดค้างไว้แทนที่จะเริ่มที่หน้าแรกตามปกติ
+    clearNavState();
 
     clearWorkspaceScreens();
   }
@@ -2634,6 +2707,11 @@
     accountView.backRow.hidden = mustChange;
     // ปุ่มมุมซ้ายบนต้องหายไปพร้อมกัน ไม่งั้นด่านบังคับตั้งรหัสใหม่มีทางออก
     document.getElementById("accountBackBtn").hidden = mustChange;
+
+    // ด่านบังคับตั้งรหัสใหม่ไม่ใช่หน้าที่ผู้ใช้ "เลือกมา" เอง -- ไม่จำไว้ ไม่งั้น
+    // รีเฟรชหลังตั้งรหัสผ่านเสร็จ (ด่านหลุดไปแล้ว) จะพากลับมาที่หน้าบัญชีอีกที
+    // ทั้งที่ไม่มีเหตุผลอะไรให้ต้องอยู่ที่นั่นต่อ
+    if (!mustChange) saveNavState({ card: "account" });
 
     showView("account");
   }
@@ -3160,6 +3238,9 @@
   document.querySelectorAll(".service-card").forEach(card => {
     card.addEventListener("click", () => {
       const key = card.dataset.service;
+      // จำไว้เผื่อรีเฟรช -- restoreNavState() คืนกลับมาที่นี่ด้วยการจำลองคลิก
+      // การ์ดใบเดิมนี้เอง ไม่ได้เขียนโค้ดเปิดหน้าซ้ำอีกชุด
+      saveNavState({ card: key });
 
       if (key === "requests") {
         openRequestsView();
@@ -5072,9 +5153,12 @@
     }
   }
 
-  function openRequestsView() {
-    currentRequestFilter = "power";
-    setActiveNavItem("power");
+  // เนื้อในเดียวกับที่ openRequestsView() กับตัวจัดการคลิกแท็บด้านล่างเคยแยกเขียน
+  // ซ้ำกันสองที่ -- ดึงมารวมไว้ที่เดียวเพราะ restoreNavState() ต้องเรียกสลับแท็บ
+  // ตอนโหลดหน้าด้วย (ไม่ใช่แค่ตอนคลิกจริง) ใช้ฟังก์ชันเดียวกันจะได้ไม่มีจุดที่ลืมแก้
+  function switchRequestsTab(filter) {
+    currentRequestFilter = filter;
+    setActiveNavItem(currentRequestFilter);
     currentSearchQuery = "";
     requestsSearchInput.value = "";
     meterSelection.clear();
@@ -5084,22 +5168,19 @@
     revenueSelection.clear();
     setRevenueMode("pending");
     renderRequestsList();
+  }
+
+  function openRequestsView(filter) {
+    switchRequestsTab(filter || "power");
     showView("requests");
   }
 
   requestsNavItems.forEach(item => {
     item.addEventListener("click", () => {
-      currentRequestFilter = item.dataset.filter;
-      setActiveNavItem(currentRequestFilter);
-      currentSearchQuery = "";
-      requestsSearchInput.value = "";
-      meterSelection.clear();
-      setMeterMode("pending");
-      generalSelection.clear();
-      setGeneralMode("pending");
-      revenueSelection.clear();
-      setRevenueMode("pending");
-      renderRequestsList();
+      switchRequestsTab(item.dataset.filter);
+      // แท็บอยู่ใต้การ์ด "งานรับคำร้อง" เดียวกันเสมอ -- อัปเดตแค่ค่า filter ทับ
+      // ของเดิม ไม่ต้องเปลี่ยน card เพราะยังเป็นการ์ดเดิม
+      saveNavState({ card: "requests", filter: currentRequestFilter });
     });
   });
 
@@ -9862,6 +9943,7 @@ ${sheetHtml}
     bootOverlay.hidden = true;
     updateTabBadges();
     enterApp();
+    restoreNavState();
   }
 
   init();
