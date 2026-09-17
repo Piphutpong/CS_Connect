@@ -1496,10 +1496,10 @@
             .printed-at { text-align: center; color: #6b5c82; font-size: 13px; margin: 0 0 20px; }
             table { width: 100%; border-collapse: collapse; margin-bottom: 32px; }
             /* ตัวหนังสือในตารางใช้ TH Sarabun New (ฟอนต์เอกสารราชการไทย) ขนาด
-               12pt โดยเฉพาะ เล็กกว่าฟอนต์ที่เหลือของเอกสาร (Sarabun ทั่วไป) ตาม
+               10pt โดยเฉพาะ เล็กกว่าฟอนต์ที่เหลือของเอกสาร (Sarabun ทั่วไป) ตาม
                ที่ขอ -- ถ้าเครื่องที่พิมพ์ไม่มีฟอนต์นี้ติดตั้งไว้ จะ fallback ไปที่
                Sarabun ที่โหลดจาก Google Fonts อยู่แล้วโดยอัตโนมัติ */
-            th, td { border: 1px solid #cdb9ea; padding: 8px 10px; font-family: "TH Sarabun New", Sarabun, sans-serif; font-size: 12pt; text-align: left; vertical-align: top; }
+            th, td { border: 1px solid #cdb9ea; padding: 8px 10px; font-family: "TH Sarabun New", Sarabun, sans-serif; font-size: 10pt; text-align: left; vertical-align: top; }
             th { background: #ece0f8; }
             .col-index { width: 60px; text-align: center; }
             .col-number { width: 120px; }
@@ -2072,36 +2072,27 @@
   }
 
   /**
-   * เลข WBS ถัดไปของปี พ.ศ. ปัจจุบัน
+   * ค่าเริ่มต้นของช่อง WBS ตอนเปิดฟอร์ม -- รูปแบบ C-<ปี พ.ศ. 2 หลัก>-A-HADSR.0000
+   * เสมอ **ไม่ใช่เลขถัดไปที่เดาไว้ล่วงหน้าอีกต่อไป** (เดิมไล่หาเลขสูงสุดจากคำร้อง
+   * ที่โหลดมาแล้วบวกหนึ่งให้ เหมือน generateTrackingNumber แต่ตั้งใจเปลี่ยนตามที่
+   * เจ้าของระบบขอ: เลขเดาแบบนั้นหน้าตาเหมือนเลขจริงเกินไป มีเจ้าหน้าที่บันทึก
+   * สถานะงานโดยไม่ได้แก้ไข WBS ที่ระบบเดาให้ กลายเป็นว่าเลขที่ควรว่างสำหรับคน
+   * บันทึก WBS ตัวจริงถูกใบอื่นไปครองอยู่ก่อนโดยไม่มีใครตั้งใจ ทำให้ระบุ WBS ที่
+   * ถูกต้องไม่ได้อีก ลงท้ายด้วย .0000 เสมอจึงมองออกง่ายว่ายังไม่ได้กรอกจริง
+   * (เลข .0000 ที่กรอกจริงแทบไม่เกิดขึ้น เพราะ WBS จริงเริ่มนับที่ .0001)
    *
-   * รูปแบบ C-<ปี พ.ศ. 2 หลัก>-A-HADSR.<ลำดับ 4 หลัก> และ **รันแยกตามปี**:
-   * ขึ้นปีใหม่ ลำดับกลับไปเริ่มใหม่ เพราะไม่มีคำร้องไหนถือเลขขึ้นต้นปีใหม่มาก่อน
-   *
-   * ไล่หาเลขสูงสุดจากคำร้องที่โหลดมาแล้ว (แบบเดียวกับเลขที่คำร้องระบบ) ไม่ได้เก็บ
-   * ตัวนับไว้ที่ไหน จึงเป็นแค่ "ค่าที่เดาให้" ไม่ใช่การจอง -- เจ้าหน้าที่แก้ทับได้
-   * และถ้าสองคนกรอกพร้อมกันอาจได้เลขซ้ำ ซึ่งจะเห็นได้จากในชีต (ข้อจำกัดเดียวกับ
-   * เลขที่คำร้องระบบ ยอมรับได้ที่ขนาดสำนักงานนี้)
-   *
-   * ยังไม่เคยมี WBS ของปีนี้เลย -> .0000 ตามที่ตกลงไว้
+   * WBS ยังห้ามซ้ำกันทั้งสำนักงานเหมือนเดิม (save_requests ฝั่ง SQL) รวมถึงชน
+   * กับค่าเริ่มต้นนี้เองด้วย -- ถ้าคนแรกบันทึกทับโดยไม่แก้ไข คนที่สองที่ทำแบบ
+   * เดียวกันกับคำร้องใบอื่นจะถูกปฏิเสธและรู้ตัวทันทีว่าต้องกรอกเลขจริง แทนที่จะ
+   * ปล่อยผ่านไปเงียบ ๆ เหมือนตอนที่ค่าเริ่มต้นเป็นเลขเดาที่ไม่ซ้ำกันเอง
    */
   function wbsPrefix() {
     const beYear = new Date().getFullYear() + 543;
     return `C-${String(beYear % 100).padStart(2, "0")}-A-HADSR.`;
   }
 
-  function nextWbs() {
-    const prefix = wbsPrefix();
-
-    const numbers = getRequests()
-      .map(r => r.wbs)
-      .filter(w => typeof w === "string" && w.startsWith(prefix))
-      .map(w => parseInt(w.slice(prefix.length), 10))
-      .filter(n => Number.isInteger(n));
-
-    if (!numbers.length) return `${prefix}0000`;
-
-    const max = numbers.reduce((a, b) => Math.max(a, b), 0);
-    return `${prefix}${String(max + 1).padStart(4, "0")}`;
+  function defaultWbs() {
+    return `${wbsPrefix()}0000`;
   }
 
   function generateTrackingNumber(type) {
@@ -5305,8 +5296,8 @@
     extJobStatus.dispatchEvent(new Event("change"));
     // อ่านอย่างเดียว -- ตั้งค่าได้จากหน้าจ่ายงานเท่านั้น (ดู assignRequests_)
     document.getElementById("extAssignee").value = r.assignee || "";
-    // มีเลขแล้วใช้เลขเดิม ยังไม่มีก็เดาเลขถัดไปของปีนี้ให้ (แก้ทับได้)
-    extWbs.value = r.wbs || nextWbs();
+    // มีเลขแล้วใช้เลขเดิม ยังไม่มีก็ใส่ค่าเริ่มต้น .0000 ให้ (แก้ทับได้ ดู defaultWbs)
+    extWbs.value = r.wbs || defaultWbs();
     extApprovalNo.value = r.approvalNo || "";
     extApprovalDate.value = r.approvalDate || "";
     document.getElementById("extNote").value = r.note || "";
