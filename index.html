@@ -24,7 +24,7 @@
 <title>CS Connect</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=Sarabun:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=20260917b">
+<link rel="stylesheet" href="style.css?v=20260917c">
 </head>
 <body>
 
@@ -1411,7 +1411,7 @@
         <h2 id="estFormPaneTitle">ใบประมาณการ</h2>
       </div>
 
-      <div class="estimate-head">
+      <div class="estimate-head" id="estJobHead">
         <div class="field">
           <label for="estJobName">ชื่องานย่อย</label>
           <input type="text" id="estJobName" placeholder="เช่น ปักเสาช่วงที่ 1" autocomplete="off">
@@ -1428,15 +1428,36 @@
         </div>
       </div>
 
+      <!-- แก้ไขชุดเซ็ตพัสดุโดยตรง -- แสดงแทนแถวชื่องานย่อยด้านบน (#estJobHead ถูก
+           ซ่อนไว้ระหว่างนี้ ดู openKitEditor ใน app.js) ไม่ต้องอ้อมไปพักไว้ในงานย่อย
+           ของคำร้องจริงก่อนเหมือนเดิม ใช้คลาส est-kit-save เดียวกับฟอร์ม "บันทึกงาน
+           ย่อยนี้เป็นชุดเซ็ต" ด้านล่าง เพราะเป็นฟอร์มชื่อ+หมายเหตุแบบเดียวกัน -->
+      <div id="estKitEditHead" class="est-kit-save" hidden>
+        <div class="field">
+          <label for="estKitEditName">ชื่อชุดเซ็ต</label>
+          <input type="text" id="estKitEditName" placeholder="เช่น ติดตั้งหม้อแปลงสปอตโหลด 3-P, 50 kVA" autocomplete="off">
+        </div>
+        <div class="field">
+          <label for="estKitEditNote">หมายเหตุ (ถ้ามี)</label>
+          <input type="text" id="estKitEditNote" placeholder="คำอธิบายสั้น ๆ" autocomplete="off">
+        </div>
+        <div class="batch-toolbar">
+          <button type="button" id="estKitEditSaveBtn" class="btn btn-primary">บันทึกการแก้ไขชุดเซ็ต</button>
+          <button type="button" id="estKitEditCancelBtn" class="btn btn-ghost">ยกเลิก</button>
+        </div>
+      </div>
+
       <p id="estCatalogNote" class="field-hint"></p>
 
       <!-- ชุดเซ็ตพัสดุ -- งานแบบเดิม ๆ (เช่น ติดตั้งหม้อแปลงสปอตโหลด 3-P 50 kVA)
            ใช้พัสดุชุดเดิมสิบกว่ารายการทุกครั้ง เลือกทีละตัวสิบสี่รอบคือการพิมพ์ซ้ำ
            ของที่รู้อยู่แล้ว แผงนี้จึงอยู่ "เหนือ" แผงเลือกทีละตัว เพราะเป็นทางที่ควร
            ลองก่อน แล้วค่อยเก็บรายละเอียดที่เหลือทีละตัวด้านล่าง
-           สร้าง/ลบชุดเซ็ตเป็นสิทธิ์ของผู้ดูแลระบบ ปุ่มจึงซ่อนไว้กับคนอื่น (ของจริง
-           กันที่ฝั่งเซิร์ฟเวอร์ -- ดู saveEstimateKit_ / deleteEstimateKit_) -->
-      <div class="est-kits">
+           สร้าง/ลบ/แก้ไขชุดเซ็ตเป็นสิทธิ์ของผู้ดูแลระบบ ปุ่มจึงซ่อนไว้กับคนอื่น
+           (ของจริงกันที่ฝั่งเซิร์ฟเวอร์ -- ดู saveEstimateKit_ / deleteEstimateKit_)
+           ทั้งบล็อกนี้ถูกซ่อนระหว่างแก้ไขชุดเซ็ตโดยตรง (ดู openKitEditor) เพราะ
+           การเลือก/เพิ่มชุดอื่นระหว่างกำลังแก้ไขชุดนี้อยู่ไม่มีความหมาย -->
+      <div id="estKitsBlock" class="est-kits">
         <div class="est-kits-row">
           <div class="field est-kits-pick">
             <label for="estKitSelect">ชุดเซ็ตพัสดุ</label>
@@ -1445,12 +1466,12 @@
             </select>
           </div>
           <button type="button" id="estKitAddBtn" class="btn btn-primary">+ เพิ่มทั้งชุด</button>
+          <button type="button" id="estKitEditBtn" class="btn btn-ghost" hidden>แก้ไขชุดเซ็ตนี้โดยตรง</button>
           <button type="button" id="estKitSaveBtn" class="btn btn-ghost" hidden>บันทึกงานย่อยนี้เป็นชุดเซ็ต</button>
           <button type="button" id="estKitDeleteBtn" class="btn btn-danger-ghost" hidden>ลบชุดเซ็ต</button>
         </div>
 
         <p id="estKitHint" class="field-hint"></p>
-        <p id="estKitError" class="form-error" hidden></p>
 
         <div id="estKitSaveForm" class="est-kit-save" hidden>
           <div class="field">
@@ -1467,6 +1488,11 @@
           </div>
         </div>
       </div>
+
+      <!-- อยู่นอก #estKitsBlock โดยตั้งใจ -- ข้อความแจ้งเตือน/สำเร็จต้องยังเห็นได้
+           แม้ระหว่างแก้ไขชุดเซ็ตโดยตรงที่ซ่อนบล็อกด้านบนไปแล้ว (ใช้ร่วมกันทุกปุ่ม
+           ที่เกี่ยวกับชุดเซ็ต: เพิ่มทั้งชุด/สร้าง/ลบ/แก้ไขโดยตรง) -->
+      <p id="estKitError" class="form-error" hidden></p>
 
       <!-- แผงเลือกพัสดุ: เลือกกลุ่ม -> เลือกรายการ -> ป้อนจำนวน -> กดเพิ่ม
            รายการจะลงตารางด้านล่างก็ต่อเมื่อกดเพิ่มแล้วเท่านั้น -->
@@ -1593,6 +1619,6 @@
      **ต้องเปลี่ยนเลขนี้ทุกครั้งที่แก้ app.js / style.css / track.js / qr.js**
      ไม่งั้นผู้ใช้บางคนจะยังได้ไฟล์เก่าไปอีกพักใหญ่ -->
 <script src="vendor/supabase.js?v=2.116.0"></script>
-<script src="app.js?v=20260917b"></script>
+<script src="app.js?v=20260917c"></script>
 </body>
 </html>

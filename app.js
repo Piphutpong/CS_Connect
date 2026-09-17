@@ -7345,8 +7345,10 @@
     pickRm: document.getElementById("estPickRm"),
     pickRp: document.getElementById("estPickRp"),
     pickError: document.getElementById("estPickError"),
+    kitsBlock: document.getElementById("estKitsBlock"),
     kitSelect: document.getElementById("estKitSelect"),
     kitAddBtn: document.getElementById("estKitAddBtn"),
+    kitEditBtn: document.getElementById("estKitEditBtn"),
     kitSaveBtn: document.getElementById("estKitSaveBtn"),
     kitDeleteBtn: document.getElementById("estKitDeleteBtn"),
     kitHint: document.getElementById("estKitHint"),
@@ -7356,6 +7358,12 @@
     kitNote: document.getElementById("estKitNote"),
     kitSaveConfirmBtn: document.getElementById("estKitSaveConfirmBtn"),
     kitSaveCancelBtn: document.getElementById("estKitSaveCancelBtn"),
+    jobHead: document.getElementById("estJobHead"),
+    kitEditHead: document.getElementById("estKitEditHead"),
+    kitEditName: document.getElementById("estKitEditName"),
+    kitEditNote: document.getElementById("estKitEditNote"),
+    kitEditSaveBtn: document.getElementById("estKitEditSaveBtn"),
+    kitEditCancelBtn: document.getElementById("estKitEditCancelBtn"),
     jobName: document.getElementById("estJobName"),
     investment: document.getElementById("estInvestment"),
     catalogNote: document.getElementById("estCatalogNote"),
@@ -7377,8 +7385,17 @@
   let estimateCatalogFailed = false;
   let estimateKits = [];        // [{ id, name, note, items: [...] }]
   let estimateLists = null;     // { section: [], group: [], investment: [] }
+  // ชุดเซ็ตพัสดุที่กำลังแก้ไขตรง ๆ อยู่ (openKitEditor) -- null เมื่อไม่ได้อยู่ใน
+  // โหมดนี้ รูปร่างเดียวกับ "งานย่อย" ({ items: [...] }) โดยตั้งใจ เพื่อให้
+  // currentJob() คืนค่านี้แทนได้ และใช้ renderEstimateRows()/แผงเลือกพัสดุ/
+  // markEstimateDirty() ชุดเดียวกับตอนแก้ไขงานย่อยจริงได้ทั้งหมดโดยไม่ต้อง
+  // เขียนโค้ดซ้ำ (ดูเหตุผลเต็มที่ openKitEditor)
+  let editingKit = null;
 
   function markEstimateDirty() {
+    // กำลังแก้ไขชุดเซ็ตพัสดุอยู่ ไม่ใช่ใบประมาณการของคำร้องนี้ -- ป้าย "ยังไม่ได้
+    // บันทึก" บนแถบบนเป็นเรื่องของใบประมาณการเท่านั้น ไม่เกี่ยวกับชุดเซ็ต
+    if (editingKit) return;
     estimateDirty = true;
     estimateView.dirty.hidden = false;
     estimateView.success.hidden = true;
@@ -7420,8 +7437,80 @@
   }
 
   function currentJob() {
+    // กำลังแก้ไขชุดเซ็ตพัสดุโดยตรงอยู่ -- คืน editingKit แทน "งานย่อย" จริง
+    // (ดูเหตุผลเต็มที่ประกาศ editingKit และที่ openKitEditor)
+    if (editingKit) return editingKit;
     const dept = currentDept();
     return dept && dept.jobs[estimateJobIndex];
+  }
+
+  /**
+   * เปิดหน้าแก้ไข "ชุดเซ็ตพัสดุ" ที่เลือกไว้ตรง ๆ -- แทนที่วิธีเดิมที่ต้องอ้อมไป
+   * พักไว้ในงานย่อยของคำร้องจริงใบใดใบหนึ่งก่อน (เพิ่มทั้งชุด -> แก้จำนวน ->
+   * บันทึกงานย่อยนี้เป็นชุดเซ็ตทับของเดิม) ซึ่งระหว่างนั้นแก้ไขเนื้อหาใบประมาณการ
+   * ของคำร้องจริงไปชั่วคราวด้วย เสี่ยงลืมกดยกเลิก/บันทึกคำร้องผิดใบ
+   *
+   * ใช้ currentJob()/renderEstimateRows()/แผงเลือกพัสดุชุดเดียวกับตอนแก้ไขงานย่อย
+   * จริงทุกอย่างโดยไม่ต้องเขียนโค้ดซ้ำ เพราะ editingKit มีรูปร่าง { items: [...] }
+   * เหมือนงานย่อย และ currentJob() คืน editingKit แทนเมื่ออยู่ในโหมดนี้ (ดู
+   * markEstimateDirty ด้วย ที่กันไม่ให้การแก้ชุดเซ็ตไปติดป้าย "ยังไม่ได้บันทึก"
+   * ของใบประมาณการจริงบนแถบบน)
+   */
+  function openKitEditor(kit) {
+    editingKit = {
+      id: kit.id,
+      name: kit.name,
+      note: kit.note || "",
+      // clone แต่ละแถว ไม่ใช่แค่อ้างอิง array เดิม -- แก้ไขแล้วกด "ยกเลิก" ต้อง
+      // ไม่กระทบชุดเซ็ตที่ estimateKits ถืออยู่จนกว่าจะกดบันทึกจริง
+      items: (kit.items || []).map(item => ({ ...item }))
+    };
+
+    estimateView.kitEditName.value = editingKit.name;
+    estimateView.kitEditNote.value = editingKit.note;
+
+    estimateView.jobHead.hidden = true;
+    estimateView.kitsBlock.hidden = true;
+    estimateView.kitEditHead.hidden = false;
+
+    // ปุ่มพิมพ์/บันทึกประมาณการ กับป้าย "ยังไม่ได้บันทึก" เป็นของใบประมาณการ
+    // ของคำร้อง ไม่เกี่ยวกับการแก้ชุดเซ็ต ซ่อนไว้กันสับสนว่ากดแล้วจะบันทึกอะไร
+    document.getElementById("estimatePrintBtn").hidden = true;
+    document.getElementById("estimateSaveBtn").hidden = true;
+    estimateView.dirty.hidden = true;
+
+    estimateView.formPaneTitle.textContent = `แก้ไขชุดเซ็ตพัสดุ: ${editingKit.name}`;
+    renderEstimateCrumbs();
+
+    renderEstimateRows();
+    resetItemPicker();
+    hideError(estimateView.kitError);
+  }
+
+  /** ปิดโหมดแก้ไขชุดเซ็ต แล้วย้อนกลับไปวาดงานย่อยจริงที่เปิดค้างไว้ก่อนหน้า */
+  function closeKitEditor() {
+    editingKit = null;
+
+    estimateView.jobHead.hidden = false;
+    estimateView.kitsBlock.hidden = false;
+    estimateView.kitEditHead.hidden = true;
+
+    document.getElementById("estimatePrintBtn").hidden = false;
+    document.getElementById("estimateSaveBtn").hidden = false;
+    // ป้าย "ยังไม่ได้บันทึก" ของใบประมาณการจริงอาจค้างอยู่ตั้งแต่ก่อนเข้าโหมดนี้
+    // (ยังไม่ได้กันไว้ว่าห้ามเข้าโหมดนี้ตอนใบประมาณการมีของที่ยังไม่ได้บันทึก ดู
+    // estKitEditBtn) จึงคืนตามค่า estimateDirty จริง ไม่ใช่ซ่อนทิ้งเฉย ๆ
+    estimateView.dirty.hidden = !estimateDirty;
+
+    renderEstimateForm();
+    renderEstimateCrumbs();
+  }
+
+  /** ถามก่อนทิ้งการแก้ไขที่ยังไม่ได้บันทึก -- คืน true ถ้าปิดโหมดจริง */
+  function cancelKitEdit() {
+    if (!window.confirm("ยกเลิกการแก้ไขชุดเซ็ตนี้โดยไม่บันทึก?")) return false;
+    closeKitEditor();
+    return true;
   }
 
   /**
@@ -7521,6 +7610,16 @@
   }
 
   function showEstimateLevel(level) {
+    // กำลังแก้ไขชุดเซ็ตพัสดุอยู่ -- ทางออกจากโหมดนี้คือ "ยกเลิก"/"บันทึก" เท่านั้น
+    // ไม่ใช่การเปลี่ยนชั้นตามปกติ (ซึ่งจะทิ้ง editingKit ค้างไว้แบบผิด ๆ เพราะ
+    // currentJob() ยังจะคืนมันต่อไปทั้งที่หน้าจอเปลี่ยนไปแล้ว) กดครั้งแรกจึงแค่
+    // ปิดโหมดแก้ไข (ถ้ายืนยัน) แล้วค้างอยู่ที่งานย่อยจริงเดิม กดอีกครั้งจึงจะ
+    // เปลี่ยนชั้นจริง ๆ -- เหมือนปิด overlay ก่อนแล้วค่อยเดินต่อ
+    if (editingKit) {
+      cancelKitEdit();
+      return;
+    }
+
     if (level < 2) estimateJobIndex = -1;
     if (level < 1) estimateDeptIndex = -1;
 
@@ -8035,6 +8134,17 @@
     estimateView.success.hidden = true;
     hideError(estimateView.error);
 
+    // กันไว้เผื่อเข้าหน้านี้มาระหว่างที่ editingKit ยังค้างอยู่จากรอบก่อน (เช่น
+    // เซสชันหมดอายุกลางคันตอนกำลังแก้ไขชุดเซ็ต ซึ่งข้ามปุ่มย้อนกลับที่คอยเคลียร์
+    // สถานะนี้ไปโดยตรง) ไม่รีเซ็ตตรงนี้ currentJob() จะยังคืนชุดเซ็ตเก่าแทนงานย่อย
+    // จริงของคำร้องใบใหม่ที่เพิ่งเปิด
+    editingKit = null;
+    estimateView.jobHead.hidden = false;
+    estimateView.kitsBlock.hidden = false;
+    estimateView.kitEditHead.hidden = true;
+    document.getElementById("estimatePrintBtn").hidden = false;
+    document.getElementById("estimateSaveBtn").hidden = false;
+
     estimateView.contextWbs.textContent = record.wbs ? `WBS: ${record.wbs}` : "ยังไม่มีเลข WBS";
     estimateView.contextCustomer.textContent =
       [record.requestNumber, record.customerName].filter(Boolean).join(" · ");
@@ -8318,11 +8428,12 @@
       if (kit) option.textContent = `${kit.name} (${(kit.items || []).length} รายการ)`;
     });
 
-    // ปุ่มสร้าง/ลบซ่อนไว้กับคนที่ไม่ใช่ผู้ดูแลระบบ -- เป็นแค่การจัดหน้าจอ ของจริง
-    // กันที่ requireAdmin_ ฝั่งเซิร์ฟเวอร์ ซึ่งใครแก้ flag ในเบราว์เซอร์ก็ผ่านไม่ได้
+    // ปุ่มสร้าง/ลบ/แก้ไขตรง ๆ ซ่อนไว้กับคนที่ไม่ใช่ผู้ดูแลระบบ -- เป็นแค่การจัดหน้าจอ
+    // ของจริงกันที่ requireAdmin_ ฝั่งเซิร์ฟเวอร์ ซึ่งใครแก้ flag ในเบราว์เซอร์ก็ผ่านไม่ได้
     const admin = Boolean((getSession() || {}).isAdmin);
     estimateView.kitSaveBtn.hidden = !admin;
     estimateView.kitDeleteBtn.hidden = !admin;
+    estimateView.kitEditBtn.hidden = !admin;
 
     updateKitHint();
   }
@@ -8569,6 +8680,86 @@
       showError(estimateView.kitError, friendlyError(err, "ลบชุดเซ็ตไม่สำเร็จ กรุณาลองใหม่อีกครั้ง"));
     } finally {
       setBusy(estimateView.kitDeleteBtn, false);
+    }
+  });
+
+  /* ---------- แก้ไขชุดเซ็ตโดยตรง (ผู้ดูแลระบบ) ---------- */
+
+  estimateView.kitEditBtn.addEventListener("click", () => {
+    hideError(estimateView.kitError);
+
+    const kit = currentKit();
+    if (!kit) {
+      showError(estimateView.kitError, "กรุณาเลือกชุดเซ็ตที่ต้องการแก้ไขก่อน");
+      return;
+    }
+
+    // ใบประมาณการของคำร้องนี้มีของที่ยังไม่ได้บันทึกอยู่ -- การแก้ชุดเซ็ตไม่ได้
+    // แตะใบนี้เลย แต่ถ้าออกจากหน้าระหว่างแก้ชุดเซ็ต (ปุ่มย้อนกลับ) จะเสียของที่
+    // พิมพ์ค้างไว้ไปด้วย เตือนไว้ก่อนดีกว่าให้แปลกใจทีหลัง
+    if (estimateDirty && !window.confirm(
+      "ใบประมาณการนี้ยังไม่ได้บันทึก การแก้ไขชุดเซ็ตไม่กระทบใบนี้ "
+      + "แต่ถ้าออกจากหน้าระหว่างแก้ไขชุดเซ็ต จะเสียของที่พิมพ์ค้างไว้ในใบนี้ไปด้วย ดำเนินการต่อหรือไม่?"
+    )) return;
+
+    openKitEditor(kit);
+  });
+
+  estimateView.kitEditCancelBtn.addEventListener("click", () => {
+    cancelKitEdit();
+  });
+
+  estimateView.kitEditSaveBtn.addEventListener("click", async () => {
+    if (!editingKit) return;
+    hideError(estimateView.kitError);
+
+    const name = estimateView.kitEditName.value.trim();
+    if (!name) {
+      showError(estimateView.kitError, "กรุณาตั้งชื่อชุดเซ็ต");
+      return;
+    }
+
+    const items = (editingKit.items || [])
+      .filter(item => item.description)
+      .map(item => ({
+        keyCode: item.keyCode || "",
+        description: item.description,
+        group: item.group || "",
+        in: item.in || "",
+        rm: item.rm || "",
+        rp: item.rp || ""
+      }));
+
+    if (!items.length) {
+      showError(estimateView.kitError, "ชุดเซ็ตต้องมีพัสดุอย่างน้อยหนึ่งรายการ");
+      return;
+    }
+
+    const kitId = editingKit.id;
+
+    try {
+      setBusy(estimateView.kitEditSaveBtn, true, "กำลังบันทึก...");
+
+      const result = await backend.saveEstimateKit({
+        id: kitId,
+        name,
+        note: estimateView.kitEditNote.value.trim(),
+        items
+      });
+
+      estimateKits = result.kits || [];
+      closeKitEditor();
+      // เลือกชุดเดิมค้างไว้ใน dropdown ต่อ จะได้เห็นผลที่เพิ่งบันทึกในตัวเลือกทันที
+      estimateView.kitSelect.value = String(kitId);
+      refreshKitControls();
+
+      showError(estimateView.kitError, `บันทึกการแก้ไขชุดเซ็ต “${name}” แล้ว (${items.length} รายการ)`);
+      estimateView.kitError.classList.add("is-notice");
+    } catch (err) {
+      console.error("CS Connect edit kit error:", err);
+      showError(estimateView.kitError, friendlyError(err, "บันทึกการแก้ไขชุดเซ็ตไม่สำเร็จ กรุณาลองใหม่อีกครั้ง"));
+    } finally {
+      setBusy(estimateView.kitEditSaveBtn, false);
     }
   });
 

@@ -1940,6 +1940,13 @@ span.estimate-crumb {
   margin-bottom: 14px;
 }
 
+/* ซ่อนระหว่างแก้ไขชุดเซ็ตพัสดุโดยตรง (openKitEditor ใน app.js) -- display: grid
+   ข้างบนไม่มีเงื่อนไข จึงต้องมี override นี้ไม่งั้น [hidden] จะไม่มีผลเลย (ดู
+   Gotcha ใน CLAUDE.md) */
+.estimate-head[hidden] {
+  display: none;
+}
+
 /* ตารางกว้างกว่าคอลัมน์ฟอร์มแน่นอน -- ให้เลื่อนแนวนอนในกรอบของตัวเอง ไม่ใช่
    ทำให้ทั้งหน้าเลื่อนได้ (กติกาเดียวกับตารางกว้างที่อื่นในโปรเจกต์นี้) */
 .estimate-scroll {
