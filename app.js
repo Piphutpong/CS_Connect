@@ -3403,6 +3403,7 @@
   const requestsDateFrom = document.getElementById("requestsDateFrom");
   const requestsDateTo = document.getElementById("requestsDateTo");
   const requestsDateClearBtn = document.getElementById("requestsDateClearBtn");
+  const requestsSummary = document.getElementById("requestsSummary");
   const requestsSortBtn = document.getElementById("requestsSortBtn");
   const requestsSortLabel = document.getElementById("requestsSortLabel");
   const extendWorkSortBtn = document.getElementById("extendWorkSortBtn");
@@ -3653,6 +3654,9 @@
   // ตรงลำดับเวลาพอดี ว่าง = ไม่กรองด้านนั้น
   let requestsDateFromValue = "";
   let requestsDateToValue = "";
+  // สถานะที่ถูกย่อไว้ในมุมมองจัดกลุ่มของหน้างานรับคำร้อง -- คีย์เป็น
+  // "<แท็บ>|<สถานะ>" เพราะแต่ละแท็บมีสถานะชื่อซ้ำกันได้ จำระหว่างเปิดเว็บเท่านั้น
+  const requestsCollapsed = new Set();
 
   // Which half of the คุมคำร้องส่งแผนกมิเตอร์ tab is showing: "pending" (the
   // requests still waiting to go out) or "history" (books already printed).
@@ -4404,6 +4408,129 @@
     return true;
   }
 
+  /**
+   * ตัวเลือกสถานะของคำร้องแต่ละประเภท อ่านจาก <select> ของฟอร์มโดยตรง ไม่ประกาศ
+   * ซ้ำ -- เหตุผลเดียวกับ extendStatuses(): เพิ่มสถานะในฟอร์มแล้วไม่ต้องมาเพิ่ม
+   * ในลิสต์ที่นี่อีกที ไม่งั้นวันหนึ่งมันจะไม่ตรงกันแล้วมีกลุ่มที่ไม่มีวันโผล่
+   */
+  const REQUEST_STATUS_SELECT_ID = {
+    power: "reqJobStatus",
+    extend: "extJobStatus",
+    general: "genJobStatus",
+    deposit: "depJobStatus"
+  };
+
+  function requestStatusesFor(type) {
+    const select = document.getElementById(REQUEST_STATUS_SELECT_ID[type] || "");
+    if (!select) return [];
+    return Array.from(select.options).map(o => o.value).filter(Boolean);
+  }
+
+  /**
+   * สถานะตั้งต้นของคำร้องแต่ละประเภท -- ใบที่ยังอยู่สถานะนี้แปลว่ายังไม่มีใคร
+   * ดำเนินการอะไรต่อ ใช้นิยาม "Output" ในกล่องสรุป (ดู renderRequestsSummary)
+   */
+  const REQUEST_OPENING_STATUS = { power: "รอตรวจสอบ" };
+
+  /**
+   * กล่องสรุปเหนือรายการ: จำนวนคำร้องแยกตามสถานะ และเมื่อเลือกช่วงวันที่ไว้จะมี
+   * Input/Output ของช่วงนั้นด้วย
+   *
+   * Input  = คำร้องที่ "รับเข้ามา" ในช่วง (นับจากวันที่รับคำร้อง)
+   * Output = คำร้องที่ "ถูกดำเนินการ" ในช่วง คือมีการเปลี่ยนสถานะไปเป็นสถานะอื่น
+   *          ที่ไม่ใช่สถานะตั้งต้น โดยดูจาก statusHistory ว่ามีรายการที่เวลา (at)
+   *          ตกอยู่ในช่วงที่เลือก -- จงใจนับจาก "เวลาที่เปลี่ยนสถานะ" ไม่ใช่วันที่
+   *          รับคำร้อง เพราะใบที่รับมาก่อนหน้าแล้วเพิ่งมาดำเนินการในช่วงนี้ ก็ถือ
+   *          เป็นผลงานของช่วงนี้ Input กับ Output จึงเป็นคนละชุดคำร้องกันได้
+   */
+  function renderRequestsSummary(statusCountSource) {
+    const statuses = requestStatusesFor(currentRequestFilter);
+    const hasRange = Boolean(requestsDateFromValue || requestsDateToValue);
+    requestsSummary.innerHTML = "";
+    requestsSummary.hidden = !statuses.length;
+    if (!statuses.length) return;
+
+    const extras = statusCountSource.map(r => r.jobStatus).filter(st => st && statuses.indexOf(st) === -1);
+    const shown = statuses.concat(Array.from(new Set(extras)));
+
+    const counts = document.createElement("div");
+    counts.className = "requests-summary-counts";
+    shown.forEach(status => {
+      const item = document.createElement("span");
+      item.className = `requests-summary-item tone-${JOB_STATUS_TONE[status] || "info"}`;
+      const label = document.createElement("span");
+      label.textContent = status;
+      const value = document.createElement("strong");
+      value.textContent = String(statusCountSource.filter(r => r.jobStatus === status).length);
+      item.append(label, value);
+      counts.appendChild(item);
+    });
+    requestsSummary.appendChild(counts);
+
+    if (!hasRange) return;
+
+    const opening = REQUEST_OPENING_STATUS[currentRequestFilter];
+    const ofType = getRequests().filter(r => r.type === currentRequestFilter);
+    const input = ofType.filter(requestsDateFilterMatches).length;
+    const output = opening
+      ? ofType.filter(r => actedOnInRange(r, opening)).length
+      : null;
+
+    const io = document.createElement("div");
+    io.className = "requests-summary-io";
+
+    const rangeText = `${requestsDateFromValue ? formatThaiDate(requestsDateFromValue) : "เริ่มแรก"}`
+      + ` – ${requestsDateToValue ? formatThaiDate(requestsDateToValue) : "ปัจจุบัน"}`;
+
+    const inputEl = document.createElement("span");
+    inputEl.className = "requests-summary-io-item";
+    inputEl.innerHTML = `<span>Input (รับเข้า)</span>`;
+    const inputValue = document.createElement("strong");
+    inputValue.textContent = String(input);
+    inputEl.appendChild(inputValue);
+    io.appendChild(inputEl);
+
+    if (output !== null) {
+      const outputEl = document.createElement("span");
+      outputEl.className = "requests-summary-io-item";
+      outputEl.innerHTML = `<span>Output (ดำเนินการแล้ว)</span>`;
+      const outputValue = document.createElement("strong");
+      outputValue.textContent = String(output);
+      outputEl.appendChild(outputValue);
+      io.appendChild(outputEl);
+    }
+
+    const rangeEl = document.createElement("span");
+    rangeEl.className = "requests-summary-range";
+    rangeEl.textContent = `ช่วง ${rangeText}`;
+    io.appendChild(rangeEl);
+
+    requestsSummary.appendChild(io);
+  }
+
+  /**
+   * ใบนี้ถูกเปลี่ยนสถานะไปเป็นสถานะอื่น (ที่ไม่ใช่สถานะตั้งต้น) ในช่วงที่เลือกไหม
+   *
+   * statusHistory เก็บ at เป็น epoch ms ส่วนช่องกรองเป็นวันที่ YYYY-MM-DD จึงต้อง
+   * แปลงขอบช่วงเป็นต้นวัน/ท้ายวันก่อนเทียบ ใบเก่าที่ไม่มี at (ข้อมูลก่อนมีฟิลด์นี้)
+   * นับไม่ได้ ก็ข้ามไป ดีกว่าเดาแล้วรายงานตัวเลขที่ไม่จริง
+   */
+  function actedOnInRange(record, openingStatus) {
+    const history = Array.isArray(record.statusHistory) ? record.statusHistory : [];
+    const from = requestsDateFromValue ? new Date(`${requestsDateFromValue}T00:00:00`).getTime() : null;
+    const to = requestsDateToValue ? new Date(`${requestsDateToValue}T23:59:59.999`).getTime() : null;
+
+    return history.some(entry => {
+      if (!entry || !entry.at) return false;
+      if (entry.status === openingStatus) return false;
+      const at = Number(entry.at);
+      if (!Number.isFinite(at)) return false;
+      if (from !== null && at < from) return false;
+      if (to !== null && at > to) return false;
+      return true;
+    });
+  }
+
   function renderRequestsList() {
     requestsFormMode.hidden = true;
     requestsListMode.hidden = false;
@@ -4469,8 +4596,19 @@
       updateSelectionButtonLabel(revenuePrintBtn, revenueSelection.size);
     }
 
+    // จัดกลุ่มตามสถานะ + กล่องสรุปจำนวน เฉพาะแท็บประเภทคำร้องจริง -- แท็บคุมส่ง
+    // แผนกเป็นคิวสถานะเดียวอยู่แล้ว หัวกลุ่มก้อนเดียวไม่ช่วยอะไร และมี checkbox
+    // เลือกหลายใบซึ่งอ่านง่ายกว่าเมื่อเป็นรายการเรียบ
+    const groupByStatus = !derivedFilter;
+    if (groupByStatus) {
+      renderRequestsSummary(filtered);
+    } else {
+      requestsSummary.hidden = true;
+      requestsSummary.innerHTML = "";
+    }
+
     renderRequestCardsInto(requestsList, filtered, {
-      isGeneralTab, isRevenueTab,
+      isGeneralTab, isRevenueTab, groupByStatus,
       searchQuery: currentSearchQuery,
       onArchiveMerged: renderRequestsList
     });
@@ -4485,7 +4623,7 @@
    */
   function renderRequestCardsInto(listEl, filtered, {
     isMeterTab = false, isGeneralTab = false, isRevenueTab = false,
-    searchQuery = "", onArchiveMerged = renderRequestsList
+    searchQuery = "", onArchiveMerged = renderRequestsList, groupByStatus = false
   } = {}) {
     listEl.innerHTML = "";
 
@@ -4508,6 +4646,65 @@
         listEl.appendChild(archiveBtn);
       }
       return;
+    }
+
+    // จัดกลุ่มตามสถานะ ย่อ/ขยายได้ -- เรียงกลุ่มตามลำดับขั้นตอนงาน (ลำดับเดียว
+    // กับดรอปดาวน์สถานะ) ไม่ใช่ตามจำนวน เพราะคนอ่านกำลังไล่ว่างานอยู่ขั้นไหนแล้ว
+    // กลุ่มที่ไม่มีคำร้องเลยไม่ต้องวาด สถานะแปลก ๆ ที่ไม่อยู่ในดรอปดาวน์ (ข้อมูล
+    // เก่า) ต่อท้ายไว้ ดีกว่าปล่อยให้หายไปจากหน้าจอเงียบ ๆ
+    const groupBodies = new Map();
+    if (groupByStatus) {
+      const order = requestStatusesFor(currentRequestFilter);
+      const extras = filtered.map(r => r.jobStatus).filter(st => st && order.indexOf(st) === -1);
+      const hasBlank = filtered.some(r => !r.jobStatus);
+      const statuses = order.concat(Array.from(new Set(extras))).concat(hasBlank ? [""] : []);
+
+      statuses.forEach(status => {
+        const count = filtered.filter(r => (r.jobStatus || "") === status).length;
+        if (!count) return;
+
+        const section = document.createElement("section");
+        section.className = "status-group";
+
+        const head = document.createElement("button");
+        head.type = "button";
+        head.className = "status-group-head";
+
+        const caret = document.createElement("span");
+        caret.className = "status-group-caret";
+
+        const badge = document.createElement("span");
+        badge.className = `request-badge request-badge-status tone-${JOB_STATUS_TONE[status] || "info"}`;
+        badge.textContent = status || "ไม่ระบุสถานะ";
+
+        const countEl = document.createElement("span");
+        countEl.className = "status-group-count";
+        countEl.textContent = `${count} คำร้อง`;
+
+        head.append(caret, badge, countEl);
+
+        const body = document.createElement("div");
+        body.className = "status-group-body";
+
+        // จำการย่อแยกตามแท็บ -- คนละแท็บมีสถานะชื่อซ้ำกันได้ ย่อกลุ่มในแท็บหนึ่ง
+        // ไม่ควรไปย่อในอีกแท็บด้วย
+        const collapseKey = `${currentRequestFilter}|${status}`;
+        const collapsed = requestsCollapsed.has(collapseKey);
+        section.classList.toggle("is-collapsed", collapsed);
+        body.hidden = collapsed;
+
+        head.addEventListener("click", () => {
+          const nowCollapsed = !requestsCollapsed.has(collapseKey);
+          if (nowCollapsed) requestsCollapsed.add(collapseKey);
+          else requestsCollapsed.delete(collapseKey);
+          section.classList.toggle("is-collapsed", nowCollapsed);
+          body.hidden = nowCollapsed;
+        });
+
+        section.append(head, body);
+        listEl.appendChild(section);
+        groupBodies.set(status, body);
+      });
     }
 
     filtered.forEach(r => {
@@ -4717,7 +4914,8 @@
         card.appendChild(actionsWrap);
       }
 
-      listEl.appendChild(card);
+      const groupBody = groupBodies.get(r.jobStatus || "");
+      (groupBody || listEl).appendChild(card);
     });
   }
 
