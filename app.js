@@ -829,12 +829,26 @@
        * (RPC ตรวจว่าไฟล์อยู่บน Storage จริง และเดินสถานะให้เฉพาะกรณีแผนผัง)
        *
        * รับ data URL เหมือนเดิม หน้าจอที่เรียกจึงไม่ต้องเปลี่ยน
+       *
+       * รับ record ทั้งใบแทนที่จะรับแค่ id เพราะต้องอ่าน record.wbs มาตั้งชื่อ
+       * โฟลเดอร์/ไฟล์แทนเลข id ดิบ -- จะได้ไล่หารูปของงานไหนใน Storage dashboard
+       * ได้ง่ายด้วยตา (id เป็นแค่ตัวเลขวิ่งที่จำไม่ได้ ส่วน WBS เป็นเลขที่เจ้าหน้าที่
+       * ใช้อ้างอิงงานอยู่แล้วในกระดาษ) fallback กลับไปใช้ id เมื่อยังไม่มี WBS
+       * (ไม่ควรเกิดในการใช้งานจริง เพราะแนบแผนผัง/ภาพหน้างานได้ก็ต่อเมื่อมี WBS
+       * แล้วเท่านั้น -- ดู syncExtendStageFields -- แต่กันไว้เผื่อข้อมูลผิดปกติ)
+       * แก้ WBS ภายหลังจะไม่ย้ายไฟล์ที่แนบไว้ก่อนหน้ามาโฟลเดอร์ใหม่ให้อัตโนมัติ
        */
-      async saveExtendFile(id, kind, file) {
+      async saveExtendFile(record, kind, file) {
         return callAsUser(async () => {
+          const id = record.id;
           const blob = await shrinkImage(dataUrlToBlob(file));
+          const wbs = String(record.wbs || "").trim();
+          // เหลือแค่ตัวอักษร/ตัวเลข/-/. ตามรูปแบบ WBS จริง กันเจ้าหน้าที่พิมพ์
+          // อักขระแปลก ๆ ทับเลขที่ระบบเดาไว้ให้ ซึ่งจะกลายเป็นชื่อ path ที่ผิดกฎ
+          const safeWbs = wbs.replace(/[^A-Za-z0-9.-]/g, "_");
+          const folderName = safeWbs || String(id);
           const folder = kind === "plan" ? "plans" : "photos";
-          const path = `${folder}/${id}/${kind}-${Date.now()}-${randomSuffix()}.${extensionFor(blob.type)}`;
+          const path = `${folder}/${folderName}/${folderName}-${kind}-${Date.now()}-${randomSuffix()}.${extensionFor(blob.type)}`;
 
           const upload = await client.storage.from("request-files").upload(path, blob, {
             contentType: blob.type, upsert: false
@@ -7136,7 +7150,7 @@
           reader.readAsDataURL(files[i]);
         });
 
-        updated = await backend.saveExtendFile(extendFormRecord.id, "plan", dataUrl);
+        updated = await backend.saveExtendFile(extendFormRecord, "plan", dataUrl);
         requestsCache = requestsCache.map(r => (String(r.id) === String(updated.id) ? updated : r));
         extendFormRecord = updated;
       }
@@ -7194,7 +7208,7 @@
         reader.readAsDataURL(file);
       });
 
-      const updated = await backend.saveExtendFile(extendFormRecord.id, kind, dataUrl);
+      const updated = await backend.saveExtendFile(extendFormRecord, kind, dataUrl);
 
       requestsCache = requestsCache.map(r => (String(r.id) === String(updated.id) ? updated : r));
       extendFormRecord = updated;
