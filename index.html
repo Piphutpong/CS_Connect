@@ -24,7 +24,7 @@
 <title>CS Connect</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=Sarabun:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=20260918c">
+<link rel="stylesheet" href="style.css?v=20260918d">
 </head>
 <body>
 
@@ -293,17 +293,18 @@
           <svg viewBox="0 0 24 24" fill="none"><path d="M13 2 3 14h7l-1 8 11-14h-7l1-6Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"/></svg>
         </span>
         <span class="service-title">งานรับคำร้อง</span>
-        <span class="service-desc">บันทึกและติดตามคำร้องขอใช้ไฟฟ้า / ขอขยายเขตฯ / คำร้องทั่วไป</span>
+        <span class="service-desc">จุดรับคำร้องเข้าระบบ รับได้ทุกประเภท (ขอใช้ไฟฟ้า / ขอขยายเขตฯ / คำร้องทั่วไป / ขอรับเงินประกัน)</span>
       </button>
 
-      <!-- งานขอใช้ไฟฟ้า -- คิวงานของคำร้องขอใช้ไฟฟ้า ใช้หน้า extendWorkView ชุดเดียว
-           กับงานขยายเขตฯ (ดู workKind ใน app.js) ไม่ได้มีหน้าแยกอีกชุด -->
+      <!-- งานขอใช้ไฟฟ้า/งานขยายเขตฯ/งานคำร้องทั่วไป/งานขอรับเงินประกัน -- คิวงาน
+           ทั้ง 4 ประเภทใช้หน้า extendWorkView ชุดเดียวกัน (ดู workKind ใน app.js)
+           ไม่ได้มีหน้าแยกกันคนละชุด -->
       <button class="service-card" data-service="power">
         <span class="service-icon" aria-hidden="true">
           <svg viewBox="0 0 24 24" fill="none"><path d="M9 3v5M15 3v5M6 8h12v3a6 6 0 0 1-12 0V8Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"/><path d="M12 17v4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
         </span>
         <span class="service-title">งานขอใช้ไฟฟ้า</span>
-        <span class="service-desc">คิวงานคำร้องขอใช้ไฟฟ้า จ่ายงานและติดตามงานในมือ</span>
+        <span class="service-desc">คิวงานตรวจสอบระบบไฟฟ้าภายใน จ่ายงานและติดตามงานในมือ</span>
       </button>
 
       <button class="service-card" data-service="extend">
@@ -311,7 +312,23 @@
           <svg viewBox="0 0 24 24" fill="none"><path d="M4 20V10m0 10h16M4 20 12 4l8 16M9 20v-6h6v6" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"/></svg>
         </span>
         <span class="service-title">งานขยายเขตระบบจำหน่ายไฟฟ้า</span>
-        <span class="service-desc">คำร้องขอขยายเขตระบบจำหน่ายไฟฟ้า</span>
+        <span class="service-desc">คิวงานสำรวจของช่าง จ่ายงานและติดตามงานในมือ</span>
+      </button>
+
+      <button class="service-card" data-service="general">
+        <span class="service-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none"><path d="M7 3h8l4 4v14H7V3Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M15 3v4h4M9 12h6M9 16h6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+        </span>
+        <span class="service-title">งานคำร้องทั่วไป</span>
+        <span class="service-desc">คิวงานคำร้องทั่วไป + คุมคำร้องส่งแผนกสนับสนุน (ผสน.)</span>
+      </button>
+
+      <button class="service-card" data-service="deposit">
+        <span class="service-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none"><path d="M3 10h18M5 10V7a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v3M4 10h16v9a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-9Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M9 14h6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+        </span>
+        <span class="service-title">งานขอรับเงินประกัน</span>
+        <span class="service-desc">คิวงานขอเงินประกันคืน + คุมคำร้องส่ง ผบร.</span>
       </button>
 
       <button class="service-card" data-service="solar">
@@ -376,31 +393,9 @@
         <svg viewBox="0 0 24 24" fill="none"><path d="M4 20V10m0 10h16M4 20 12 4l8 16M9 20v-6h6v6" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"/></svg>
         ขอขยายเขตฯ
       </button>
-      <button class="requests-nav-item" data-filter="payment">
-        <svg viewBox="0 0 24 24" fill="none"><path d="M12 3a5 5 0 0 0-5 5v3.2c0 .6-.2 1.2-.6 1.7L5 15h14l-1.4-2.1c-.4-.5-.6-1.1-.6-1.7V8a5 5 0 0 0-5-5Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M9.5 18a2.5 2.5 0 0 0 5 0" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
-        แจ้งเตือนการรับชำระเงิน
-        <span class="nav-badge" data-badge-for="payment" hidden></span>
-      </button>
-      <button class="requests-nav-item" data-filter="meter">
-        <svg viewBox="0 0 24 24" fill="none"><path d="M4 18a8 8 0 1 1 16 0" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><path d="M12 18l4.5-5.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><circle cx="12" cy="18" r="1.3" fill="currentColor"/></svg>
-        คุมคำร้องส่งแผนกมิเตอร์
-        <span class="nav-badge" data-badge-for="meter" hidden></span>
-      </button>
-      <!-- Derived tab เหมือน payment/meter ด้านล่าง -- คำร้องทั่วไปที่ยังไม่ได้
-           ส่ง (jobStatus = "รอส่ง ผสน.") กรองจาก requestsCache เหมือนกัน ไม่ใช่
-           ข้อมูลชุดแยก ดู isGeneralDispatch ใน app.js -->
-      <button class="requests-nav-item" data-filter="generalDispatch">
-        <svg viewBox="0 0 24 24" fill="none"><path d="M3 12h13M11 6l6 6-6 6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M14 5h6v14h-6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
-        คุมคำร้องส่งแผนกสนับสนุน
-        <span class="nav-badge" data-badge-for="generalDispatch" hidden></span>
-      </button>
-      <!-- Derived tab เหมือน generalDispatch ข้างบน -- ขอเงินประกันคืนที่ยังไม่ได้ส่ง
-           (jobStatus = "รอส่ง ผบร.") ดู isRevenueDispatch ใน app.js -->
-      <button class="requests-nav-item" data-filter="revenueDispatch">
-        <svg viewBox="0 0 24 24" fill="none"><path d="M3 12h13M11 6l6 6-6 6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M14 5h6v14h-6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
-        คุมคำร้องส่งแผนกบริหารรายได้ค่าไฟฟ้า
-        <span class="nav-badge" data-badge-for="revenueDispatch" hidden></span>
-      </button>
+      <!-- แจ้งเตือนการรับชำระเงิน/คุมคำร้องส่งแผนกมิเตอร์/คุมคำร้องส่งแผนกสนับสนุน/
+           คุมคำร้องส่ง ผบร. ย้ายไปเป็นชิปในหน้าโมดูลงานของแต่ละประเภทแล้ว (ดู
+           renderExtendChips ใน app.js) หน้านี้เหลือแค่ 4 ปุ่มรับคำร้องจริง ๆ -->
     </nav>
 
     <main class="requests-content">
@@ -415,34 +410,9 @@
             <div class="requests-heading-actions">
               <button type="button" id="requestsAddBtn" class="btn btn-primary">+ เพิ่มคำร้อง</button>
               <button type="button" id="requestsAddBatchBtn" class="btn btn-primary">+ เพิ่มหลายคำร้อง</button>
-              <button type="button" id="meterPrintBtn" class="btn btn-primary" hidden disabled>พิมพ์สมุดคุมส่งแผนกมิเตอร์</button>
-              <!-- เหมือน meterPrintBtn ข้างบนทุกกลไก (เลือกด้วย checkbox บนการ์ด
-                   -> เปิดเอกสารแก้ไขได้ -> ยืนยัน -> เปลี่ยนสถานะ+เก็บสมุด+พิมพ์)
-                   แต่อยู่ในแท็บ "คุมคำร้องส่งแผนกสนับสนุน" (data-filter=
-                   "generalDispatch") ซึ่งเป็นแท็บล่างสุดในแถบซ้าย แยกจากแท็บ
-                   "คำร้องทั่วไป" ต่างหาก ดู openGeneralDispatchPrint ใน app.js -->
-              <button type="button" id="generalPrintBtn" class="btn btn-primary" hidden disabled>พิมพ์สมุดคุมคำร้องทั่วไป</button>
-              <!-- เหมือน generalPrintBtn ข้างบนทุกกลไก แต่ของแท็บคุมคำร้องส่ง ผบร. -->
-              <button type="button" id="revenuePrintBtn" class="btn btn-primary" hidden disabled>พิมพ์สมุดคุมส่ง ผบร.</button>
             </div>
           </div>
 
-          <!-- แท็บ meter กับแท็บ generalDispatch เท่านั้นที่มีสองโหมด: งานที่ยัง
-               ต้องส่ง กับสมุดที่พิมพ์ไปแล้ว -- ซ่อนไว้กับทุกแท็บอื่น -->
-          <div class="requests-modes" id="meterModes" hidden>
-            <button type="button" class="requests-mode-btn active" data-meter-mode="pending">รอส่ง</button>
-            <button type="button" class="requests-mode-btn" data-meter-mode="history">ประวัติการส่ง</button>
-          </div>
-          <!-- เหมือน meterModes ข้างบนทุกประการ แต่ของแท็บ "คุมคำร้องส่งแผนกสนับสนุน" -->
-          <div class="requests-modes" id="generalModes" hidden>
-            <button type="button" class="requests-mode-btn active" data-general-mode="pending">รอส่ง</button>
-            <button type="button" class="requests-mode-btn" data-general-mode="history">ประวัติการส่ง</button>
-          </div>
-          <!-- เหมือน generalModes ข้างบน แต่ของแท็บ "คุมคำร้องส่งแผนกบริหารรายได้ฯ" -->
-          <div class="requests-modes" id="revenueModes" hidden>
-            <button type="button" class="requests-mode-btn active" data-revenue-mode="pending">รอส่ง</button>
-            <button type="button" class="requests-mode-btn" data-revenue-mode="history">ประวัติการส่ง</button>
-          </div>
           <div class="requests-search">
             <input type="search" id="requestsSearchInput" placeholder="ค้นหาด้วยเลขที่คำร้อง, ชื่อลูกค้า, เบอร์โทร, บ้านเลขที่, เลขที่โฉนด...">
             <!-- เรียงตามวันที่รับคำร้อง แล้วตัดสินด้วยเลขที่คำร้องเมื่อวันที่ตรงกัน
@@ -1167,10 +1137,33 @@
         </div>
         <div class="requests-heading-actions">
           <!-- เพิ่มคำร้องได้ตรงจากหน้านี้เลย ไม่ต้องย้อนกลับไปหน้างานรับคำร้อง
-               ก่อน -- ปุ่มเดียวใช้ร่วมกันทั้งงานขอใช้ไฟฟ้าและงานขยายเขตฯ เพราะ
-               เป็นโมดูลเดียวกันสลับด้วย workKind (ดู extendWorkAddBtn ใน app.js) -->
+               ก่อน -- ปุ่มเดียวใช้ร่วมกันทั้ง 4 ประเภทงาน เพราะเป็นโมดูลเดียวกัน
+               สลับด้วย workKind (ดู extendWorkAddBtn ใน app.js) -->
           <button type="button" id="extendWorkAddBtn" class="btn btn-primary">+ เพิ่มคำร้อง</button>
+          <!-- ปุ่มพิมพ์สมุดคุมทั้ง 3 ชุด ย้ายมาจากหน้างานรับคำร้อง -- โผล่เฉพาะ
+               ตอน workKind ตรงกับประเภทของสมุดคุมนั้น (ดู renderRequestsList /
+               renderExtendChips ใน app.js) เลือกด้วย checkbox บนการ์ด -> เปิด
+               เอกสารแก้ไขได้ -> ยืนยัน -> เปลี่ยนสถานะ+เก็บสมุด+พิมพ์ เหมือนเดิม
+               ทุกกลไก แค่ย้ายที่อยู่มาไว้ในโมดูลงานของประเภทนั้นแทน -->
+          <button type="button" id="meterPrintBtn" class="btn btn-primary" hidden disabled>พิมพ์สมุดคุมส่งแผนกมิเตอร์</button>
+          <button type="button" id="generalPrintBtn" class="btn btn-primary" hidden disabled>พิมพ์สมุดคุมคำร้องทั่วไป</button>
+          <button type="button" id="revenuePrintBtn" class="btn btn-primary" hidden disabled>พิมพ์สมุดคุมส่ง ผบร.</button>
         </div>
+      </div>
+
+      <!-- โหมด "รอส่ง"/"ประวัติการส่ง" ของสมุดคุมทั้ง 3 ชุด ย้ายมาจากหน้างาน
+           รับคำร้อง -- โผล่เฉพาะตอนชิป dispatch ของประเภทนั้นถูกเลือกอยู่ -->
+      <div class="requests-modes" id="meterModes" hidden>
+        <button type="button" class="requests-mode-btn active" data-meter-mode="pending">รอส่ง</button>
+        <button type="button" class="requests-mode-btn" data-meter-mode="history">ประวัติการส่ง</button>
+      </div>
+      <div class="requests-modes" id="generalModes" hidden>
+        <button type="button" class="requests-mode-btn active" data-general-mode="pending">รอส่ง</button>
+        <button type="button" class="requests-mode-btn" data-general-mode="history">ประวัติการส่ง</button>
+      </div>
+      <div class="requests-modes" id="revenueModes" hidden>
+        <button type="button" class="requests-mode-btn active" data-revenue-mode="pending">รอส่ง</button>
+        <button type="button" class="requests-mode-btn" data-revenue-mode="history">ประวัติการส่ง</button>
       </div>
 
       <div class="requests-search">
@@ -1636,6 +1629,6 @@
      **ต้องเปลี่ยนเลขนี้ทุกครั้งที่แก้ app.js / style.css / track.js / qr.js**
      ไม่งั้นผู้ใช้บางคนจะยังได้ไฟล์เก่าไปอีกพักใหญ่ -->
 <script src="vendor/supabase.js?v=2.116.0"></script>
-<script src="app.js?v=20260918c"></script>
+<script src="app.js?v=20260918d"></script>
 </body>
 </html>

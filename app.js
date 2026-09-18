@@ -14,15 +14,13 @@
     deposit: "ขอเงินประกันคืน",
     general: "คำร้องทั่วไป",
     extend: "ขอขยายเขตระบบจำหน่ายไฟฟ้า",
+    // payment/meter เป็น derived tab ของ workKind power, generalDispatch ของ
+    // general, revenueDispatch ของ deposit -- ทั้งสี่แสดงเป็นชิปในโมดูลงาน
+    // (extendWorkView) ของประเภทงานนั้น ไม่ใช่แท็บแยกในหน้างานรับคำร้องแล้ว
+    // (ดู WORK_KIND_DISPATCH_TABS/renderExtendDispatchTab)
     payment: "แจ้งเตือนการรับชำระเงิน",
     meter: "คุมคำร้องส่งแผนกมิเตอร์",
-    // Derived tab เหมือน payment/meter ข้างบน -- คำร้องทั่วไป (type: general)
-    // ที่ยังไม่ได้ส่ง กรองจาก jobStatus ไม่ใช่ประเภทแยก ดู isGeneralDispatch
-    // อยู่ล่างสุดในแถบซ้าย ต่อจากแท็บคุมคำร้องส่งแผนกมิเตอร์ -- แท็บ "คุมงาน"
-    // สองตัวอยู่ติดกัน
     generalDispatch: "คุมคำร้องส่งแผนกสนับสนุน",
-    // Derived tab ตัวที่สาม -- ขอเงินประกันคืน (type: deposit) ที่ยังไม่ได้ส่ง
-    // ดู isRevenueDispatch
     revenueDispatch: "คุมคำร้องส่งแผนกบริหารรายได้ค่าไฟฟ้า"
   };
 
@@ -2358,7 +2356,6 @@
       setBusy(submitBtn, true, "กำลังโหลดข้อมูล...");
       await refreshAll();
       await migrateLocalDataOnce();
-      updateTabBadges();
 
       enterApp();
     } catch (err) {
@@ -2814,7 +2811,6 @@
         // ไปจะเจอรายการคำร้องว่างเปล่าทั้งที่ข้อมูลมีอยู่
         try {
           await refreshAll();
-          updateTabBadges();
 
           // ตั้งรหัสใหม่เสร็จ = ผ่านด่านแล้ว พาเข้าหน้าใช้งานเลย การค้างอยู่หน้า
           // เดิมทำให้ไม่รู้ว่าสำเร็จหรือยัง และเป็นสิ่งที่ผู้ใช้ต้องเดาเอง
@@ -3261,8 +3257,8 @@
         return;
       }
 
-      // สองการ์ดนี้ใช้หน้าคิวงานชุดเดียวกัน ต่างกันแค่ประเภทคำร้อง (workKind)
-      if (key === "extend" || key === "power") {
+      // 4 การ์ดนี้ใช้หน้าคิวงานชุดเดียวกัน ต่างกันแค่ประเภทคำร้อง (workKind)
+      if (WORK_KIND_TITLES[key]) {
         openExtendWorkView({ kind: key });
         return;
       }
@@ -3404,7 +3400,6 @@
   const requestsSortLabel = document.getElementById("requestsSortLabel");
   const extendWorkSortBtn = document.getElementById("extendWorkSortBtn");
   const extendWorkSortLabel = document.getElementById("extendWorkSortLabel");
-  const navBadges = document.querySelectorAll(".nav-badge");
 
   // แจ้งเตือนการรับชำระเงิน isn't its own data -- it's ขอใช้ไฟฟ้า records still
   // marked รอชำระเงิน that already have a slip on file, i.e. payments
@@ -3466,19 +3461,23 @@
     revenueDispatch: isRevenueDispatch
   };
 
-  // Each derived tab's sidebar button carries a `.nav-badge` tagged with
-  // data-badge-for="<tab key>"; the count is just how many records its own
-  // filter currently matches, so it shrinks as staff move records along.
-  function updateTabBadges() {
-    const requests = getRequests();
-    navBadges.forEach(badge => {
-      const filter = DERIVED_TAB_FILTERS[badge.dataset.badgeFor];
-      if (!filter) return;
-      const count = requests.filter(filter).length;
-      badge.textContent = String(count);
-      badge.hidden = count === 0;
-    });
-  }
+  // แท็บ dispatch ที่โผล่เป็นชิปเพิ่มในโมดูลงาน (extendWorkView) ของแต่ละ
+  // workKind -- เดิมเป็นแท็บแยกในหน้างานรับคำร้อง ย้ายมาอยู่ตรงนี้เพราะเป็นข้อมูล
+  // ของประเภทงานนั้น ๆ โดยตรง (ดู renderExtendChips/renderExtendDispatchTab)
+  const WORK_KIND_DISPATCH_TABS = {
+    power: [
+      { key: "payment", label: "แจ้งเตือนการรับชำระเงิน" },
+      { key: "meter", label: "คุมคำร้องส่งแผนกมิเตอร์" }
+    ],
+    extend: [],
+    general: [
+      { key: "generalDispatch", label: "คุมคำร้องส่งแผนกสนับสนุน" }
+    ],
+    deposit: [
+      { key: "revenueDispatch", label: "คุมคำร้องส่งแผนกบริหารรายได้ค่าไฟฟ้า" }
+    ]
+  };
+
   const requestFormTitle = document.getElementById("requestFormTitle");
   const requestFormSubtitle = document.getElementById("requestFormSubtitle");
   const requestForm = document.getElementById("requestForm");
@@ -4380,104 +4379,56 @@
     // land back at the top of the list, not wherever the form happened to
     // be scrolled to.
     window.scrollTo(0, 0);
-    updateTabBadges();
 
-    const derivedFilter = DERIVED_TAB_FILTERS[currentRequestFilter];
-    // ทั้งแท็บ ไม่กรองด้วยคำค้น -- ใช้ตัดสินว่า id ที่เลือกไว้ (ตะกร้าเช็คบ็อก)
-    // ยังอยู่ในแท็บนี้ไหม แยกจาก filtered ด้านล่างซึ่งกรองด้วยคำค้นด้วย เพื่อไม่ให้
-    // ค้นหาคำอื่นแล้วเลือกที่หน้าจอไม่เห็นชั่วคราวถูกตัดออกจากตะกร้าไปเงียบ ๆ
-    const eligibleForTab = getRequests().filter(derivedFilter || (r => r.type === currentRequestFilter));
+    // ไม่มีแท็บ derived (payment/meter/generalDispatch/revenueDispatch) ในหน้า
+    // นี้อีกแล้ว -- ย้ายไปเป็นชิปในโมดูลงานของแต่ละประเภทหมดแล้ว (ดู
+    // renderExtendDispatchTab) currentRequestFilter จึงเป็นแค่ 1 ใน 4 ประเภท
+    // คำร้องจริงเสมอ กรองด้วย type ตรง ๆ ไม่ต้องพึ่ง DERIVED_TAB_FILTERS ที่นี่
     const filtered = sortRequestsForDisplay(
-      eligibleForTab.filter(r => matchesSearch(r, currentSearchQuery))
+      getRequests()
+        .filter(r => r.type === currentRequestFilter)
+        .filter(r => matchesSearch(r, currentSearchQuery))
     );
 
     requestsListTitle.textContent = REQUEST_TYPES[currentRequestFilter];
     requestsListCount.textContent = `ทั้งหมด ${filtered.length} รายการ`;
-    requestsAddBtn.hidden = Boolean(derivedFilter);
-    // เพิ่มหลายคำร้องมีเฉพาะขอใช้ไฟฟ้า -- ขอขยายเขตฯ (และแท็บอื่นที่ยังไม่มี
-    // ฟอร์มของตัวเอง) ไม่มีปุ่มนี้
-    requestsAddBatchBtn.hidden = Boolean(derivedFilter) || currentRequestFilter !== "power";
+    requestsAddBtn.hidden = false;
+    // เพิ่มหลายคำร้องมีเฉพาะขอใช้ไฟฟ้า
+    requestsAddBatchBtn.hidden = currentRequestFilter !== "power";
 
-    const isMeterTab = currentRequestFilter === "meter";
-    meterModes.hidden = !isMeterTab;
+    renderRequestCardsInto(requestsList, filtered, { searchQuery: currentSearchQuery, onArchiveMerged: renderRequestsList });
+  }
 
-    if (isMeterTab && meterMode === "history") {
-      renderDispatchHistory();
-      return;
-    }
-
-    meterPrintBtn.hidden = !isMeterTab;
-    if (isMeterTab) {
-      // A record can only leave this tab by having its jobStatus changed
-      // elsewhere (another tab, another staff member) -- drop any selected
-      // id that's no longer actually eligible for this tab (regardless of the
-      // search box), like a shopping cart that keeps items typed out of view.
-      const eligibleIds = new Set(eligibleForTab.map(r => r.id));
-      meterSelection.forEach(id => { if (!eligibleIds.has(id)) meterSelection.delete(id); });
-      meterPrintBtn.disabled = meterSelection.size === 0;
-      updateSelectionButtonLabel(meterPrintBtn, meterSelection.size);
-    }
-
-    // เหมือน isMeterTab ข้างบนทุกประการตอนนี้ -- "คุมคำร้องส่งแผนกสนับสนุน" เป็น
-    // derived tab แยกจากแท็บ "คำร้องทั่วไป" (isGeneralDispatch ใน
-    // DERIVED_TAB_FILTERS) filtered ด้านบนจึงถูกกรองเหลือเฉพาะคำร้องที่ยังเป็น
-    // "รอส่ง ผสน." อยู่แล้วโดยอัตโนมัติ ไม่ต้องกรองซ้ำที่นี่
-    const isGeneralTab = currentRequestFilter === "generalDispatch";
-    generalModes.hidden = !isGeneralTab;
-
-    if (isGeneralTab && generalMode === "history") {
-      renderGeneralDispatchHistory();
-      return;
-    }
-
-    generalPrintBtn.hidden = !isGeneralTab;
-    if (isGeneralTab) {
-      // A record can only leave this tab by having its jobStatus changed
-      // elsewhere (another tab, another staff member) -- drop any selected
-      // id that's no longer actually eligible for this tab (regardless of the
-      // search box), like a shopping cart that keeps items typed out of view.
-      const eligibleIds = new Set(eligibleForTab.map(r => r.id));
-      generalSelection.forEach(id => { if (!eligibleIds.has(id)) generalSelection.delete(id); });
-      generalPrintBtn.disabled = generalSelection.size === 0;
-      updateSelectionButtonLabel(generalPrintBtn, generalSelection.size);
-    }
-
-    // เหมือน isGeneralTab ข้างบนทุกประการ แต่ของแท็บคุมคำร้องส่ง ผบร.
-    const isRevenueTab = currentRequestFilter === "revenueDispatch";
-    revenueModes.hidden = !isRevenueTab;
-
-    if (isRevenueTab && revenueMode === "history") {
-      renderRevenueDispatchHistory();
-      return;
-    }
-
-    revenuePrintBtn.hidden = !isRevenueTab;
-    if (isRevenueTab) {
-      const eligibleIds = new Set(eligibleForTab.map(r => r.id));
-      revenueSelection.forEach(id => { if (!eligibleIds.has(id)) revenueSelection.delete(id); });
-      revenuePrintBtn.disabled = revenueSelection.size === 0;
-      updateSelectionButtonLabel(revenuePrintBtn, revenueSelection.size);
-    }
-
-    requestsList.innerHTML = "";
+  /**
+   * วาดการ์ดคำร้องหนึ่งชุดลงในคอนเทนเนอร์ที่ระบุ ใช้ร่วมกันทั้งหน้างานรับคำร้อง
+   * (แท็บประเภทคำร้องธรรมดา) และแท็บคุมคำร้องส่งแผนกต่าง ๆ ในโมดูลงาน (มิเตอร์/
+   * คำร้องทั่วไป/ผบร. -- ย้ายมาจากหน้างานรับคำร้องเดิม ดู renderExtendDispatchTab)
+   * ต่างกันแค่คอนเทนเนอร์ปลายทางกับ checkbox เลือกหลายใบ (ใส่เฉพาะ 3 แท็บ
+   * dispatch เท่านั้น ไม่มีในแท็บประเภทคำร้องธรรมดา)
+   */
+  function renderRequestCardsInto(listEl, filtered, {
+    isMeterTab = false, isGeneralTab = false, isRevenueTab = false,
+    searchQuery = "", onArchiveMerged = renderRequestsList
+  } = {}) {
+    listEl.innerHTML = "";
 
     if (filtered.length === 0) {
       const empty = document.createElement("div");
       empty.className = "request-empty";
       empty.textContent = "ยังไม่มีข้อมูลคำร้อง";
-      requestsList.appendChild(empty);
+      listEl.appendChild(empty);
 
       // loadRequests() only brings back open/recent requests (see
       // loadRequestsForStaff_ in Code.gs) -- an empty result while searching
       // doesn't rule out an older, already-closed record, so offer to check
       // the full history on the server instead of silently saying "not found".
-      if (currentSearchQuery && backend === supabaseBackend) {
+      if (searchQuery && backend === supabaseBackend) {
         const archiveBtn = document.createElement("button");
         archiveBtn.type = "button";
         archiveBtn.className = "btn btn-ghost request-archive-search-btn";
-        archiveBtn.textContent = `ค้นหา "${currentSearchQuery}" ในคำร้องเก่าที่จัดเก็บแล้ว`;
-        archiveBtn.addEventListener("click", () => searchArchivedAndMerge(currentSearchQuery, archiveBtn));
-        requestsList.appendChild(archiveBtn);
+        archiveBtn.textContent = `ค้นหา "${searchQuery}" ในคำร้องเก่าที่จัดเก็บแล้ว`;
+        archiveBtn.addEventListener("click", () => searchArchivedAndMerge(searchQuery, archiveBtn, onArchiveMerged));
+        listEl.appendChild(archiveBtn);
       }
       return;
     }
@@ -4689,7 +4640,7 @@
         card.appendChild(actionsWrap);
       }
 
-      requestsList.appendChild(card);
+      listEl.appendChild(card);
     });
   }
 
@@ -4935,26 +4886,33 @@
     return haystack.includes(query.toLowerCase());
   }
 
-  /** The "ประวัติการส่ง" half of the meter tab: books already printed. */
-  function renderDispatchHistory() {
-    requestsAddBtn.hidden = true;
-    meterPrintBtn.hidden = true;
+  /**
+   * รายการสมุดคุมที่พิมพ์ไปแล้ว ("ประวัติการส่ง") ใช้ร่วมกันทั้ง 3 ชุด (มิเตอร์/
+   * คำร้องทั่วไป/ผบร.) ต่างกันแค่แหล่งข้อมูล ปุ่มพิมพ์ที่ต้องซ่อนระหว่างดูประวัติ
+   * และปลายทางตอนคลิก/พิมพ์ซ้ำ เดิมมี 3 ชุดโค้ดที่เกือบเหมือนกันทุกตัวอักษร รวม
+   * เป็นฟังก์ชันเดียวตอนย้ายมาแสดงในโมดูลงาน (extendWorkList) แทนหน้างานรับ
+   * คำร้องเดิม -- ค้นหาด้วย extendSearchQuery ของโมดูลงาน ไม่ใช่ currentSearchQuery
+   * ของหน้างานรับคำร้องอีกต่อไป เพราะสามชุดนี้ไม่มีอยู่ในหน้านั้นแล้ว
+   */
+  function renderDispatchHistoryList({ title, dispatches, printBtn, onOpen }) {
+    extendWorkAddBtn.hidden = true;
+    printBtn.hidden = true;
 
-    const matches = getDispatches()
-      .filter(d => dispatchMatchesSearch(d, currentSearchQuery))
+    const matches = dispatches
+      .filter(d => dispatchMatchesSearch(d, extendSearchQuery))
       .sort((a, b) => (b.printedAt || 0) - (a.printedAt || 0));
 
-    requestsListTitle.textContent = REQUEST_TYPES.meter;
-    requestsListCount.textContent = `พิมพ์ไปแล้ว ${matches.length} เล่ม`;
-    requestsList.innerHTML = "";
+    extendWorkTitle.textContent = title;
+    extendWorkCount.textContent = `พิมพ์ไปแล้ว ${matches.length} เล่ม`;
+    extendWorkList.innerHTML = "";
 
     if (!matches.length) {
       const empty = document.createElement("div");
       empty.className = "request-empty";
-      empty.textContent = currentSearchQuery
+      empty.textContent = extendSearchQuery
         ? "ไม่พบสมุดคุมที่ตรงกับคำค้น"
         : "ยังไม่มีสมุดคุมที่พิมพ์ไว้ (ประวัติจะเริ่มบันทึกตั้งแต่ครั้งถัดไปที่กดพิมพ์)";
-      requestsList.appendChild(empty);
+      extendWorkList.appendChild(empty);
       return;
     }
 
@@ -5001,161 +4959,43 @@
       reprintBtn.textContent = "พิมพ์ซ้ำ";
       reprintBtn.addEventListener("click", (e) => {
         e.stopPropagation();
-        openDispatchReprint(dispatch);
+        onOpen(dispatch);
       });
       actions.appendChild(reprintBtn);
       card.appendChild(actions);
 
-      card.addEventListener("click", () => openDispatchReprint(dispatch));
-      requestsList.appendChild(card);
+      card.addEventListener("click", () => onOpen(dispatch));
+      extendWorkList.appendChild(card);
     });
   }
 
-  /** เหมือน renderGeneralDispatchHistory ด้านล่าง แต่ของสมุดคุมส่ง ผบร. */
+  /** The "ประวัติการส่ง" half of the meter tab: books already printed. */
+  function renderDispatchHistory() {
+    renderDispatchHistoryList({
+      title: REQUEST_TYPES.meter,
+      dispatches: getDispatches(),
+      printBtn: meterPrintBtn,
+      onOpen: openDispatchReprint
+    });
+  }
+
+  /** เหมือน renderDispatchHistory ด้านบน แต่ของสมุดคุมส่ง ผบร. */
   function renderRevenueDispatchHistory() {
-    requestsAddBtn.hidden = true;
-    revenuePrintBtn.hidden = true;
-
-    const matches = getRevenueDispatches()
-      .filter(d => dispatchMatchesSearch(d, currentSearchQuery))
-      .sort((a, b) => (b.printedAt || 0) - (a.printedAt || 0));
-
-    requestsListTitle.textContent = REQUEST_TYPES.revenueDispatch;
-    requestsListCount.textContent = `พิมพ์ไปแล้ว ${matches.length} เล่ม`;
-    requestsList.innerHTML = "";
-
-    if (!matches.length) {
-      const empty = document.createElement("div");
-      empty.className = "request-empty";
-      empty.textContent = currentSearchQuery
-        ? "ไม่พบสมุดคุมที่ตรงกับคำค้น"
-        : "ยังไม่มีสมุดคุมที่พิมพ์ไว้ (ประวัติจะเริ่มบันทึกตั้งแต่ครั้งถัดไปที่กดพิมพ์)";
-      requestsList.appendChild(empty);
-      return;
-    }
-
-    matches.forEach(dispatch => {
-      const rows = Array.isArray(dispatch.rows) ? dispatch.rows : [];
-      const card = document.createElement("div");
-      card.className = "request-card request-card-clickable";
-
-      card.innerHTML = `
-        <div class="request-card-top">
-          <div class="request-badges">
-            <span class="request-badge request-badge-id"></span>
-            <span class="request-badge request-badge-purpose"></span>
-          </div>
-          <span class="request-date"></span>
-        </div>
-        <div class="request-name"></div>
-        <div class="request-meta dispatch-meta-people"></div>
-      `;
-
-      card.querySelector(".request-badge-id").textContent = `${rows.length} รายการ`;
-
-      const printedByEl = card.querySelector(".request-badge-purpose");
-      if (dispatch.printedByName) {
-        printedByEl.textContent = `พิมพ์โดย ${dispatch.printedByName}`;
-      } else {
-        printedByEl.remove();
-      }
-
-      card.querySelector(".request-date").textContent = formatThaiDateTime(dispatch.printedAt);
-      card.querySelector(".request-name").textContent =
-        rows.map(row => row.customerName).filter(Boolean).join(", ") || "-";
-      card.querySelector(".dispatch-meta-people").textContent =
-        `ผู้ส่ง: ${dispatch.senderName || "-"} · ผู้รับ: ${dispatch.receiverName || "-"}`;
-
-      card.classList.add("has-card-actions");
-      const actions = document.createElement("div");
-      actions.className = "request-card-actions";
-      const reprintBtn = document.createElement("button");
-      reprintBtn.type = "button";
-      reprintBtn.className = "btn btn-ghost request-card-action-btn";
-      reprintBtn.textContent = "พิมพ์ซ้ำ";
-      reprintBtn.addEventListener("click", (e) => {
-        e.stopPropagation();
-        openRevenueDispatchReprint(dispatch);
-      });
-      actions.appendChild(reprintBtn);
-      card.appendChild(actions);
-
-      card.addEventListener("click", () => openRevenueDispatchReprint(dispatch));
-      requestsList.appendChild(card);
+    renderDispatchHistoryList({
+      title: REQUEST_TYPES.revenueDispatch,
+      dispatches: getRevenueDispatches(),
+      printBtn: revenuePrintBtn,
+      onOpen: openRevenueDispatchReprint
     });
   }
 
   /** เหมือน renderDispatchHistory ด้านบน แต่ของแท็บคำร้องทั่วไป (สมุดที่พิมพ์ส่ง ผสน. ไปแล้ว) */
   function renderGeneralDispatchHistory() {
-    requestsAddBtn.hidden = true;
-    generalPrintBtn.hidden = true;
-
-    const matches = getGeneralDispatches()
-      .filter(d => dispatchMatchesSearch(d, currentSearchQuery))
-      .sort((a, b) => (b.printedAt || 0) - (a.printedAt || 0));
-
-    requestsListTitle.textContent = REQUEST_TYPES.generalDispatch;
-    requestsListCount.textContent = `พิมพ์ไปแล้ว ${matches.length} เล่ม`;
-    requestsList.innerHTML = "";
-
-    if (!matches.length) {
-      const empty = document.createElement("div");
-      empty.className = "request-empty";
-      empty.textContent = currentSearchQuery
-        ? "ไม่พบสมุดคุมที่ตรงกับคำค้น"
-        : "ยังไม่มีสมุดคุมที่พิมพ์ไว้ (ประวัติจะเริ่มบันทึกตั้งแต่ครั้งถัดไปที่กดพิมพ์)";
-      requestsList.appendChild(empty);
-      return;
-    }
-
-    matches.forEach(dispatch => {
-      const rows = Array.isArray(dispatch.rows) ? dispatch.rows : [];
-      const card = document.createElement("div");
-      card.className = "request-card request-card-clickable";
-
-      card.innerHTML = `
-        <div class="request-card-top">
-          <div class="request-badges">
-            <span class="request-badge request-badge-id"></span>
-            <span class="request-badge request-badge-purpose"></span>
-          </div>
-          <span class="request-date"></span>
-        </div>
-        <div class="request-name"></div>
-        <div class="request-meta dispatch-meta-people"></div>
-      `;
-
-      card.querySelector(".request-badge-id").textContent = `${rows.length} รายการ`;
-
-      const printedByEl = card.querySelector(".request-badge-purpose");
-      if (dispatch.printedByName) {
-        printedByEl.textContent = `พิมพ์โดย ${dispatch.printedByName}`;
-      } else {
-        printedByEl.remove();
-      }
-
-      card.querySelector(".request-date").textContent = formatThaiDateTime(dispatch.printedAt);
-      card.querySelector(".request-name").textContent =
-        rows.map(row => row.customerName).filter(Boolean).join(", ") || "-";
-      card.querySelector(".dispatch-meta-people").textContent =
-        `ผู้ส่ง: ${dispatch.senderName || "-"} · ผู้รับ: ${dispatch.receiverName || "-"}`;
-
-      card.classList.add("has-card-actions");
-      const actions = document.createElement("div");
-      actions.className = "request-card-actions";
-      const reprintBtn = document.createElement("button");
-      reprintBtn.type = "button";
-      reprintBtn.className = "btn btn-ghost request-card-action-btn";
-      reprintBtn.textContent = "พิมพ์ซ้ำ";
-      reprintBtn.addEventListener("click", (e) => {
-        e.stopPropagation();
-        openGeneralDispatchReprint(dispatch);
-      });
-      actions.appendChild(reprintBtn);
-      card.appendChild(actions);
-
-      card.addEventListener("click", () => openGeneralDispatchReprint(dispatch));
-      requestsList.appendChild(card);
+    renderDispatchHistoryList({
+      title: REQUEST_TYPES.generalDispatch,
+      dispatches: getGeneralDispatches(),
+      printBtn: generalPrintBtn,
+      onOpen: openGeneralDispatchReprint
     });
   }
 
@@ -5168,7 +5008,7 @@
    * saveRequests() path as anything else, so there's no special "this record
    * came from a search" case to keep correct in the edit/save logic.
    */
-  async function searchArchivedAndMerge(query, triggerBtn) {
+  async function searchArchivedAndMerge(query, triggerBtn, onDone = renderRequestsList) {
     setBusy(triggerBtn, true, "กำลังค้นหา...");
     try {
       const found = await backend.searchArchived(query);
@@ -5180,7 +5020,11 @@
       const knownIds = new Set(requestsCache.map(r => String(r.id)));
       const fresh = found.filter(r => !knownIds.has(String(r.id)));
       requestsCache = requestsCache.concat(fresh);
-      renderRequestsList();
+      // เรียกฟังก์ชันวาดของหน้าที่กำลังแสดงอยู่จริง -- เดิมมีแค่หน้างานรับคำร้อง
+      // เดียว ตอนนี้แท็บ dispatch ทั้ง 3 ย้ายไปอยู่ในโมดูลงาน ต้องเรียก
+      // renderExtendWork() แทนถ้าค้นจากที่นั่น ไม่งั้นข้อมูลใหม่จะไม่ขึ้นจนกว่า
+      // จะสลับหน้าไปมา
+      onDone();
     } catch (err) {
       console.error("CS Connect: ค้นหาคำร้องเก่าไม่สำเร็จ", err);
       triggerBtn.textContent = "ค้นหาไม่สำเร็จ ลองใหม่อีกครั้ง";
@@ -5214,17 +5058,10 @@
     item.addEventListener("click", () => {
       const filter = item.dataset.filter;
 
-      // ขอใช้ไฟฟ้า/ขอขยายเขตฯ มีหน้าคิวงานของตัวเอง (งานขอใช้ไฟฟ้า/งานขยายเขต
-      // ระบบจำหน่ายไฟฟ้า -- extendWorkView) ซึ่งมีเครื่องมือครบกว่าแค่รายการเฉย ๆ
-      // ในหน้านี้ (ชิปสถานะ, จ่ายงาน, ตัวกรองช่วงวันที่) กดสองแท็บนี้จากเมนูซ้าย
-      // ของหน้างานรับคำร้อง จึงพาไปที่หน้านั้นแทน ไม่ต้องแสดงรายการซ้ำอยู่ที่นี่
-      // อีกชุด (ตามที่เจ้าของระบบขอ)
-      if (filter === "power" || filter === "extend") {
-        openExtendWorkView({ kind: filter });
-        saveNavState({ card: filter });
-        return;
-      }
-
+      // หน้างานรับคำร้องรับได้ทุกประเภท -- กดแท็บไหนก็แสดงรายการ+ปุ่มเพิ่มคำร้อง
+      // ของประเภทนั้นในหน้านี้เอง (เคยพาไปหน้างานของแต่ละประเภท แต่ทำให้หน้านี้
+      // เพิ่มคำร้องไม่ครบทุกประเภท) ส่วนงานตรวจสอบ/คุมส่งแผนกอยู่ที่หน้างานของ
+      // แต่ละประเภทจากการ์ดหน้าแรก
       switchRequestsTab(filter);
       // แท็บอยู่ใต้การ์ด "งานรับคำร้อง" เดียวกันเสมอ -- อัปเดตแค่ค่า filter ทับ
       // ของเดิม ไม่ต้องเปลี่ยน card เพราะยังเป็นการ์ดเดิม
@@ -6159,23 +5996,24 @@
     }
 
     // คำร้องขอขยายเขตฯ ทำงานจบในโมดูลของตัวเอง ไม่ใช่ในหน้างานรับคำร้อง --
-    // ย้ายฟอร์มไปไว้ในหน้ารายละเอียดของโมดูลนั้น แล้วสลับหน้าไปที่นั่น
-    // ขอใช้ไฟฟ้าที่ "บันทึกแล้ว" เปิดในหน้างานขอใช้ไฟฟ้า ส่วนใบใหม่ที่เปิดจากหน้า
-    // งานรับคำร้อง (options.openInWork ไม่ได้ส่งมา) และโหมดเพิ่มหลายคำร้อง ยังอยู่
-    // ในหน้ารับคำร้อง -- การรับเรื่องเข้าระบบเป็นงานของหน้านั้น และโหมดหลายคำร้อง
-    // ต้องใช้พื้นที่ของหน้ารับคำร้องทั้งหมด ส่วนใบใหม่ที่เปิดจากปุ่ม "+ เพิ่มคำร้อง"
-    // ในหน้างานขอใช้ไฟฟ้า/งานขยายเขตฯ เอง (extendWorkAddBtn) ส่ง openInWork มาเพื่อ
-    // ให้ยังอยู่ในโมดูลนั้นต่อ ไม่กระโดดไปหน้ารับคำร้องทั้งที่กดเพิ่มจากอีกหน้าหนึ่ง
-    const openInWork = isSupported && (isExtend || (isPower && !batchMode && (record || options.openInWork)));
+    // ย้ายฟอร์มไปไว้ในหน้ารายละเอียดของโมดูลนั้น แล้วสลับหน้าไปที่นั่น (เสมอ
+    // ไม่ว่าใบใหม่หรือใบเก่า) ขอใช้ไฟฟ้า/คำร้องทั่วไป/ขอเงินประกันคืนมีโมดูลงาน
+    // ของตัวเองเหมือนกัน แต่กติกาต่างจาก extend เล็กน้อย: ใบที่ "บันทึกแล้ว" เปิด
+    // ในโมดูลงานเลย ส่วนใบใหม่ที่เปิดจากหน้างานรับคำร้อง (options.openInWork
+    // ไม่ได้ส่งมา) และโหมดเพิ่มหลายคำร้อง (power เท่านั้น) ยังอยู่ในหน้ารับคำร้อง
+    // -- การรับเรื่องเข้าระบบเป็นงานของหน้านั้น และโหมดหลายคำร้องต้องใช้พื้นที่
+    // ของหน้ารับคำร้องทั้งหมด ส่วนใบใหม่ที่เปิดจากปุ่ม "+ เพิ่มคำร้อง" ในโมดูลงาน
+    // เอง (extendWorkAddBtn) ส่ง openInWork มาเพื่อให้ยังอยู่ในโมดูลนั้นต่อ ไม่
+    // กระโดดไปหน้ารับคำร้องทั้งที่กดเพิ่มจากอีกหน้าหนึ่ง
+    const hasWorkModule = isPower || isGeneral || isDeposit;
+    const openInWork = isSupported && (isExtend || (hasWorkModule && !batchMode && (record || options.openInWork)));
     document.getElementById("reqAssigneeField").hidden =
       !(isPower && record && (WORK_KIND_ASSIGNABLE.power || record.assignee));
 
     if (openInWork) {
       setWorkKind(type);
-      mountExtendDetail(isExtend ? extendForm : requestForm);
-      extendDetailTitle.textContent = record
-        ? "รายละเอียดคำร้อง"
-        : "เพิ่มคำร้องขอขยายเขตฯ";
+      mountExtendDetail(type);
+      extendDetailTitle.textContent = record ? "รายละเอียดคำร้อง" : `เพิ่มคำร้อง: ${REQUEST_TYPES[type]}`;
       extendDetailSubtitle.textContent = record
         ? (isExtend
           ? [record.requestNumber, record.customerName, record.wbs]
@@ -6183,7 +6021,7 @@
         ).filter(Boolean).join(" · ")
         : "กรอกรายละเอียดคำร้องใหม่";
       if (!isExtend) {
-        // ขอใช้ไฟฟ้าไม่มีขั้นแผนผัง/ภาพหน้างาน/ประมาณการ
+        // มีแค่ขอขยายเขตฯ ที่มีขั้นแผนผัง/ภาพหน้างาน/ประมาณการ ประเภทอื่นไม่มี
         extendStage.plan = false;
         extendStage.photo = false;
         extendStage.estimate = false;
@@ -9252,7 +9090,9 @@ ${sheetHtml}
 
   const WORK_KIND_TITLES = {
     extend: "งานขยายเขตระบบจำหน่ายไฟฟ้า",
-    power: "งานขอใช้ไฟฟ้า"
+    power: "งานขอใช้ไฟฟ้า",
+    general: "งานคำร้องทั่วไป",
+    deposit: "งานขอรับเงินประกัน"
   };
 
   let extendFilter = EXTEND_FILTER_ALL;
@@ -9284,8 +9124,16 @@ ${sheetHtml}
    * ในฟอร์มแล้วต้องมาเพิ่มในลิสต์ที่นี่อีกที วันหนึ่งมันจะไม่ตรงกัน แล้วจะมีงาน
    * ที่ไม่โผล่ในชิปไหนเลย
    */
+  const WORK_KIND_STATUS_SELECT_ID = {
+    power: "reqJobStatus",
+    extend: null, // extJobStatus is a JS reference, not looked up by id here
+    general: "genJobStatus",
+    deposit: "depJobStatus"
+  };
+
   function extendStatuses() {
-    const select = workKind === "power" ? document.getElementById("reqJobStatus") : extJobStatus;
+    const select = workKind === "extend" ? extJobStatus
+      : document.getElementById(WORK_KIND_STATUS_SELECT_ID[workKind] || "reqJobStatus");
     return Array.from(select.options).map(o => o.value).filter(Boolean);
   }
 
@@ -9297,7 +9145,7 @@ ${sheetHtml}
    * ที่ดูเหมือนไม่มีงาน ส่วนการกลับมาประเภทเดิม (keepView) ไม่ผ่านทางนี้ มุมมองจึงคงอยู่
    */
   function setWorkKind(kind) {
-    if (kind !== "extend" && kind !== "power") return;
+    if (!WORK_KIND_TITLES[kind]) return;
 
     if (kind !== workKind) {
       workKind = kind;
@@ -9310,6 +9158,14 @@ ${sheetHtml}
       extendWorkDateTo.value = "";
       extendPersonEmail = "";
       extendSelection.clear();
+      // เปลี่ยนประเภทงานแล้ว ตะกร้า/โหมดของแท็บ dispatch (เป็นของประเภทเดิม)
+      // ไม่มีความหมายกับประเภทใหม่เลย ล้างทิ้งเหมือนตอนกดชิปใน renderExtendChips
+      meterSelection.clear();
+      setMeterMode("pending");
+      generalSelection.clear();
+      setGeneralMode("pending");
+      revenueSelection.clear();
+      setRevenueMode("pending");
     }
 
     document.getElementById("extendWorkTopTitle").textContent = WORK_KIND_TITLES[workKind];
@@ -9323,21 +9179,31 @@ ${sheetHtml}
   }
 
   /**
-   * ย้ายฟอร์มคำร้องขอขยายเขตฯ กับแผงประวัติเข้า/ออกจากหน้ารายละเอียดของโมดูลนี้
+   * ย้ายฟอร์มคำร้อง (ขอใช้ไฟฟ้า/ขอขยายเขตฯ/คำร้องทั่วไป/ขอเงินประกันคืน) กับ
+   * แผงประวัติเข้า/ออกจากหน้ารายละเอียดของโมดูลนี้ -- เดิมรองรับแค่ 2 ประเภท
+   * (ขอใช้ไฟฟ้า/ขอขยายเขตฯ) ขยายเป็น 4 ประเภทตอนเพิ่มงานคำร้องทั่วไป/ขอรับเงิน
+   * ประกันเข้าโมดูลงานเดียวกันนี้ด้วย (ดู workKind)
    *
-   * ย้ายโหนดจริงด้วย appendChild ไม่ได้ก๊อบมาร์กอัปมาไว้สองที่ -- ฟอร์มยาวร่วม
-   * สองร้อยบรรทัดและมี event ผูกไว้เต็มไปหมด สองชุดคือสองชุดที่ต้องแก้ให้ตรงกัน
+   * ย้ายโหนดจริงด้วย appendChild ไม่ได้ก๊อบมาร์กอัปมาไว้สองที่ -- แต่ละฟอร์มยาว
+   * หลายร้อยบรรทัดและมี event ผูกไว้เต็มไปหมด สองชุดคือสองชุดที่ต้องแก้ให้ตรงกัน
    * ตลอดไป ส่วนการย้ายโหนดพา event กับค่าที่กรอกไว้ไปด้วยทั้งหมด
    *
-   * บ้านเดิมของทั้งสองอันอยู่ในหน้างานรับคำร้อง (ฟอร์มขอใช้ไฟฟ้าใช้แผงประวัติ
-   * ตัวเดียวกัน) จึงต้องย้ายกลับทุกครั้งที่เปิดฟอร์มประเภทอื่น
+   * บ้านเดิมของทั้งสี่อันอยู่ในหน้างานรับคำร้อง (ทุกฟอร์มใช้แผงประวัติตัวเดียวกัน)
+   * จึงต้องย้ายกลับทุกครั้งที่เปิดฟอร์มประเภทอื่น
    */
-  const extendFormHome = extendForm.parentElement;
+  const FORM_ELEMENTS = { power: requestForm, extend: extendForm, general: generalForm, deposit: depositForm };
+
   // จุดยึดตำแหน่งเดิมของฟอร์มขอใช้ไฟฟ้าในหน้ารับคำร้อง -- ต้องกลับไปที่ "เดิม" จริง
   // ไม่ใช่ต่อท้าย .form-main เพราะ #batchResult กับฟอร์มอื่นอยู่ในกล่องเดียวกัน
-  // และลำดับของมันมีผลตอนโหมดเพิ่มหลายคำร้อง
+  // และลำดับของมันมีผลตอนโหมดเพิ่มหลายคำร้อง -- อีกสามฟอร์มไม่มีโหมดกลุ่มและไม่มี
+  // sibling ที่แคร์ลำดับ จึงจำแค่ parentElement เดิมพอ (เหมือนที่ extendForm เคยทำ)
   const requestFormAnchor = document.createComment("requestForm home");
   requestForm.parentElement.insertBefore(requestFormAnchor, requestForm);
+  const FORM_HOMES = {
+    extend: extendForm.parentElement,
+    general: generalForm.parentElement,
+    deposit: depositForm.parentElement
+  };
   const requestFormMetaHome = requestFormMeta.parentElement;
   const extendFormLayout = extendPaneMeta.parentElement;
 
@@ -9380,18 +9246,26 @@ ${sheetHtml}
   // ลากขอบหน้าต่างข้ามเกณฑ์แล้วต้องย้ายตาม ไม่ใช่ค้างผิดที่จนกว่าจะเปิดฟอร์มใหม่
   summaryWideLayout.addEventListener("change", placeSummaryCard);
 
-  function sendRequestFormHome() {
-    if (requestForm.previousSibling !== requestFormAnchor) {
-      requestFormAnchor.parentNode.insertBefore(requestForm, requestFormAnchor.nextSibling);
+  /** ส่งฟอร์มประเภทหนึ่งกลับบ้านเดิมของมันในหน้างานรับคำร้อง ถ้ายังไม่ได้อยู่ที่นั่น */
+  function sendFormHome(type) {
+    const form = FORM_ELEMENTS[type];
+    if (type === "power") {
+      if (form.previousSibling !== requestFormAnchor) {
+        requestFormAnchor.parentNode.insertBefore(form, requestFormAnchor.nextSibling);
+      }
+      return;
     }
+    const home = FORM_HOMES[type];
+    if (form.parentElement !== home) home.appendChild(form);
   }
 
-  /** form = ฟอร์มที่จะวางในหน้ารายละเอียด (ขอขยายเขตฯ หรือขอใช้ไฟฟ้า) อีกฟอร์มกลับบ้าน */
-  function mountExtendDetail(form) {
-    const target = form || extendForm;
+  /** type = ประเภทฟอร์มที่จะวางในหน้ารายละเอียด อีกสามประเภทกลับบ้านหมด */
+  function mountExtendDetail(type) {
+    const target = FORM_ELEMENTS[type] || extendForm;
 
-    if (target === extendForm) sendRequestFormHome();
-    else if (extendForm.parentElement !== extendFormHome) extendFormHome.appendChild(extendForm);
+    Object.keys(FORM_ELEMENTS).forEach(key => {
+      if (FORM_ELEMENTS[key] !== target) sendFormHome(key);
+    });
 
     if (target.parentElement !== extendPaneForm) extendPaneForm.appendChild(target);
     if (requestFormMeta.parentElement !== extendPaneMeta) extendPaneMeta.appendChild(requestFormMeta);
@@ -9399,8 +9273,7 @@ ${sheetHtml}
   }
 
   function unmountExtendDetail() {
-    sendRequestFormHome();
-    if (extendForm.parentElement !== extendFormHome) extendFormHome.appendChild(extendForm);
+    Object.keys(FORM_ELEMENTS).forEach(sendFormHome);
     if (requestFormMeta.parentElement !== requestFormMetaHome) {
       requestFormMetaHome.appendChild(requestFormMeta);
     }
@@ -9455,7 +9328,10 @@ ${sheetHtml}
    * ชิป "งานของฉัน"/"งานในมือแต่ละคน" (ไม่มีใครถูกจ่ายงาน ชิปจะเป็นศูนย์ตลอด)
    * บรรทัด "ยังไม่ได้จ่ายงาน" บนการ์ด และช่องผู้รับผิดชอบในฟอร์ม
    */
-  const WORK_KIND_ASSIGNABLE = { extend: true, power: true };
+  // คำร้องทั่วไปกับขอเงินประกันคืนเป็นงานธุรการ/การเงิน ไม่ใช่งานภาคสนามที่ต้อง
+  // จ่ายให้ช่างคนใดคนหนึ่งไปทำ จึงปิดไว้เหมือนที่ assign_requests ฝั่ง SQL
+  // ปฏิเสธ type นอกเหนือ extend/power อยู่แล้ว (ดู supabase/migrations)
+  const WORK_KIND_ASSIGNABLE = { extend: true, power: true, general: false, deposit: false };
 
   function workAssignable() {
     return Boolean(WORK_KIND_ASSIGNABLE[workKind]);
@@ -9632,6 +9508,13 @@ ${sheetHtml}
       key: status,
       label: status,
       count: jobs.filter(r => r.jobStatus === status).length
+    })
+    // แท็บ dispatch ของประเภทงานนี้ (ถ้ามี) -- ย้ายมาจากหน้างานรับคำร้องเดิม
+    // ต่อท้ายสุด เพราะเป็น "มุมมองพิเศษ" แยกจากสถานะปกติของงาน
+    )).concat((WORK_KIND_DISPATCH_TABS[workKind] || []).map(tab => ({
+      key: tab.key,
+      label: tab.label,
+      count: jobs.filter(DERIVED_TAB_FILTERS[tab.key]).length
     })));
 
     extendWorkChips.innerHTML = "";
@@ -9658,6 +9541,16 @@ ${sheetHtml}
         // เลือกไว้ในมุมมองก่อนหน้าแล้วเปลี่ยนมุมมอง = ไม่รู้แล้วว่ากำลังจะจ่าย
         // งานใบไหนบ้าง ล้างทิ้งดีกว่าปล่อยให้เลือกค้างข้ามหน้าจอ
         extendSelection.clear();
+        // เหมือนกับตอนสลับแท็บในหน้างานรับคำร้องเดิมทุกประการ (switchRequestsTab)
+        // -- ล้างตะกร้า+กลับโหมด "รอส่ง" ของทั้ง 3 แท็บ dispatch ทุกครั้งที่กดชิป
+        // ไหนก็ตาม ไม่ใช่แค่ตอนออกจากแท็บ dispatch เอง กันไม่ให้กลับมาเจอโหมด
+        // ประวัติการส่งค้างอยู่โดยไม่รู้ตัว
+        meterSelection.clear();
+        setMeterMode("pending");
+        generalSelection.clear();
+        setGeneralMode("pending");
+        revenueSelection.clear();
+        setRevenueMode("pending");
         renderExtendWork();
       });
 
@@ -9967,9 +9860,96 @@ ${sheetHtml}
     return true;
   }
 
+  /**
+   * แท็บคุมคำร้องส่งแผนกต่าง ๆ (แจ้งเตือนการรับชำระเงิน/คุมคำร้องส่งแผนกมิเตอร์
+   * -- workKind power, คุมคำร้องส่งแผนกสนับสนุน -- workKind general, คุมคำร้อง
+   * ส่ง ผบร. -- workKind deposit) ย้ายมาจากหน้างานรับคำร้องเดิมทั้งชุด (ตรรกะ
+   * กรอง/checkbox/โหมด/ประวัติ ไม่เปลี่ยนเลย แค่ย้ายมาวาดใน extendWorkList
+   * แทน requestsList) ใช้ renderRequestCardsInto ตัวเดียวกับหน้างานรับคำร้อง
+   * เพราะสามแท็บนี้เป็นการ์ดหน้าตาแบบ "request card" ธรรมดา ไม่ใช่การ์ดงานแบบ
+   * ที่ใช้ในมุมมองอื่นของโมดูลนี้ (renderExtendCard/renderJobsByStatus)
+   */
+  function renderExtendDispatchTab(filterKey, jobs) {
+    const derivedFilter = DERIVED_TAB_FILTERS[filterKey];
+    // ทั้งประเภทงาน ไม่กรองด้วยคำค้น/ช่วงวันที่ -- ใช้ตัดสินว่า id ที่เลือกไว้
+    // (ตะกร้าเช็คบ็อก) ยังอยู่ในแท็บนี้ไหม เหมือน eligibleForTab ตอนอยู่หน้า
+    // งานรับคำร้องเดิมทุกประการ
+    const eligibleForTab = jobs.filter(derivedFilter);
+    const filtered = sortRequestsForDisplay(
+      eligibleForTab
+        .filter(extendDateFilterMatches)
+        .filter(r => matchesSearch(r, extendSearchQuery))
+    );
+
+    extendWorkTitle.textContent = REQUEST_TYPES[filterKey];
+    extendWorkCount.textContent = `ทั้งหมด ${filtered.length} รายการ`;
+    // แท็บ dispatch เป็นมุมมองกรองข้อมูลที่มีอยู่แล้ว ไม่มีอะไรให้เพิ่มใหม่ตรงนี้
+    extendWorkAddBtn.hidden = true;
+
+    const isMeterTab = filterKey === "meter";
+    meterModes.hidden = !isMeterTab;
+    if (isMeterTab && meterMode === "history") { renderDispatchHistory(); return; }
+    meterPrintBtn.hidden = !isMeterTab;
+    if (isMeterTab) {
+      const eligibleIds = new Set(eligibleForTab.map(r => r.id));
+      meterSelection.forEach(id => { if (!eligibleIds.has(id)) meterSelection.delete(id); });
+      meterPrintBtn.disabled = meterSelection.size === 0;
+      updateSelectionButtonLabel(meterPrintBtn, meterSelection.size);
+    }
+
+    const isGeneralTab = filterKey === "generalDispatch";
+    generalModes.hidden = !isGeneralTab;
+    if (isGeneralTab && generalMode === "history") { renderGeneralDispatchHistory(); return; }
+    generalPrintBtn.hidden = !isGeneralTab;
+    if (isGeneralTab) {
+      const eligibleIds = new Set(eligibleForTab.map(r => r.id));
+      generalSelection.forEach(id => { if (!eligibleIds.has(id)) generalSelection.delete(id); });
+      generalPrintBtn.disabled = generalSelection.size === 0;
+      updateSelectionButtonLabel(generalPrintBtn, generalSelection.size);
+    }
+
+    const isRevenueTab = filterKey === "revenueDispatch";
+    revenueModes.hidden = !isRevenueTab;
+    if (isRevenueTab && revenueMode === "history") { renderRevenueDispatchHistory(); return; }
+    revenuePrintBtn.hidden = !isRevenueTab;
+    if (isRevenueTab) {
+      const eligibleIds = new Set(eligibleForTab.map(r => r.id));
+      revenueSelection.forEach(id => { if (!eligibleIds.has(id)) revenueSelection.delete(id); });
+      revenuePrintBtn.disabled = revenueSelection.size === 0;
+      updateSelectionButtonLabel(revenuePrintBtn, revenueSelection.size);
+    }
+
+    // "payment" ไม่มี checkbox/print ของตัวเอง -- แต่ละใบมีปุ่ม "พิมพ์ Slip" อยู่
+    // บนการ์ดเองแล้ว (ดู renderRequestCardsInto) isMeterTab/isGeneralTab/
+    // isRevenueTab เป็น false หมดตอนอยู่แท็บนี้ ปุ่ม/โหมดของอีกสามแท็บจึงถูกซ่อน
+    // ไปแล้วโดยอัตโนมัติจากสามบล็อกข้างบน
+    renderRequestCardsInto(extendWorkList, filtered, {
+      isMeterTab, isGeneralTab, isRevenueTab,
+      searchQuery: extendSearchQuery,
+      onArchiveMerged: renderExtendWork
+    });
+  }
+
   function renderExtendWork() {
     const jobs = extendJobs();
     renderExtendChips(jobs);
+
+    // ชิป dispatch (แจ้งเตือนการรับชำระเงิน/คุมคำร้องส่งแผนกต่าง ๆ) วาดคนละแบบ
+    // กับมุมมองงานปกติ (การ์ดแบบ "request card" ธรรมดา ไม่ใช่การ์ดงานที่จัดกลุ่ม
+    // ตามสถานะ) และ extendFilterMatches ก็ไม่รู้จัก key พวกนี้ (จะเข้าใจผิดว่า
+    // เป็นชื่อสถานะแล้วไม่เจอคำร้องไหนเลย) จึงต้องแยกออกไปทั้งหมดตั้งแต่ต้นฟังก์ชัน
+    if (DERIVED_TAB_FILTERS[extendFilter]) {
+      renderExtendDispatchTab(extendFilter, jobs);
+      return;
+    }
+
+    extendWorkAddBtn.hidden = false;
+    meterModes.hidden = true;
+    meterPrintBtn.hidden = true;
+    generalModes.hidden = true;
+    generalPrintBtn.hidden = true;
+    revenueModes.hidden = true;
+    revenuePrintBtn.hidden = true;
 
     const filtered = sortRequestsForDisplay(jobs
       .filter(extendFilterMatches)
@@ -10239,7 +10219,6 @@ ${sheetHtml}
     }
 
     bootOverlay.hidden = true;
-    updateTabBadges();
     enterApp();
     restoreNavState();
   }
