@@ -24,7 +24,7 @@
 <title>CS Connect</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=Sarabun:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=20260917d">
+<link rel="stylesheet" href="style.css?v=20260918a">
 </head>
 <body>
 
@@ -1165,6 +1165,12 @@
           <h2 id="extendWorkTitle">งานทั้งหมด</h2>
           <p id="extendWorkCount" class="requests-count"></p>
         </div>
+        <div class="requests-heading-actions">
+          <!-- เพิ่มคำร้องได้ตรงจากหน้านี้เลย ไม่ต้องย้อนกลับไปหน้างานรับคำร้อง
+               ก่อน -- ปุ่มเดียวใช้ร่วมกันทั้งงานขอใช้ไฟฟ้าและงานขยายเขตฯ เพราะ
+               เป็นโมดูลเดียวกันสลับด้วย workKind (ดู extendWorkAddBtn ใน app.js) -->
+          <button type="button" id="extendWorkAddBtn" class="btn btn-primary">+ เพิ่มคำร้อง</button>
+        </div>
       </div>
 
       <div class="requests-search">
@@ -1619,6 +1625,6 @@
      **ต้องเปลี่ยนเลขนี้ทุกครั้งที่แก้ app.js / style.css / track.js / qr.js**
      ไม่งั้นผู้ใช้บางคนจะยังได้ไฟล์เก่าไปอีกพักใหญ่ -->
 <script src="vendor/supabase.js?v=2.116.0"></script>
-<script src="app.js?v=20260917d"></script>
+<script src="app.js?v=20260918a"></script>
 </body>
 </html>

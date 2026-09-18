@@ -6133,10 +6133,13 @@
 
     // คำร้องขอขยายเขตฯ ทำงานจบในโมดูลของตัวเอง ไม่ใช่ในหน้างานรับคำร้อง --
     // ย้ายฟอร์มไปไว้ในหน้ารายละเอียดของโมดูลนั้น แล้วสลับหน้าไปที่นั่น
-    // ขอใช้ไฟฟ้าที่ "บันทึกแล้ว" เปิดในหน้างานขอใช้ไฟฟ้า ส่วนใบใหม่และโหมดเพิ่มหลาย
-    // คำร้องยังอยู่ในหน้ารับคำร้อง -- การรับเรื่องเข้าระบบเป็นงานของหน้านั้น และโหมด
-    // หลายคำร้องต้องใช้พื้นที่ของหน้ารับคำร้องทั้งหมด
-    const openInWork = isSupported && (isExtend || (isPower && record && !batchMode));
+    // ขอใช้ไฟฟ้าที่ "บันทึกแล้ว" เปิดในหน้างานขอใช้ไฟฟ้า ส่วนใบใหม่ที่เปิดจากหน้า
+    // งานรับคำร้อง (options.openInWork ไม่ได้ส่งมา) และโหมดเพิ่มหลายคำร้อง ยังอยู่
+    // ในหน้ารับคำร้อง -- การรับเรื่องเข้าระบบเป็นงานของหน้านั้น และโหมดหลายคำร้อง
+    // ต้องใช้พื้นที่ของหน้ารับคำร้องทั้งหมด ส่วนใบใหม่ที่เปิดจากปุ่ม "+ เพิ่มคำร้อง"
+    // ในหน้างานขอใช้ไฟฟ้า/งานขยายเขตฯ เอง (extendWorkAddBtn) ส่ง openInWork มาเพื่อ
+    // ให้ยังอยู่ในโมดูลนั้นต่อ ไม่กระโดดไปหน้ารับคำร้องทั้งที่กดเพิ่มจากอีกหน้าหนึ่ง
+    const openInWork = isSupported && (isExtend || (isPower && !batchMode && (record || options.openInWork)));
     document.getElementById("reqAssigneeField").hidden =
       !(isPower && record && (WORK_KIND_ASSIGNABLE.power || record.assignee));
 
@@ -9190,6 +9193,7 @@ ${sheetHtml}
   const extendWorkChips = document.getElementById("extendWorkChips");
   const extendWorkTitle = document.getElementById("extendWorkTitle");
   const extendWorkCount = document.getElementById("extendWorkCount");
+  const extendWorkAddBtn = document.getElementById("extendWorkAddBtn");
   const extendWorkSearch = document.getElementById("extendWorkSearch");
   const extendAssignBar = document.getElementById("extendAssignBar");
   const extendAssignCount = document.getElementById("extendAssignCount");
@@ -10026,6 +10030,15 @@ ${sheetHtml}
   extendWorkSearch.addEventListener("input", (e) => {
     extendSearchQuery = e.target.value.trim();
     renderExtendWork();
+  });
+
+  // เพิ่มคำร้องได้ตรงจากหน้านี้เลย -- workKind ตัดสินว่ากำลังเพิ่มขอใช้ไฟฟ้า
+  // หรือขยายเขตฯ (โมดูลเดียวกันสลับด้วยตัวแปรนี้อยู่แล้ว) openInWork: true ให้
+  // openRequestForm() รู้ว่านี่คือใบใหม่ที่ต้องอยู่ในโมดูลนี้ต่อ ไม่ใช่กระโดดไป
+  // หน้างานรับคำร้อง (ดูเหตุผลเต็มที่ openRequestForm) returnTo: "extendWork"
+  // ให้บันทึก/ย้อนกลับแล้วเด้งกลับมาที่รายการงานนี้ ไม่ใช่หน้ารับคำร้อง
+  extendWorkAddBtn.addEventListener("click", () => {
+    openRequestForm(workKind, null, { returnTo: "extendWork", openInWork: true });
   });
 
   document.getElementById("extendWorkBackBtn").addEventListener("click", () => {
