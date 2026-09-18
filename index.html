@@ -24,7 +24,7 @@
 <title>CS Connect</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=Sarabun:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=20260918b">
+<link rel="stylesheet" href="style.css?v=20260918c">
 </head>
 <body>
 
@@ -1184,6 +1184,17 @@
         </button>
       </div>
 
+      <!-- กรองด้วยช่วงวันที่รับคำร้อง -- ใช้ดูปริมาณคำร้องที่เข้ามาต่อช่วงเวลา
+           (เลข "ทั้งหมด N รายการ" ข้างชื่อมุมมองจะสะท้อนตามช่วงที่กรองไว้ทันที)
+           ว่างทั้งคู่ = ไม่กรอง เว้นค่าใดค่าหนึ่งว่างไว้ก็กรองแค่ด้านที่กรอก -->
+      <div class="requests-date-filter">
+        <label for="extendWorkDateFrom">รับคำร้องตั้งแต่</label>
+        <input type="date" id="extendWorkDateFrom">
+        <label for="extendWorkDateTo">ถึงวันที่</label>
+        <input type="date" id="extendWorkDateTo">
+        <button type="button" id="extendWorkDateClearBtn" class="btn btn-ghost">ล้างตัวกรองวันที่</button>
+      </div>
+
       <!-- ชิปกรองสถานะ -- คลิกเดียวเปลี่ยนมุมมอง วาดจาก app.js เพราะจำนวนและ
            ตัวเลขบนชิปมาจากข้อมูลจริง ไม่ใช่รายการตายตัวใน HTML -->
       <div id="extendWorkChips" class="status-chips"></div>
@@ -1625,6 +1636,6 @@
      **ต้องเปลี่ยนเลขนี้ทุกครั้งที่แก้ app.js / style.css / track.js / qr.js**
      ไม่งั้นผู้ใช้บางคนจะยังได้ไฟล์เก่าไปอีกพักใหญ่ -->
 <script src="vendor/supabase.js?v=2.116.0"></script>
-<script src="app.js?v=20260918b"></script>
+<script src="app.js?v=20260918c"></script>
 </body>
 </html>

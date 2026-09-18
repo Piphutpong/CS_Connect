@@ -1409,6 +1409,40 @@ button:active {
   box-shadow: 0 0 0 3px var(--volt-100);
 }
 
+/* กรองด้วยช่วงวันที่รับคำร้อง (งานขอใช้ไฟฟ้า/งานขยายเขตฯ) -- แถวเดียวกัน
+   label+input คู่ละสอง แล้วปุ่มล้างท้ายแถว ห่อบรรทัดได้บนจอแคบเหมือน .requests-search */
+.requests-date-filter {
+  margin-top: 12px;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 10px;
+  font-size: 13.5px;
+  color: var(--ink-soft);
+}
+
+.requests-date-filter input[type="date"] {
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 13.5px;
+  font-family: inherit;
+  color: var(--ink);
+  background: var(--white);
+  outline: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.requests-date-filter input[type="date"]:focus {
+  border-color: var(--volt-300);
+  box-shadow: 0 0 0 3px var(--volt-100);
+}
+
+.requests-date-filter .btn {
+  padding: 6px 12px;
+  font-size: 13px;
+}
+
 /* สลับทิศทางเรียง (วันที่รับคำร้อง แล้วเลขที่คำร้อง) -- ปุ่มเดียวสลับสองสถานะ
    แทนที่จะเป็นคู่ปุ่มแบบ .requests-mode-btn เพราะมีแค่สองทิศทางให้เลือก
    ไม่ใช่สามโหมดขึ้นไปแบบ รอส่ง/ประวัติการส่ง */

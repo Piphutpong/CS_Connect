@@ -5212,7 +5212,20 @@
 
   requestsNavItems.forEach(item => {
     item.addEventListener("click", () => {
-      switchRequestsTab(item.dataset.filter);
+      const filter = item.dataset.filter;
+
+      // ขอใช้ไฟฟ้า/ขอขยายเขตฯ มีหน้าคิวงานของตัวเอง (งานขอใช้ไฟฟ้า/งานขยายเขต
+      // ระบบจำหน่ายไฟฟ้า -- extendWorkView) ซึ่งมีเครื่องมือครบกว่าแค่รายการเฉย ๆ
+      // ในหน้านี้ (ชิปสถานะ, จ่ายงาน, ตัวกรองช่วงวันที่) กดสองแท็บนี้จากเมนูซ้าย
+      // ของหน้างานรับคำร้อง จึงพาไปที่หน้านั้นแทน ไม่ต้องแสดงรายการซ้ำอยู่ที่นี่
+      // อีกชุด (ตามที่เจ้าของระบบขอ)
+      if (filter === "power" || filter === "extend") {
+        openExtendWorkView({ kind: filter });
+        saveNavState({ card: filter });
+        return;
+      }
+
+      switchRequestsTab(filter);
       // แท็บอยู่ใต้การ์ด "งานรับคำร้อง" เดียวกันเสมอ -- อัปเดตแค่ค่า filter ทับ
       // ของเดิม ไม่ต้องเปลี่ยน card เพราะยังเป็นการ์ดเดิม
       saveNavState({ card: "requests", filter: currentRequestFilter });
@@ -9209,6 +9222,9 @@ ${sheetHtml}
   const extendWorkCount = document.getElementById("extendWorkCount");
   const extendWorkAddBtn = document.getElementById("extendWorkAddBtn");
   const extendWorkSearch = document.getElementById("extendWorkSearch");
+  const extendWorkDateFrom = document.getElementById("extendWorkDateFrom");
+  const extendWorkDateTo = document.getElementById("extendWorkDateTo");
+  const extendWorkDateClearBtn = document.getElementById("extendWorkDateClearBtn");
   const extendAssignBar = document.getElementById("extendAssignBar");
   const extendAssignCount = document.getElementById("extendAssignCount");
   const extendAssignSelect = document.getElementById("extendAssignSelect");
@@ -9241,6 +9257,12 @@ ${sheetHtml}
 
   let extendFilter = EXTEND_FILTER_ALL;
   let extendSearchQuery = "";
+  // ตัวกรองช่วงวันที่รับคำร้อง (YYYY-MM-DD ตรงรูปแบบที่ receivedDate เก็บอยู่
+  // แล้ว เทียบแบบ string ได้ตรงลำดับเวลาพอดีเหมือน compareRequestsByReceivedThenNumber
+  // ไม่ต้อง parse เป็น Date) ว่าง = ไม่กรองด้านนั้น ใช้ดูว่าช่วงเวลาหนึ่งมีคำร้อง
+  // เข้ามากี่ใบ (เลข "ทั้งหมด N รายการ" ข้างชื่อมุมมองจะสะท้อนตามช่วงที่กรองไว้)
+  let extendDateFrom = "";
+  let extendDateTo = "";
   let extendSelection = new Set();
   // สถานะที่ถูกย่อไว้ในมุมมองแบบจัดกลุ่ม -- จำระหว่างเปิดเว็บ ไม่ได้เก็บถาวร
   let extendCollapsed = new Set();
@@ -9282,6 +9304,10 @@ ${sheetHtml}
       extendFilter = EXTEND_FILTER_ALL;
       extendSearchQuery = "";
       extendWorkSearch.value = "";
+      extendDateFrom = "";
+      extendDateTo = "";
+      extendWorkDateFrom.value = "";
+      extendWorkDateTo.value = "";
       extendPersonEmail = "";
       extendSelection.clear();
     }
@@ -9933,12 +9959,21 @@ ${sheetHtml}
     extendAssignCount.textContent = `เลือกไว้ ${count} รายการ`;
   }
 
+  /** อยู่ในช่วงวันที่รับคำร้องที่กรองไว้ไหม -- ไม่ได้กรองด้านไหนเลยก็ผ่านหมด */
+  function extendDateFilterMatches(r) {
+    const d = r.receivedDate || "";
+    if (extendDateFrom && d < extendDateFrom) return false;
+    if (extendDateTo && d > extendDateTo) return false;
+    return true;
+  }
+
   function renderExtendWork() {
     const jobs = extendJobs();
     renderExtendChips(jobs);
 
     const filtered = sortRequestsForDisplay(jobs
       .filter(extendFilterMatches)
+      .filter(extendDateFilterMatches)
       .filter(r => matchesSearch(r, extendSearchQuery)));
 
     // งานที่เลือกไว้แล้วหลุดออกจากมุมมองปัจจุบัน (เช่นมีคนอื่นเปลี่ยนสถานะไป)
@@ -10019,6 +10054,10 @@ ${sheetHtml}
       extendFilter = EXTEND_FILTER_ALL;
       extendSearchQuery = "";
       extendWorkSearch.value = "";
+      extendDateFrom = "";
+      extendDateTo = "";
+      extendWorkDateFrom.value = "";
+      extendWorkDateTo.value = "";
     }
     extendSelection.clear();
     extendPersonEmail = "";
@@ -10043,6 +10082,26 @@ ${sheetHtml}
 
   extendWorkSearch.addEventListener("input", (e) => {
     extendSearchQuery = e.target.value.trim();
+    renderExtendWork();
+  });
+
+  // กรองด้วยช่วงวันที่รับคำร้อง -- ดูจำนวนคำร้องที่เข้ามาต่อช่วงเวลา (เลข
+  // "ทั้งหมด N รายการ" ข้างชื่อมุมมองจะสะท้อนตามช่วงที่กรองไว้ทันที)
+  extendWorkDateFrom.addEventListener("change", () => {
+    extendDateFrom = extendWorkDateFrom.value;
+    renderExtendWork();
+  });
+
+  extendWorkDateTo.addEventListener("change", () => {
+    extendDateTo = extendWorkDateTo.value;
+    renderExtendWork();
+  });
+
+  extendWorkDateClearBtn.addEventListener("click", () => {
+    extendDateFrom = "";
+    extendDateTo = "";
+    extendWorkDateFrom.value = "";
+    extendWorkDateTo.value = "";
     renderExtendWork();
   });
 
