@@ -11572,50 +11572,690 @@ ${sheetHtml}
   });
 
   // ---------------------------------------------------------- งานเสนอราคา
+  /**
+   * ใบเสนอราคาคือ "หนังสือภายนอก" ตามแบบที่ 1 ของระเบียบงานสารบรรณ กฟภ. -- หน้าจอ
+   * แก้ไขคือกระดาษ A4 หน้าตาเดียวกับที่พิมพ์ออกมา คลิกตรงข้อความไหนก็แก้ตรงนั้น
+   * เหมือนพิมพ์ใน Word (ไม่ใช่ฟอร์มกรอกช่องแล้วค่อยไปดูตัวอย่างอีกหน้า)
+   *
+   * ช่องที่แก้ได้คือ .qf[data-field] ใน #quoPaper -- ชื่อ data-field คือคีย์ใน
+   * item.data ตรง ๆ ตัวอ่าน/ตัวเขียนวนทุกช่องเอง เพิ่มช่องใหม่ในหนังสือ = เพิ่ม
+   * element ใน index.html อย่างเดียว
+   *
+   * แก้ไขด้วย contenteditable ไม่ใช่ <textarea> เพราะต้องการให้บนจอตัดบรรทัด/ย่อหน้า
+   * ตรงกับกระดาษจริงทุกตัวอักษร (textarea วาดตัวอักษรคนละแบบกับข้อความปกติ) และหน้า
+   * พิมพ์ก็คือสำเนาของ element เดียวกันนี้ (ดู printQuotation) ที่แลกมาคือต้องคุม
+   * contenteditable เอง: วางข้อความเป็นตัวอักษรล้วนเสมอ (ไม่รับตัวหนา/สี/ตาราง
+   * จากที่อื่น) และเก็บเป็นข้อความธรรมดา ไม่เก็บ HTML -- ไม่มีทางที่ข้อความที่เคย
+   * บันทึกจะกลายเป็นสคริปต์ตอนวาดกลับ
+   *
+   * แม่แบบเป็นใบเสนอราคาที่ data.isTemplate = true (status = "แม่แบบ") --
+   * "ใช้แม่แบบนี้" คัดลอกเนื้อหาไปเป็นใบใหม่ ใบเดิมไม่ถูกแตะ
+   *
+   * ค่าตั้งต้นในโค้ดตั้งใจไม่มีชื่อ/เบอร์มือถือของเจ้าหน้าที่ -- ไฟล์นี้เผยแพร่
+   * สาธารณะบน GitHub Pages ข้อมูลบุคคลอยู่ในแม่แบบซึ่งเก็บในฐานข้อมูลเท่านั้น
+   */
   const quotationListMode = document.getElementById("quotationListMode");
   const quotationFormMode = document.getElementById("quotationFormMode");
   const quotationList = document.getElementById("quotationList");
+  const quotationListTitle = document.getElementById("quotationListTitle");
   const quotationCount = document.getElementById("quotationCount");
   const quotationError = document.getElementById("quotationError");
+  const quotationNotice = document.getElementById("quotationNotice");
   const quotationSearch = document.getElementById("quotationSearch");
-  const quotationForm = document.getElementById("quotationForm");
+  const quotationAddBtn = document.getElementById("quotationAddBtn");
+  const priceItemAddBtn = document.getElementById("priceItemAddBtn");
+  const quoTabBtns = document.querySelectorAll("[data-quo-tab]");
   const quotationFormError = document.getElementById("quotationFormError");
   const quotationFormTitle = document.getElementById("quotationFormTitle");
   const quotationFormSubtitle = document.getElementById("quotationFormSubtitle");
   const quotationDeleteBtn = document.getElementById("quotationDeleteBtn");
+  const quotationDuplicateBtn = document.getElementById("quotationDuplicateBtn");
+  const quotationSaveTemplateBtn = document.getElementById("quotationSaveTemplateBtn");
+  const quotationSaveBtn = document.getElementById("quotationSaveBtn");
+  const quoPaper = document.getElementById("quoPaper");
   const quoLines = document.getElementById("quoLines");
+  const quoStatus = document.getElementById("quoStatus");
+  const quoStatusField = document.getElementById("quoStatusField");
+  const quoThaiDigits = document.getElementById("quoThaiDigits");
+  const quoDirty = document.getElementById("quoDirty");
+  const quoVatEnabled = document.getElementById("quoVatEnabled");
+  const quoVatRow = document.getElementById("quoVatRow");
+  const quoGrandLabel = document.getElementById("quoGrandLabel");
+  const quoPriceModal = document.getElementById("quoPriceModal");
+  const quoPriceSearch = document.getElementById("quoPriceSearch");
+  const quoPriceList = document.getElementById("quoPriceList");
+  const quoPriceNote = document.getElementById("quoPriceNote");
+  const quoFieldEls = Array.from(quoPaper.querySelectorAll(".qf[data-field]"));
 
-  let quotations = [];
-  let quotationEditing = null;
+  const QUO_DEFAULT_SENDER = "การไฟฟ้าส่วนภูมิภาคสาขาหางดง\n197 หมู่ 8 ตำบลหนองแก๋ว\nอำเภอหางดง จังหวัดเชียงใหม่ 50230";
+  const QUO_DEFAULT_CONCLUSION = [
+    "หากท่านมีความประสงค์ให้การไฟฟ้าส่วนภูมิภาคสาขาหางดงดำเนินการตามรายละเอียดข้างต้น หรือมีความประสงค์จะดำเนินการเพียงบางรายการ กรุณาแจ้งมาที่แผนกบริการและลูกค้าสัมพันธ์ การไฟฟ้าส่วนภูมิภาคสาขาหางดง",
+    "หวังเป็นอย่างยิ่งว่าจะได้รับความไว้วางใจจากท่านให้เข้าดำเนินการต่อไป และขอขอบคุณมา ณ โอกาสนี้",
+    "จึงเรียนมาเพื่อโปรดพิจารณา"
+  ].join("\n");
+  const QUO_DEFAULT_OWNER = "แผนกบริการและลูกค้าสัมพันธ์ การไฟฟ้าส่วนภูมิภาคสาขาหางดง\nโทร. 0 5310 6510\nโทรสาร 0 5344 1176";
+
+  let quotations = [];          // kind = quotation ทั้งใบจริงและแม่แบบ
+  let priceItems = [];          // kind = price_item
+  let priceItemsLoaded = false;
+  let quotationTab = "docs";    // docs | templates | prices
   let quotationQuery = "";
-  // รายการราคาที่กำลังแก้ -- ผูกสดกับหน้าจอเหมือนหน้าประมาณการ (ทุกการพิมพ์
-  // เขียนลงโมเดลทันที) ไม่ใช่อ่านค่าจาก DOM ตอนกดบันทึกทีเดียว ซึ่งเป็นจุดที่
-  // หน้าจอแบบนี้ทำข้อมูลหายบ่อยที่สุด
+  let quotationEditing = null;  // รายการที่กำลังแก้ (null = ใบใหม่ยังไม่เคยบันทึก)
+  let quoEditingIsTemplate = false;
+  // id ของใบใหม่ -- จองไว้ตั้งแต่เปิดฟอร์ม กดบันทึกซ้ำ/ยิงซ้ำตอนเน็ตสะดุดจึง
+  // เขียนทับแถวเดิม ไม่ใช่เพิ่มใบซ้ำ (หลักเดียวกับ pendingNewId ของคำร้อง)
+  let quoPendingId = null;
+  // รายการในตาราง -- ผูกสดกับช่องบนกระดาษ ทุกการพิมพ์เขียนลงที่นี่ทันที
   let quoLineModel = [];
+  let quoDirtyFlag = false;
 
+  const QUOTATION_STATUS_TONE = {
+    "ร่าง": "info",
+    "เสนอราคาแล้ว": "warning",
+    "ลูกค้าตอบรับ": "success",
+    "ทำสัญญา/เริ่มงาน": "success",
+    "ส่งมอบงานแล้ว": "success",
+    "ยกเลิก": "danger",
+    "แม่แบบ": "info"
+  };
+
+  // Enter ในช่องหลายบรรทัดขึ้นย่อหน้าใหม่เป็น <div> ทุกเบราว์เซอร์ -- CSS ย่อหน้า
+  // (.qd-para > div) อาศัยรูปนี้ ถ้าเป็น <br> ย่อหน้าที่สองจะไม่เข้า 2.5 ซม.
+  try { document.execCommand("defaultParagraphSeparator", false, "div"); } catch { /* ไม่รองรับก็ไม่เป็นไร */ }
+
+  function quoThaiDate(date) {
+    return date.toLocaleDateString("th-TH", { day: "numeric", month: "long", year: "numeric" });
+  }
+
+  function quoRound2(value) {
+    return Math.round((Number(value) || 0) * 100) / 100;
+  }
+
+  function formatMoney(value) {
+    return (Number(value) || 0).toLocaleString("th-TH", {
+      minimumFractionDigits: 2, maximumFractionDigits: 2
+    });
+  }
+
+  function quoParseNumber(text) {
+    const cleaned = String(text || "").replace(/[,\s]/g, "");
+    if (!cleaned) return 0;
+    const value = Number(cleaned);
+    return Number.isFinite(value) ? value : NaN;
+  }
+
+  /**
+   * รวมเป็นเงิน / VAT 7% / รวมทั้งสิ้น -- ที่เดียวที่รู้วิธีคิด ปัดทีละบรรทัดก่อน
+   * แล้วค่อยรวม แบบเดียวกับตารางในใบเสนอราคากระดาษ (1,478.13 x 3 = 4,434.39)
+   * ไม่งั้นยอดรวมจะต่างจากผลบวกของคอลัมน์ "ค่าใช้จ่ายรวม" ไปหนึ่งสตางค์ได้
+   */
+  function quotationTotals(lines, vatEnabled) {
+    const subtotal = quoRound2((Array.isArray(lines) ? lines : []).reduce((sum, line) => {
+      const price = Number(line.unitPrice ?? line.price) || 0;
+      return sum + quoRound2(price * (Number(line.qty) || 0));
+    }, 0));
+    const vat = vatEnabled === false ? 0 : quoRound2(subtotal * 0.07);
+    return { subtotal, vat, grand: quoRound2(subtotal + vat) };
+  }
+
+  // ---------------------------------------------------------------- ช่องแก้ไข
+  function quoIsSingle(el) {
+    return el.hasAttribute("data-single");
+  }
+
+  function quoReadField(el) {
+    if (quoIsSingle(el)) {
+      return el.textContent.replace(/ /g, " ").replace(/\s*\n\s*/g, " ").trim();
+    }
+    // innerText คืน \n ระหว่าง <div> แต่ละย่อหน้า -- ตัดบรรทัดว่างหัว/ท้ายทิ้ง
+    return String(el.innerText || "").replace(/ /g, " ").replace(/^\n+|\n+$/g, "");
+  }
+
+  function quoWriteField(el, value) {
+    const text = String(value == null ? "" : value);
+    el.innerHTML = "";
+    if (!text) return;
+    if (quoIsSingle(el)) {
+      el.textContent = text;
+      return;
+    }
+    text.split("\n").forEach(line => {
+      const div = document.createElement("div");
+      if (line) div.textContent = line;
+      else div.appendChild(document.createElement("br"));
+      el.appendChild(div);
+    });
+  }
+
+  /**
+   * ทำให้ element หนึ่งแก้ไขได้แบบข้อความล้วน
+   * - บรรทัดเดียว: plaintext-only (Firefox รุ่นเก่าไม่รองรับ ถอยเป็น true) กด Enter ไม่ขึ้นบรรทัด
+   * - หลายบรรทัด: true เพื่อให้ Enter สร้างย่อหน้าใหม่เป็น <div>
+   * - วางข้อความ: รับเฉพาะตัวอักษร ตัดรูปแบบจาก Word/เว็บทิ้งหมด
+   * - Ctrl+B/I/U ถูกปิด เพราะรูปแบบตัวอักษรไม่ถูกบันทึก ปล่อยให้กดได้คือหลอกผู้ใช้
+   */
+  function wireQuoEditable(el, onInput) {
+    const single = quoIsSingle(el);
+    el.setAttribute("contenteditable", single ? "plaintext-only" : "true");
+    if (single && el.contentEditable !== "plaintext-only") el.setAttribute("contenteditable", "true");
+    el.spellcheck = false;
+
+    el.addEventListener("keydown", (e) => {
+      if (single && e.key === "Enter") e.preventDefault();
+      if ((e.ctrlKey || e.metaKey) && ["b", "i", "u"].includes(String(e.key).toLowerCase())) e.preventDefault();
+    });
+
+    el.addEventListener("paste", (e) => {
+      e.preventDefault();
+      let text = (e.clipboardData && e.clipboardData.getData("text/plain")) || "";
+      text = text.replace(/\r\n?/g, "\n");
+      if (single) text = text.replace(/\s*\n\s*/g, " ");
+      document.execCommand("insertText", false, text);
+    });
+
+    el.addEventListener("drop", (e) => e.preventDefault());
+
+    el.addEventListener("input", () => {
+      setQuoDirty(true);
+      if (onInput) onInput();
+    });
+
+    // ลบข้อความจนหมดแล้ว contenteditable มักเหลือ <br>/<div> ค้าง ทำให้ :empty
+    // ไม่ติดและข้อความแนะนำไม่กลับมา -- เคลียร์ตอนออกจากช่อง ไม่ใช่ตอนพิมพ์
+    // (ถ้าล้างตอนพิมพ์ เคอร์เซอร์จะกระโดด)
+    el.addEventListener("blur", () => {
+      if (!el.textContent.trim()) el.innerHTML = "";
+    });
+  }
+
+  quoFieldEls.forEach(el => wireQuoEditable(el));
+
+  function setQuoDirty(dirty) {
+    quoDirtyFlag = dirty;
+    quoDirty.textContent = "ยังไม่ได้บันทึก";
+    quoDirty.hidden = !dirty;
+  }
+
+  function flashQuoSaved(text) {
+    quoDirty.textContent = text || "บันทึกแล้ว";
+    quoDirty.hidden = false;
+    setTimeout(() => { if (!quoDirtyFlag) quoDirty.hidden = true; }, 2500);
+  }
+
+  function quoConfirmLeave() {
+    if (quotationFormMode.hidden || !quoDirtyFlag) return true;
+    return confirm("มีการแก้ไขที่ยังไม่ได้บันทึก ออกจากหน้านี้โดยไม่บันทึกใช่หรือไม่?");
+  }
+
+  window.addEventListener("beforeunload", (e) => {
+    if (!views.quotation.hidden && !quotationFormMode.hidden && quoDirtyFlag) {
+      e.preventDefault();
+      e.returnValue = "";
+    }
+  });
+
+  quoThaiDigits.addEventListener("change", () => {
+    quoPaper.classList.toggle("is-thai-digits", quoThaiDigits.checked);
+    setQuoDirty(true);
+  });
+
+  quoStatus.addEventListener("change", () => setQuoDirty(true));
+
+  // ---------------------------------------------------------------- ตาราง
+  function renderQuoLines() {
+    quoLines.innerHTML = "";
+
+    if (!quoLineModel.length) {
+      const tr = document.createElement("tr");
+      tr.className = "qd-table-empty qd-screen-only";
+      const td = document.createElement("td");
+      td.colSpan = 5;
+      td.textContent = "ยังไม่มีรายการ -- กด \"+ เลือกจากรายการราคา\" หรือ \"+ เพิ่มแถวว่าง\" ด้านล่างตาราง";
+      tr.appendChild(td);
+      quoLines.appendChild(tr);
+    }
+
+    quoLineModel.forEach((line, index) => {
+      const tr = document.createElement("tr");
+      tr.className = "qd-row";
+
+      const tdNo = document.createElement("td");
+      tdNo.className = "qd-no";
+      tdNo.style.position = "relative";
+      tdNo.textContent = String(index + 1);
+      const del = document.createElement("button");
+      del.type = "button";
+      del.className = "qd-row-del qd-screen-only";
+      del.textContent = "×";
+      del.title = "ลบแถวนี้";
+      del.setAttribute("aria-label", `ลบรายการที่ ${index + 1}`);
+      del.addEventListener("click", () => {
+        quoLineModel.splice(index, 1);
+        setQuoDirty(true);
+        renderQuoLines();
+      });
+      tdNo.appendChild(del);
+
+      const tdDesc = document.createElement("td");
+      const desc = document.createElement("div");
+      desc.className = "qf";
+      desc.setAttribute("data-single", "");
+      desc.dataset.placeholder = "รายการ";
+      desc.textContent = line.description || "";
+      wireQuoEditable(desc, () => { line.description = quoReadField(desc); });
+      tdDesc.appendChild(desc);
+
+      const tdPrice = document.createElement("td");
+      tdPrice.className = "qd-num";
+      const price = document.createElement("div");
+      price.className = "qf";
+      price.setAttribute("data-single", "");
+      price.dataset.placeholder = "0.00";
+      price.setAttribute("inputmode", "decimal");
+      price.textContent = line.unitPrice ? formatMoney(line.unitPrice) : "";
+      wireQuoEditable(price, () => {
+        const value = quoParseNumber(price.textContent);
+        line.unitPrice = Number.isNaN(value) ? 0 : value;
+        updateQuoLineAmount(tr, line);
+      });
+      price.addEventListener("blur", () => {
+        const value = quoParseNumber(price.textContent);
+        if (!Number.isNaN(value) && price.textContent.trim()) price.textContent = formatMoney(value);
+      });
+      tdPrice.appendChild(price);
+
+      const tdQty = document.createElement("td");
+      tdQty.className = "qd-center";
+      const qty = document.createElement("div");
+      qty.className = "qf";
+      qty.setAttribute("data-single", "");
+      qty.dataset.placeholder = "0";
+      qty.setAttribute("inputmode", "decimal");
+      qty.textContent = line.qty ? String(line.qty) : "";
+      wireQuoEditable(qty, () => {
+        const value = quoParseNumber(qty.textContent);
+        line.qty = Number.isNaN(value) ? 0 : value;
+        updateQuoLineAmount(tr, line);
+      });
+      tdQty.appendChild(qty);
+
+      const tdAmount = document.createElement("td");
+      tdAmount.className = "qd-num qd-amount";
+
+      tr.append(tdNo, tdDesc, tdPrice, tdQty, tdAmount);
+      quoLines.appendChild(tr);
+      updateQuoLineAmount(tr, line, true);
+    });
+
+    updateQuoTotals();
+  }
+
+  function updateQuoLineAmount(tr, line, skipTotals) {
+    const amount = quoRound2((Number(line.unitPrice) || 0) * (Number(line.qty) || 0));
+    tr.querySelector(".qd-amount").textContent = amount ? formatMoney(amount) : "";
+    if (!skipTotals) updateQuoTotals();
+  }
+
+  function updateQuoTotals() {
+    const vatEnabled = quoVatEnabled.checked;
+    const totals = quotationTotals(quoLineModel, vatEnabled);
+    document.getElementById("quoSubtotal").textContent = formatMoney(totals.subtotal);
+    document.getElementById("quoVat").textContent = formatMoney(totals.vat);
+    document.getElementById("quoGrand").textContent = formatMoney(totals.grand);
+    quoVatRow.hidden = !vatEnabled;
+    quoGrandLabel.textContent = vatEnabled
+      ? "รวมเป็นเงินทั้งสิ้น (รวมภาษีมูลค่าเพิ่ม)"
+      : "รวมเป็นเงินทั้งสิ้น";
+  }
+
+  quoVatEnabled.addEventListener("change", () => {
+    setQuoDirty(true);
+    updateQuoTotals();
+  });
+
+  document.getElementById("quoAddLineBtn").addEventListener("click", () => {
+    quoLineModel.push({ description: "", unitPrice: 0, qty: 1 });
+    setQuoDirty(true);
+    renderQuoLines();
+    const rows = quoLines.querySelectorAll(".qd-row");
+    const lastDesc = rows.length ? rows[rows.length - 1].querySelector(".qf") : null;
+    if (lastDesc) lastDesc.focus();
+  });
+
+  // ---------------------------------------------------------------- เปิด/บันทึก
+  function quoDefaultData() {
+    return {
+      urgency: "",
+      refNo: "มท",
+      sender: QUO_DEFAULT_SENDER,
+      dateText: quoThaiDate(new Date()),
+      subject: "ขอเสนอราคา",
+      recipient: "",
+      reference: "",
+      enclosure: "",
+      paraCause: "",
+      paraIntent: "",
+      paraConclusion: QUO_DEFAULT_CONCLUSION,
+      closing: "ขอแสดงความนับถือ",
+      signerName: "",
+      signerPosition: "",
+      ownerBlock: QUO_DEFAULT_OWNER,
+      lines: [],
+      vatEnabled: true,
+      thaiDigits: false
+    };
+  }
+
+  /**
+   * เปิดกระดาษแก้ไข
+   *   openQuotationForm(item)                -- แก้ใบ/แม่แบบที่บันทึกไว้แล้ว
+   *   openQuotationForm(null)                -- ใบใหม่จากค่าตั้งต้น
+   *   openQuotationForm(null, sourceData)    -- ใบใหม่จากแม่แบบ/สำเนา (วันที่เป็นวันนี้)
+   */
+  function openQuotationForm(item, sourceData) {
+    quotationEditing = item || null;
+    quoPendingId = item ? null : newWorkItemId();
+    quoEditingIsTemplate = Boolean(item && item.data && item.data.isTemplate);
+
+    const base = item
+      ? { ...(item.data || {}) }
+      : { ...quoDefaultData(), ...(sourceData || {}), dateText: quoThaiDate(new Date()) };
+    delete base.isTemplate;
+    // ใบที่สร้างก่อนหน้ากระดาษแบบนี้ (มีแค่ customer/number/note) -- ยกค่าเท่าที่
+    // ตรงความหมายมาไว้ช่องใหม่ ไม่ปล่อยให้เปิดมาแล้วว่างเปล่าทั้งที่มีข้อมูล
+    if (!base.recipient && base.customer) base.recipient = base.customer;
+    if (!base.refNo && base.number) base.refNo = base.number;
+
+    quoFieldEls.forEach(el => quoWriteField(el, base[el.dataset.field]));
+
+    quoLineModel = (Array.isArray(base.lines) ? base.lines : []).map(l => ({
+      description: String(l.description || ""),
+      unitPrice: Number(l.unitPrice ?? l.price) || 0,
+      qty: Number(l.qty) || 0
+    }));
+    quoVatEnabled.checked = base.vatEnabled !== false;
+    quoThaiDigits.checked = Boolean(base.thaiDigits);
+    quoPaper.classList.toggle("is-thai-digits", quoThaiDigits.checked);
+    quoStatus.value = item && !quoEditingIsTemplate ? (item.status || "ร่าง") : "ร่าง";
+    quoStatusField.hidden = quoEditingIsTemplate;
+    renderQuoLines();
+
+    if (quoEditingIsTemplate) {
+      quotationFormTitle.textContent = `แก้ไขแม่แบบ: ${item.data.templateName || item.title || ""}`;
+    } else {
+      quotationFormTitle.textContent = item ? "แก้ไขใบเสนอราคา" : "ใบเสนอราคาใหม่";
+    }
+    renderQuoSubtitle();
+
+    quotationDeleteBtn.hidden = !item;
+    quotationDuplicateBtn.hidden = !item || quoEditingIsTemplate;
+    quotationSaveTemplateBtn.hidden = quoEditingIsTemplate;
+    quotationSaveBtn.textContent = quoEditingIsTemplate ? "บันทึกแม่แบบ" : "บันทึก";
+
+    hideError(quotationFormError);
+    setQuoDirty(false);
+    quotationListMode.hidden = true;
+    quotationFormMode.hidden = false;
+    window.scrollTo(0, 0);
+  }
+
+  function renderQuoSubtitle() {
+    const item = quotationEditing;
+    if (!item) {
+      quotationFormSubtitle.textContent = "ยังไม่ได้บันทึก";
+      return;
+    }
+    const by = item.updatedByName || item.createdByName || "-";
+    const at = item.updatedAt || item.createdAt;
+    quotationFormSubtitle.textContent = `แก้ไขล่าสุด: ${by}${at ? ` · ${formatThaiDateTime(at)}` : ""}`;
+  }
+
+  function collectQuoData() {
+    const data = {};
+    quoFieldEls.forEach(el => { data[el.dataset.field] = quoReadField(el); });
+    data.lines = quoLineModel
+      .filter(l => String(l.description || "").trim() || Number(l.unitPrice) || Number(l.qty))
+      .map(l => ({
+        description: String(l.description || "").trim(),
+        unitPrice: quoRound2(l.unitPrice),
+        qty: Number(l.qty) || 0
+      }));
+    data.vatEnabled = quoVatEnabled.checked;
+    data.thaiDigits = quoThaiDigits.checked;
+    return data;
+  }
+
+  function upsertLocalQuotation(saved) {
+    const index = quotations.findIndex(q => String(q.id) === String(saved.id));
+    if (index === -1) quotations.unshift(saved);
+    else quotations[index] = saved;
+  }
+
+  quotationSaveBtn.addEventListener("click", async () => {
+    hideError(quotationFormError);
+    const data = collectQuoData();
+
+    if (quoEditingIsTemplate) {
+      data.isTemplate = true;
+      data.templateName = quotationEditing.data.templateName || quotationEditing.title || "";
+    } else if (!data.subject) {
+      showError(quotationFormError, "กรุณากรอก \"เรื่อง\" ของหนังสือ");
+      return;
+    }
+
+    setBusy(quotationSaveBtn, true, "กำลังบันทึก...");
+    try {
+      const saved = await backend.saveWorkItem("quotation", {
+        id: quotationEditing ? quotationEditing.id : quoPendingId,
+        title: quoEditingIsTemplate ? data.templateName : (data.subject || data.recipient || "ใบเสนอราคา"),
+        status: quoEditingIsTemplate ? "แม่แบบ" : quoStatus.value,
+        data
+      });
+      quotationEditing = saved;
+      quoPendingId = null;
+      upsertLocalQuotation(saved);
+      quotationDeleteBtn.hidden = false;
+      quotationDuplicateBtn.hidden = quoEditingIsTemplate;
+      if (!quoEditingIsTemplate) quotationFormTitle.textContent = "แก้ไขใบเสนอราคา";
+      renderQuoSubtitle();
+      setQuoDirty(false);
+      flashQuoSaved("บันทึกแล้ว");
+    } catch (err) {
+      showError(quotationFormError, moduleErrorText(err));
+    } finally {
+      setBusy(quotationSaveBtn, false);
+    }
+  });
+
+  quotationSaveTemplateBtn.addEventListener("click", async () => {
+    hideError(quotationFormError);
+    const current = collectQuoData();
+    const name = prompt(
+      "ตั้งชื่อแม่แบบ (เช่น \"เสนอราคาบำรุงรักษาหม้อแปลง\")\nเนื้อหาทั้งหมดบนกระดาษจะถูกเก็บเป็นแม่แบบใหม่ ใบนี้ไม่เปลี่ยน",
+      current.subject || ""
+    );
+    if (name === null) return;
+    const templateName = name.trim();
+    if (!templateName) {
+      showError(quotationFormError, "กรุณาตั้งชื่อแม่แบบ");
+      return;
+    }
+
+    setBusy(quotationSaveTemplateBtn, true, "กำลังบันทึก...");
+    try {
+      const saved = await backend.saveWorkItem("quotation", {
+        id: newWorkItemId(),
+        title: templateName,
+        status: "แม่แบบ",
+        data: { ...current, isTemplate: true, templateName }
+      });
+      upsertLocalQuotation(saved);
+      flashQuoSaved(`บันทึกแม่แบบ "${templateName}" แล้ว`);
+    } catch (err) {
+      showError(quotationFormError, moduleErrorText(err));
+    } finally {
+      setBusy(quotationSaveTemplateBtn, false);
+    }
+  });
+
+  quotationDuplicateBtn.addEventListener("click", () => {
+    if (quoDirtyFlag && !confirm("มีการแก้ไขที่ยังไม่ได้บันทึก -- ทำสำเนาจากข้อความบนจอตอนนี้ (ใบเดิมจะไม่ถูกบันทึก) ใช่หรือไม่?")) return;
+    const copy = collectQuoData();
+    openQuotationForm(null, copy);
+    setQuoDirty(true);
+    quotationFormSubtitle.textContent = "สำเนา -- ยังไม่ได้บันทึก";
+  });
+
+  quotationDeleteBtn.addEventListener("click", async () => {
+    if (!quotationEditing) return;
+    const what = quoEditingIsTemplate ? "แม่แบบนี้" : "ใบเสนอราคานี้";
+    if (!confirm(`ลบ${what}ใช่หรือไม่?`)) return;
+    setBusy(quotationDeleteBtn, true, "กำลังลบ...");
+    try {
+      await backend.deleteWorkItem(quotationEditing.id);
+      quotations = quotations.filter(q => String(q.id) !== String(quotationEditing.id));
+      setQuoDirty(false);
+      showQuotationList();
+    } catch (err) {
+      showError(quotationFormError, moduleErrorText(err));
+    } finally {
+      setBusy(quotationDeleteBtn, false);
+    }
+  });
+
+  document.getElementById("quotationBackToListBtn").addEventListener("click", () => {
+    if (!quoConfirmLeave()) return;
+    setQuoDirty(false);
+    showQuotationList();
+  });
+
+  // ---------------------------------------------------------------- พิมพ์
+  /**
+   * พิมพ์ = คัดลอกกระดาษบนจอทั้งแผ่นไปวางในหน้าต่างใหม่ แล้วถอดส่วนที่เป็นเครื่องมือ
+   * แก้ไขออก (กรอบประ, ข้อความแนะนำ, ปุ่ม, บรรทัดที่ไม่ได้กรอก) -- ไม่ได้สร้าง HTML
+   * ใหม่อีกชุด จึงไม่มีทางที่หน้าจอกับกระดาษจะวางตำแหน่งต่างกัน
+   *
+   * หน้าต่างใหม่โหลด style.css ตัวเดียวกัน (ลิงก์เต็มพร้อม ?v=) ขอบกระดาษ/เลขหน้า
+   * อยู่ใน @media print ของไฟล์นั้น หน้าต่างที่เปิดด้วย window.open สืบ CSP ของหน้านี้
+   * มาด้วย จึงห้ามมีสคริปต์ inline -- ปุ่มพิมพ์ผูก listener จากฝั่งนี้
+   */
+  function printQuotation() {
+    const printWindow = window.open("", "_blank");
+    if (!printWindow) return;
+
+    const clone = quoPaper.cloneNode(true);
+    clone.removeAttribute("id");
+    clone.style.backgroundImage = "none";
+    clone.querySelectorAll(".qd-screen-only").forEach(n => n.remove());
+    clone.querySelectorAll("[data-optional]").forEach(line => {
+      const field = line.querySelector("[data-field]");
+      if (field && !field.textContent.trim()) line.remove();
+    });
+    clone.querySelectorAll(".qd-urgency, .qd-para, .qd-owner").forEach(n => {
+      if (!n.textContent.trim()) n.remove();
+    });
+    clone.querySelectorAll("[contenteditable]").forEach(n => n.removeAttribute("contenteditable"));
+    clone.querySelectorAll(".qf").forEach(n => {
+      n.classList.remove("qf");
+      n.removeAttribute("data-placeholder");
+    });
+    // src ใน markup เป็นลิงก์สัมพัทธ์ -- หน้าต่างใหม่ต้องได้ลิงก์เต็ม
+    const seal = clone.querySelector(".qd-seal");
+    const liveSeal = quoPaper.querySelector(".qd-seal");
+    if (seal && liveSeal) seal.setAttribute("src", liveSeal.src);
+
+    const cssLink = document.querySelector('link[rel="stylesheet"][href*="style.css"]');
+    const cssHref = cssLink ? cssLink.href : new URL("style.css", location.href).href;
+    const title = quoReadField(quoFieldEls.find(el => el.dataset.field === "subject")) || "ใบเสนอราคา";
+
+    printWindow.document.write(`<!doctype html>
+      <html lang="th">
+        <head>
+          <meta charset="utf-8">
+          <title>${escapeForPrint(title)}</title>
+          <link rel="stylesheet" href="${escapeForPrint(cssHref)}">
+        </head>
+        <body class="quo-print-body">
+          <div class="quo-print-toolbar">
+            <button type="button" id="printBtn" class="btn btn-primary">พิมพ์</button>
+          </div>
+          ${clone.outerHTML}
+        </body>
+      </html>`);
+    printWindow.document.close();
+    printWindow.document.getElementById("printBtn")
+      .addEventListener("click", () => printWindow.print());
+  }
+
+  document.getElementById("quotationPrintBtn").addEventListener("click", printQuotation);
+
+  // ---------------------------------------------------------------- รายการ
   async function openQuotationView() {
     showView("quotation");
+    setQuoDirty(false);
+    hideError(quotationError);
+    quotationNotice.hidden = true;
+    quotationList.innerHTML = '<div class="request-empty">กำลังโหลด...</div>';
     quotationListMode.hidden = false;
     quotationFormMode.hidden = true;
-    hideError(quotationError);
-    quotationList.innerHTML = '<div class="request-empty">กำลังโหลด...</div>';
     try {
       quotations = await backend.loadWorkItems("quotation");
     } catch (err) {
       quotations = [];
       showError(quotationError, moduleErrorText(err));
     }
+    renderQuotationTab();
+  }
+
+  function showQuotationList() {
+    quotationFormMode.hidden = true;
+    quotationListMode.hidden = false;
+    renderQuotationTab();
+    window.scrollTo(0, 0);
+  }
+
+  function setQuotationTab(tab) {
+    quotationTab = tab;
+    quotationQuery = "";
+    quotationSearch.value = "";
+    quoTabBtns.forEach(btn => btn.classList.toggle("active", btn.dataset.quoTab === tab));
+    renderQuotationTab();
+  }
+
+  quoTabBtns.forEach(btn => btn.addEventListener("click", () => setQuotationTab(btn.dataset.quoTab)));
+
+  async function renderQuotationTab() {
+    quotationAddBtn.hidden = quotationTab !== "docs";
+    priceItemAddBtn.hidden = quotationTab !== "prices";
+    quotationSearch.placeholder = quotationTab === "prices"
+      ? "ค้นหารายการราคาด้วยชื่อหรือหมวด..."
+      : "ค้นหาด้วยเรื่อง, ผู้รับ, เลขที่หนังสือ...";
+
+    if (quotationTab === "prices") {
+      quotationListTitle.textContent = "รายการราคา";
+      await ensurePriceItems();
+      renderPriceItems();
+      return;
+    }
+
+    quotationListTitle.textContent = quotationTab === "templates" ? "แม่แบบใบเสนอราคา" : "ใบเสนอราคา";
     renderQuotations();
+  }
+
+  function quotationMatches(item, query) {
+    if (!query) return true;
+    const d = item.data || {};
+    return [item.title, item.status, d.subject, d.recipient, d.refNo, d.dateText,
+      d.paraCause, d.templateName, d.customer]
+      .some(v => String(v || "").toLowerCase().includes(query));
   }
 
   function renderQuotations() {
     const query = quotationQuery.trim().toLowerCase();
-    const filtered = quotations.filter(item => {
-      if (!query) return true;
-      const d = item.data || {};
-      return [item.title, item.status, d.number, d.customer, d.phone, d.subject]
-        .some(v => String(v || "").toLowerCase().includes(query));
-    });
+    const templatesTab = quotationTab === "templates";
+    const filtered = quotations
+      .filter(item => Boolean(item.data && item.data.isTemplate) === templatesTab)
+      .filter(item => quotationMatches(item, query));
 
     quotationCount.textContent = `ทั้งหมด ${filtered.length} รายการ`;
     quotationList.innerHTML = "";
@@ -11623,7 +12263,11 @@ ${sheetHtml}
     if (!filtered.length) {
       const empty = document.createElement("div");
       empty.className = "request-empty";
-      empty.textContent = query ? "ไม่พบใบเสนอราคาที่ค้นหา" : "ยังไม่มีใบเสนอราคา";
+      empty.textContent = query
+        ? "ไม่พบรายการที่ค้นหา"
+        : (templatesTab
+          ? "ยังไม่มีแม่แบบ -- เปิดใบเสนอราคาที่เขียนไว้ดีแล้ว กด \"บันทึกเป็นแม่แบบ\" เพื่อใช้ซ้ำครั้งหน้า"
+          : "ยังไม่มีใบเสนอราคา -- กด \"+ สร้างใบเสนอราคา\" หรือเลือกจากแท็บแม่แบบ");
       quotationList.appendChild(empty);
       return;
     }
@@ -11635,365 +12279,352 @@ ${sheetHtml}
 
       const top = document.createElement("div");
       top.className = "request-card-top";
-
       const badges = document.createElement("div");
       badges.className = "request-badges";
-      if (d.number) {
-        const numberEl = document.createElement("span");
-        numberEl.className = "request-badge request-badge-id";
-        numberEl.textContent = d.number;
-        badges.appendChild(numberEl);
+
+      if (!templatesTab && d.refNo && d.refNo.trim() !== "มท") {
+        const refEl = document.createElement("span");
+        refEl.className = "request-badge request-badge-id";
+        refEl.textContent = `ที่ ${d.refNo}`;
+        badges.appendChild(refEl);
       }
       const statusEl = document.createElement("span");
       statusEl.className = `request-badge request-badge-status tone-${QUOTATION_STATUS_TONE[item.status] || "info"}`;
-      statusEl.textContent = item.status || "ร่าง";
+      statusEl.textContent = templatesTab ? "แม่แบบ" : (item.status || "ร่าง");
       badges.appendChild(statusEl);
 
       const dateEl = document.createElement("span");
       dateEl.className = "request-date";
-      dateEl.textContent = d.date ? formatThaiDate(d.date) : "";
+      dateEl.textContent = templatesTab ? "" : (d.dateText || "");
       top.append(badges, dateEl);
 
       const name = document.createElement("div");
       name.className = "request-name";
-      name.textContent = d.customer || item.title || "(ไม่ระบุลูกค้า)";
-
+      name.textContent = templatesTab ? (d.templateName || item.title) : (d.subject || item.title || "(ไม่มีเรื่อง)");
       card.append(top, name);
 
-      if (d.subject) {
-        const subject = document.createElement("div");
-        subject.className = "request-meta";
-        subject.textContent = d.subject;
-        card.appendChild(subject);
+      if (d.recipient) {
+        const to = document.createElement("div");
+        to.className = "request-meta";
+        to.textContent = `เรียน ${d.recipient}`;
+        card.appendChild(to);
+      }
+      if (Array.isArray(d.lines) && d.lines.length) {
+        const total = document.createElement("div");
+        total.className = "request-meta request-meta-queue";
+        total.textContent = `${d.lines.length} รายการ · รวมทั้งสิ้น ${formatMoney(quotationTotals(d.lines, d.vatEnabled).grand)} บาท`;
+        card.appendChild(total);
       }
 
-      const total = document.createElement("div");
-      total.className = "request-meta request-meta-queue";
-      total.textContent = `รวมทั้งสิ้น: ${formatMoney(quotationTotals(d.lines, d.vatEnabled).grand)} บาท`;
-      card.appendChild(total);
+      if (templatesTab) {
+        const actions = document.createElement("div");
+        actions.className = "quo-template-actions";
+        const useBtn = document.createElement("button");
+        useBtn.type = "button";
+        useBtn.className = "btn btn-primary";
+        useBtn.textContent = "ใช้แม่แบบนี้สร้างใบเสนอราคา";
+        useBtn.addEventListener("click", (e) => {
+          e.stopPropagation();
+          const source = { ...d };
+          delete source.templateName;
+          delete source.isTemplate;
+          openQuotationForm(null, source);
+        });
+        const editBtn = document.createElement("button");
+        editBtn.type = "button";
+        editBtn.className = "btn btn-ghost";
+        editBtn.textContent = "แก้ไขแม่แบบ";
+        editBtn.addEventListener("click", (e) => {
+          e.stopPropagation();
+          openQuotationForm(item);
+        });
+        actions.append(useBtn, editBtn);
+        card.appendChild(actions);
+        // คลิกที่ตัวการ์ด = ใช้แม่แบบ (งานที่ทำบ่อยกว่าแก้แม่แบบ)
+        card.addEventListener("click", () => useBtn.click());
+      } else {
+        card.addEventListener("click", () => openQuotationForm(item));
+      }
 
-      card.addEventListener("click", () => openQuotationForm(item));
       quotationList.appendChild(card);
     });
   }
 
-  const QUOTATION_STATUS_TONE = {
-    "ร่าง": "info",
-    "เสนอราคาแล้ว": "warning",
-    "ลูกค้าตอบรับ": "success",
-    "ทำสัญญา/เริ่มงาน": "success",
-    "ส่งมอบงานแล้ว": "success",
-    "ยกเลิก": "danger"
-  };
-
-  /** รวมเป็นเงิน / VAT 7% / รวมทั้งสิ้น -- ที่เดียวที่รู้วิธีคิด */
-  function quotationTotals(lines, vatEnabled) {
-    const subtotal = (Array.isArray(lines) ? lines : []).reduce((sum, line) => {
-      const qty = Number(line.qty) || 0;
-      const price = Number(line.price) || 0;
-      return sum + qty * price;
-    }, 0);
-    const vat = vatEnabled === false ? 0 : subtotal * 0.07;
-    return { subtotal, vat, grand: subtotal + vat };
-  }
-
-  function formatMoney(value) {
-    return (Number(value) || 0).toLocaleString("th-TH", {
-      minimumFractionDigits: 2, maximumFractionDigits: 2
-    });
-  }
-
-  function openQuotationForm(item) {
-    quotationEditing = item || null;
-    quotationListMode.hidden = true;
-    quotationFormMode.hidden = false;
-    hideError(quotationFormError);
-    window.scrollTo(0, 0);
-
-    const d = item ? (item.data || {}) : {};
-    quotationFormTitle.textContent = item ? "แก้ไขใบเสนอราคา" : "สร้างใบเสนอราคา";
-    quotationFormSubtitle.textContent = item
-      ? `แก้ไขล่าสุด: ${item.updatedByName || item.createdByName || "-"}`
-      : "กรอกข้อมูลแล้วกดบันทึก";
-
-    document.getElementById("quoNumber").value = d.number || "";
-    document.getElementById("quoDate").value = d.date || todayDateString();
-    document.getElementById("quoCustomer").value = d.customer || "";
-    document.getElementById("quoPhone").value = d.phone || "";
-    document.getElementById("quoStatus").value = item ? (item.status || "ร่าง") : "ร่าง";
-    document.getElementById("quoSubject").value = d.subject || "";
-    document.getElementById("quoNote").value = d.note || "";
-    document.getElementById("quoVatEnabled").checked = d.vatEnabled !== false;
-
-    quoLineModel = Array.isArray(d.lines) && d.lines.length
-      ? d.lines.map(l => ({ ...l }))
-      : [{ description: "", qty: 1, unit: "งาน", price: 0 }];
-    renderQuoLines();
-
-    quotationDeleteBtn.hidden = !item;
-  }
-
-  function renderQuoLines() {
-    quoLines.innerHTML = "";
-    quoLineModel.forEach((line, index) => {
-      const row = document.createElement("div");
-      row.className = "quo-line";
-
-      const desc = document.createElement("input");
-      desc.type = "text";
-      desc.className = "quo-line-desc";
-      desc.placeholder = "รายการ";
-      desc.value = line.description || "";
-      desc.addEventListener("input", () => { line.description = desc.value; });
-
-      const qty = document.createElement("input");
-      qty.type = "number";
-      qty.min = "0";
-      qty.step = "any";
-      qty.placeholder = "จำนวน";
-      qty.value = line.qty ?? "";
-      qty.addEventListener("input", () => { line.qty = qty.value; updateQuoTotals(); });
-
-      const unit = document.createElement("input");
-      unit.type = "text";
-      unit.placeholder = "หน่วย";
-      unit.value = line.unit || "";
-      unit.addEventListener("input", () => { line.unit = unit.value; });
-
-      const price = document.createElement("input");
-      price.type = "number";
-      price.min = "0";
-      price.step = "0.01";
-      price.placeholder = "ราคาต่อหน่วย";
-      price.value = line.price ?? "";
-      price.addEventListener("input", () => { line.price = price.value; updateQuoTotals(); });
-
-      const amount = document.createElement("span");
-      amount.className = "quo-line-amount";
-      amount.textContent = formatMoney((Number(line.qty) || 0) * (Number(line.price) || 0));
-
-      const removeBtn = document.createElement("button");
-      removeBtn.type = "button";
-      removeBtn.className = "btn btn-ghost quo-line-remove";
-      removeBtn.textContent = "ลบ";
-      removeBtn.setAttribute("aria-label", `ลบรายการที่ ${index + 1}`);
-      removeBtn.addEventListener("click", () => {
-        quoLineModel.splice(index, 1);
-        if (!quoLineModel.length) quoLineModel.push({ description: "", qty: 1, unit: "งาน", price: 0 });
-        renderQuoLines();
-      });
-
-      row.append(desc, qty, unit, price, amount, removeBtn);
-      quoLines.appendChild(row);
-    });
-    updateQuoTotals();
-  }
-
-  function updateQuoTotals() {
-    const vatEnabled = document.getElementById("quoVatEnabled").checked;
-    const totals = quotationTotals(quoLineModel, vatEnabled);
-    document.getElementById("quoSubtotal").textContent = formatMoney(totals.subtotal);
-    document.getElementById("quoVat").textContent = formatMoney(totals.vat);
-    document.getElementById("quoGrand").textContent = formatMoney(totals.grand);
-    // ยอดรายบรรทัดต้องขยับตามด้วย ไม่งั้นยอดรวมกับยอดรายบรรทัดจะขัดกันเอง
-    quoLines.querySelectorAll(".quo-line").forEach((row, i) => {
-      const line = quoLineModel[i];
-      if (!line) return;
-      const amount = row.querySelector(".quo-line-amount");
-      if (amount) amount.textContent = formatMoney((Number(line.qty) || 0) * (Number(line.price) || 0));
-    });
-  }
-
-  document.getElementById("quoAddLineBtn").addEventListener("click", () => {
-    quoLineModel.push({ description: "", qty: 1, unit: "งาน", price: 0 });
-    renderQuoLines();
-  });
-
-  document.getElementById("quoVatEnabled").addEventListener("change", updateQuoTotals);
-
-  document.getElementById("quotationAddBtn").addEventListener("click", () => openQuotationForm(null));
-  document.getElementById("quotationBackToListBtn").addEventListener("click", () => {
-    quotationFormMode.hidden = true;
-    quotationListMode.hidden = false;
-    renderQuotations();
-  });
+  quotationAddBtn.addEventListener("click", () => openQuotationForm(null));
 
   quotationSearch.addEventListener("input", () => {
     quotationQuery = quotationSearch.value;
-    renderQuotations();
+    if (quotationTab === "prices") renderPriceItems();
+    else renderQuotations();
   });
 
-  quotationForm.addEventListener("submit", async (e) => {
-    e.preventDefault();
-    hideError(quotationFormError);
-    const customer = document.getElementById("quoCustomer").value.trim();
-    if (!customer) {
-      showError(quotationFormError, "กรุณากรอกชื่อลูกค้า");
+  // ---------------------------------------------------------------- รายการราคา
+  /**
+   * รายการราคา (kind = price_item) -- ตารางราคามาตรฐานที่หยิบใส่ใบเสนอราคาได้
+   * data = { category, unitPrice, note } ชื่อรายการอยู่ใน title
+   * แก้ในตารางได้ทันที แถวที่แก้แล้วยังไม่บันทึกเป็นสีเหลือง กดบันทึกทีละแถว --
+   * บันทึกทีละแถวแทนทั้งตาราง เพราะสองคนแก้คนละแถวพร้อมกันต้องไม่ทับกัน
+   */
+  async function ensurePriceItems(force) {
+    if (priceItemsLoaded && !force) return;
+    try {
+      priceItems = await backend.loadWorkItems("price_item");
+      priceItemsLoaded = true;
+    } catch (err) {
+      priceItems = [];
+      showError(quotationError, moduleErrorText(err));
+    }
+  }
+
+  function sortedPriceItems(list) {
+    return list.slice().sort((a, b) =>
+      String(a.data?.category || "").localeCompare(String(b.data?.category || ""), "th")
+      || (Number(a.sortOrder) || 0) - (Number(b.sortOrder) || 0));
+  }
+
+  function priceMatches(item, query) {
+    if (!query) return true;
+    return [item.title, item.data?.category, item.data?.note]
+      .some(v => String(v || "").toLowerCase().includes(query));
+  }
+
+  function renderPriceItems() {
+    const query = quotationQuery.trim().toLowerCase();
+    const rows = sortedPriceItems(priceItems).filter(item => item.isNew || priceMatches(item, query));
+    quotationCount.textContent = `ทั้งหมด ${priceItems.filter(p => !p.isNew).length} รายการ`;
+    quotationList.innerHTML = "";
+
+    const hint = document.createElement("p");
+    hint.className = "field-hint";
+    hint.textContent = "แก้ในตารางได้เลย แถวสีเหลือง = ยังไม่ได้บันทึก -- ราคาที่เลือกใส่ใบเสนอราคาไปแล้วจะไม่เปลี่ยนตามเมื่อแก้ราคาที่นี่ภายหลัง";
+    quotationList.appendChild(hint);
+
+    const table = document.createElement("table");
+    table.className = "price-table";
+    table.innerHTML = `
+      <thead><tr>
+        <th class="price-col-cat">หมวด</th><th>รายการ</th>
+        <th class="price-col-price">ราคาต่อหน่วย (บาท)</th><th>หมายเหตุ</th>
+        <th class="price-col-actions"></th>
+      </tr></thead>`;
+    const tbody = document.createElement("tbody");
+
+    if (!rows.length) {
+      const tr = document.createElement("tr");
+      const td = document.createElement("td");
+      td.colSpan = 5;
+      td.className = "request-empty";
+      td.textContent = query ? "ไม่พบรายการที่ค้นหา" : "ยังไม่มีรายการราคา -- กด \"+ เพิ่มรายการราคา\"";
+      tr.appendChild(td);
+      tbody.appendChild(tr);
+    }
+
+    rows.forEach(item => tbody.appendChild(buildPriceRow(item)));
+    table.appendChild(tbody);
+    quotationList.appendChild(table);
+
+    // หมวดที่เคยใช้ -- ให้พิมพ์หมวดซ้ำได้ตรงตัว ไม่งั้นหมวดเดียวกันสะกดสองแบบ
+    // จะกลายเป็นสองกลุ่มในหน้าต่างเลือก
+    const datalist = document.createElement("datalist");
+    datalist.id = "priceCategoryOptions";
+    Array.from(new Set(priceItems.map(p => p.data?.category).filter(Boolean))).forEach(cat => {
+      const option = document.createElement("option");
+      option.value = cat;
+      datalist.appendChild(option);
+    });
+    quotationList.appendChild(datalist);
+  }
+
+  function buildPriceRow(item) {
+    const tr = document.createElement("tr");
+    const d = item.data || {};
+
+    const makeInput = (value, attrs) => {
+      const input = document.createElement("input");
+      input.type = "text";
+      input.value = value;
+      Object.entries(attrs || {}).forEach(([k, v]) => input.setAttribute(k, v));
+      input.addEventListener("input", () => {
+        tr.classList.add("price-row-dirty");
+        saveBtn.disabled = false;
+      });
+      return input;
+    };
+
+    const cat = makeInput(d.category || "", { list: "priceCategoryOptions", placeholder: "หมวด" });
+    const name = makeInput(item.title || "", { placeholder: "ชื่อรายการ" });
+    const price = makeInput(item.isNew ? "" : formatMoney(d.unitPrice), { inputmode: "decimal", placeholder: "0.00" });
+    price.addEventListener("blur", () => {
+      const value = quoParseNumber(price.value);
+      if (!Number.isNaN(value) && price.value.trim()) price.value = formatMoney(value);
+    });
+    const note = makeInput(d.note || "", { placeholder: "หมายเหตุ" });
+
+    const saveBtn = document.createElement("button");
+    saveBtn.type = "button";
+    saveBtn.className = "btn btn-primary";
+    saveBtn.textContent = "บันทึก";
+    saveBtn.disabled = !item.isNew;
+
+    const delBtn = document.createElement("button");
+    delBtn.type = "button";
+    delBtn.className = "btn btn-ghost";
+    delBtn.textContent = item.isNew ? "ยกเลิก" : "ลบ";
+
+    saveBtn.addEventListener("click", async () => {
+      hideError(quotationError);
+      const title = name.value.trim();
+      const unitPrice = quoParseNumber(price.value);
+      if (!title) { showError(quotationError, "กรุณากรอกชื่อรายการ"); name.focus(); return; }
+      if (Number.isNaN(unitPrice)) { showError(quotationError, "ราคาต่อหน่วยต้องเป็นตัวเลข"); price.focus(); return; }
+      setBusy(saveBtn, true, "กำลังบันทึก...");
+      try {
+        const saved = await backend.saveWorkItem("price_item", {
+          id: item.id,
+          title,
+          status: "",
+          data: { category: cat.value.trim(), unitPrice: quoRound2(unitPrice), note: note.value.trim() }
+        });
+        const index = priceItems.indexOf(item);
+        if (index === -1) priceItems.push(saved);
+        else priceItems[index] = saved;
+        renderPriceItems();
+      } catch (err) {
+        showError(quotationError, moduleErrorText(err));
+        setBusy(saveBtn, false);
+      }
+    });
+
+    delBtn.addEventListener("click", async () => {
+      if (item.isNew) {
+        priceItems = priceItems.filter(p => p !== item);
+        renderPriceItems();
+        return;
+      }
+      if (!confirm(`ลบรายการ "${item.title}" ใช่หรือไม่?\n(ใบเสนอราคาที่ใช้รายการนี้ไปแล้วไม่ได้รับผลกระทบ)`)) return;
+      setBusy(delBtn, true, "กำลังลบ...");
+      try {
+        await backend.deleteWorkItem(item.id);
+        priceItems = priceItems.filter(p => p !== item);
+        renderPriceItems();
+      } catch (err) {
+        showError(quotationError, moduleErrorText(err));
+        setBusy(delBtn, false);
+      }
+    });
+
+    if (item.isNew) tr.classList.add("price-row-dirty");
+
+    const cells = [
+      ["price-col-cat", cat], ["", name], ["price-col-price", price], ["", note], ["price-col-actions", null]
+    ];
+    cells.forEach(([cls, input]) => {
+      const td = document.createElement("td");
+      if (cls) td.className = cls;
+      if (input) td.appendChild(input);
+      else td.append(saveBtn, " ", delBtn);
+      tr.appendChild(td);
+    });
+    return tr;
+  }
+
+  priceItemAddBtn.addEventListener("click", () => {
+    // แถวใหม่ขึ้นบนสุดเสมอแม้กำลังค้นหาอยู่ (priceMatches ข้าม isNew) -- id จองไว้ก่อน
+    // กดบันทึกซ้ำจึงไม่สร้างสองแถว
+    priceItems.unshift({ id: newWorkItemId(), title: "", data: { category: "", unitPrice: 0, note: "" }, isNew: true, sortOrder: -1 });
+    renderPriceItems();
+    const first = quotationList.querySelector(".price-table tbody input");
+    if (first) first.focus();
+  });
+
+  // ---------------------------------------------------------------- เลือกราคาใส่ตาราง
+  async function openQuoPricePicker() {
+    quoPriceNote.hidden = true;
+    quoPriceSearch.value = "";
+    quoPriceModal.hidden = false;
+    quoPriceList.innerHTML = '<div class="request-empty">กำลังโหลด...</div>';
+    await ensurePriceItems();
+    renderQuoPricePicker();
+    quoPriceSearch.focus();
+  }
+
+  function renderQuoPricePicker() {
+    const query = quoPriceSearch.value.trim().toLowerCase();
+    const items = sortedPriceItems(priceItems.filter(p => !p.isNew)).filter(p => priceMatches(p, query));
+    quoPriceList.innerHTML = "";
+
+    if (!items.length) {
+      const empty = document.createElement("div");
+      empty.className = "request-empty";
+      empty.textContent = priceItems.length
+        ? "ไม่พบรายการที่ค้นหา"
+        : "ยังไม่มีรายการราคา -- เพิ่มได้ที่แท็บ \"รายการราคา\" ในหน้ารายการใบเสนอราคา";
+      quoPriceList.appendChild(empty);
       return;
     }
 
-    const phoneRaw = document.getElementById("quoPhone").value.trim();
-    let phone = "";
-    if (phoneRaw) {
-      const parsed = readPhoneField(phoneRaw, "เบอร์โทรศัพท์", false);
-      if (parsed.error) {
-        showError(quotationFormError, parsed.error);
-        return;
+    let lastCategory = null;
+    items.forEach(item => {
+      const category = item.data?.category || "ไม่ระบุหมวด";
+      if (category !== lastCategory) {
+        const head = document.createElement("div");
+        head.className = "quo-price-group";
+        head.textContent = category;
+        quoPriceList.appendChild(head);
+        lastCategory = category;
       }
-      phone = parsed.value;
-    }
-
-    const btn = quotationForm.querySelector('button[type="submit"]');
-    setBusy(btn, true, "กำลังบันทึก...");
-    try {
-      const subject = document.getElementById("quoSubject").value.trim();
-      await backend.saveWorkItem("quotation", {
-        id: quotationEditing ? quotationEditing.id : newWorkItemId(),
-        // title ใช้เป็นชื่อที่ค้นหา/เรียงในคอลัมน์จริง -- งานที่เสนอราคาอ่านรู้เรื่อง
-        // กว่าเลขที่ใบเสนอราคาเวลาไล่ดูรายการ
-        title: subject || customer,
-        status: document.getElementById("quoStatus").value,
-        data: {
-          number: document.getElementById("quoNumber").value.trim(),
-          date: document.getElementById("quoDate").value,
-          customer,
-          phone,
-          subject,
-          note: document.getElementById("quoNote").value.trim(),
-          vatEnabled: document.getElementById("quoVatEnabled").checked,
-          lines: quoLineModel
-            .filter(l => String(l.description || "").trim())
-            .map(l => ({
-              description: String(l.description).trim(),
-              qty: Number(l.qty) || 0,
-              unit: String(l.unit || "").trim(),
-              price: Number(l.price) || 0
-            }))
-        }
+      const row = document.createElement("div");
+      row.className = "quo-price-item";
+      const name = document.createElement("span");
+      name.className = "quo-price-item-name";
+      name.textContent = item.title;
+      if (item.data?.note) {
+        const note = document.createElement("span");
+        note.className = "quo-price-item-cat";
+        note.textContent = item.data.note;
+        name.appendChild(note);
+      }
+      const price = document.createElement("span");
+      price.className = "quo-price-item-price";
+      price.textContent = `${formatMoney(item.data?.unitPrice)} บาท`;
+      const add = document.createElement("button");
+      add.type = "button";
+      add.className = "btn btn-ghost";
+      add.textContent = "+ เพิ่ม";
+      add.addEventListener("click", () => {
+        quoLineModel.push({ description: item.title, unitPrice: Number(item.data?.unitPrice) || 0, qty: 1 });
+        setQuoDirty(true);
+        renderQuoLines();
+        quoPriceNote.textContent = `เพิ่ม "${item.title}" แล้ว (จำนวน 1 -- แก้จำนวนในตารางได้)`;
+        quoPriceNote.hidden = false;
       });
-      await openQuotationView();
-    } catch (err) {
-      showError(quotationFormError, moduleErrorText(err));
-    } finally {
-      setBusy(btn, false);
-    }
-  });
+      row.append(name, price, add);
+      quoPriceList.appendChild(row);
+    });
+  }
 
-  quotationDeleteBtn.addEventListener("click", async () => {
-    if (!quotationEditing) return;
-    if (!confirm("ลบใบเสนอราคานี้ใช่หรือไม่?")) return;
-    setBusy(quotationDeleteBtn, true, "กำลังลบ...");
-    try {
-      await backend.deleteWorkItem(quotationEditing.id);
-      await openQuotationView();
-    } catch (err) {
-      showError(quotationFormError, moduleErrorText(err));
-    } finally {
-      setBusy(quotationDeleteBtn, false);
-    }
-  });
+  document.getElementById("quoPickPriceBtn").addEventListener("click", openQuoPricePicker);
+  quoPriceSearch.addEventListener("input", renderQuoPricePicker);
+  document.getElementById("quoPriceCloseBtn").addEventListener("click", () => { quoPriceModal.hidden = true; });
+  quoPriceModal.addEventListener("click", (e) => { if (e.target === quoPriceModal) quoPriceModal.hidden = true; });
 
-  /**
-   * พิมพ์ใบเสนอราคา -- เอกสาร A4 หนึ่งใบ สร้างด้วย window.open + document.write
-   * แบบเดียวกับสมุดคุมและใบภาพหน้างาน (CSP ของหน้านี้บล็อกสคริปต์ inline ทุกตัว
-   * จึงห้ามใส่ on* attribute ใด ๆ ลงไป)
-   *
-   * พิมพ์จากค่าที่อยู่บนหน้าจอ ไม่ใช่จากที่บันทึกไว้ -- ตรงกับที่ตาเห็น และป้าย
-   * ยังไม่บันทึกอยู่ข้าง ๆ ปุ่มอยู่แล้ว
-   */
-  document.getElementById("quotationPrintBtn").addEventListener("click", () => {
-    const printWindow = window.open("", "_blank");
-    if (!printWindow) return;
-
-    const vatEnabled = document.getElementById("quoVatEnabled").checked;
-    const lines = quoLineModel.filter(l => String(l.description || "").trim());
-    const totals = quotationTotals(lines, vatEnabled);
-    const staff = actingStaff();
-
-    const rows = lines.map((line, i) => `
-      <tr>
-        <td class="c">${i + 1}</td>
-        <td>${escapeForPrint(line.description)}</td>
-        <td class="c">${escapeForPrint(String(line.qty ?? ""))}</td>
-        <td class="c">${escapeForPrint(line.unit || "")}</td>
-        <td class="r">${formatMoney(line.price)}</td>
-        <td class="r">${formatMoney((Number(line.qty) || 0) * (Number(line.price) || 0))}</td>
-      </tr>
-    `).join("");
-
-    printWindow.document.write(`
-      <html>
-        <head>
-          <title>ใบเสนอราคา</title>
-          <link rel="preconnect" href="https://fonts.googleapis.com">
-          <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;700&display=swap" rel="stylesheet">
-          <style>
-            @page { size: A4; margin: 1.5cm 2cm; }
-            body { font-family: Sarabun, sans-serif; color: #221530; margin: 0; padding: 24px; }
-            h1 { font-size: 22px; text-align: center; margin: 0 0 4px; }
-            .sub { text-align: center; color: #6b5c82; font-size: 13px; margin: 0 0 24px; }
-            .meta { display: flex; justify-content: space-between; gap: 24px; font-size: 14px; margin-bottom: 18px; }
-            .meta div { flex: 1; }
-            .meta p { margin: 0 0 4px; }
-            table { width: 100%; border-collapse: collapse; }
-            th, td { border: 1px solid #cdb9ea; padding: 8px 10px; font-size: 14px; vertical-align: top; }
-            th { background: #ece0f8; }
-            td.c { text-align: center; }
-            td.r { text-align: right; font-variant-numeric: tabular-nums; }
-            tfoot td { font-weight: 600; }
-            .note { margin-top: 18px; font-size: 14px; white-space: pre-wrap; }
-            .sig { display: flex; justify-content: flex-end; margin-top: 56px; }
-            .sig div { text-align: center; font-size: 14px; line-height: 1.15; }
-            .sig p { margin: 0; }
-            .sig .n { margin-top: 6pt; }
-            @media print { body { padding: 0; } .actions { display: none; } }
-            .actions { text-align: center; margin-top: 32px; }
-            .actions button {
-              font: inherit; font-size: 15px; font-weight: 600; padding: 12px 28px;
-              border-radius: 10px; border: none; background: #57298c; color: #fff; cursor: pointer;
-            }
-          </style>
-        </head>
-        <body>
-          <h1>ใบเสนอราคา</h1>
-          <p class="sub">การไฟฟ้าส่วนภูมิภาค — งานธุรกิจเสริม (PEA Engineering Service)</p>
-          <div class="meta">
-            <div>
-              <p><strong>ลูกค้า:</strong> ${escapeForPrint(document.getElementById("quoCustomer").value)}</p>
-              <p><strong>โทร:</strong> ${escapeForPrint(document.getElementById("quoPhone").value)}</p>
-              <p><strong>งาน:</strong> ${escapeForPrint(document.getElementById("quoSubject").value)}</p>
-            </div>
-            <div>
-              <p><strong>เลขที่:</strong> ${escapeForPrint(document.getElementById("quoNumber").value)}</p>
-              <p><strong>วันที่:</strong> ${escapeForPrint(formatThaiDate(document.getElementById("quoDate").value))}</p>
-            </div>
-          </div>
-          <table>
-            <thead>
-              <tr><th>ลำดับ</th><th>รายการ</th><th>จำนวน</th><th>หน่วย</th><th>ราคาต่อหน่วย</th><th>จำนวนเงิน</th></tr>
-            </thead>
-            <tbody>${rows || '<tr><td colspan="6" class="c">ไม่มีรายการ</td></tr>'}</tbody>
-            <tfoot>
-              <tr><td colspan="5" class="r">รวมเป็นเงิน</td><td class="r">${formatMoney(totals.subtotal)}</td></tr>
-              ${vatEnabled ? `<tr><td colspan="5" class="r">ภาษีมูลค่าเพิ่ม 7%</td><td class="r">${formatMoney(totals.vat)}</td></tr>` : ""}
-              <tr><td colspan="5" class="r">รวมทั้งสิ้น</td><td class="r">${formatMoney(totals.grand)}</td></tr>
-            </tfoot>
-          </table>
-          <div class="note">${escapeForPrint(document.getElementById("quoNote").value)}</div>
-          <div class="sig">
-            <div>
-              <p>ลงชื่อ ....................................... ผู้เสนอราคา</p>
-              <p class="n">(${escapeForPrint(staff.byName || "")})</p>
-            </div>
-          </div>
-          <div class="actions"><button type="button" id="printBtn">พิมพ์</button></div>
-        </body>
-      </html>
-    `);
-    printWindow.document.close();
-    printWindow.document.getElementById("printBtn")
-      .addEventListener("click", () => printWindow.print());
-  });
+  /** ล้างหน้าจอใบเสนอราคาตอนออกจากระบบ (เรียกจาก clearModuleScreens) */
+  function clearQuotationScreens() {
+    quotations = [];
+    priceItems = [];
+    priceItemsLoaded = false;
+    quoLineModel = [];
+    quotationEditing = null;
+    quoPendingId = null;
+    quotationQuery = "";
+    quotationSearch.value = "";
+    quotationList.innerHTML = "";
+    quoLines.innerHTML = "";
+    quoPriceList.innerHTML = "";
+    quoPriceModal.hidden = true;
+    quoFieldEls.forEach(el => { el.innerHTML = ""; });
+    setQuoDirty(false);
+  }
 
   // -------------------------------------------- ระบบรับฟังเสียงของลูกค้า (VOC)
   const vocListMode = document.getElementById("vocListMode");
@@ -12276,6 +12907,13 @@ ${sheetHtml}
     document.querySelector('.service-card[data-service="sideBusiness"]').click();
   });
   document.getElementById("quotationBackBtn").addEventListener("click", () => {
+    // ถอยทีละขั้น: จากกระดาษกลับรายการก่อน แล้วค่อยออกไปการ์ดงานธุรกิจเสริม
+    if (!quotationFormMode.hidden) {
+      if (!quoConfirmLeave()) return;
+      setQuoDirty(false);
+      showQuotationList();
+      return;
+    }
     document.querySelector('.service-card[data-service="sideBusiness"]').click();
   });
   document.getElementById("vocBackBtn").addEventListener("click", () => enterApp());
@@ -12291,25 +12929,18 @@ ${sheetHtml}
     // หน้างาน (ขอใช้ไฟฟ้า/ขยายเขตฯ) ต้องไม่ค้างเป็นโหมดหน้างานให้คนถัดไป
     leaveWorkMode();
     brochures = [];
-    quotations = [];
     vocCases = [];
-    quoLineModel = [];
     brochureEditing = null;
-    quotationEditing = null;
     vocEditing = null;
     brochureEditPaths = [];
-    quotationQuery = "";
     vocQuery = "";
     vocFilter = "all";
     brochureList.innerHTML = "";
-    quotationList.innerHTML = "";
     vocList.innerHTML = "";
     vocChips.innerHTML = "";
-    quoLines.innerHTML = "";
-    quotationSearch.value = "";
     vocSearch.value = "";
-    quotationForm.reset();
     vocForm.reset();
+    clearQuotationScreens();
     closeBrochureEditor();
     closeBrochureViewer();
   }

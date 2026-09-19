@@ -14,7 +14,7 @@
 <meta http-equiv="Content-Security-Policy" content="default-src 'none';
         script-src 'self';
         style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
-        font-src https://fonts.gstatic.com;
+        font-src 'self' https://fonts.gstatic.com;
         img-src 'self' data: https://zsctqxfdxxkssmqfkqdh.supabase.co;
         connect-src https://zsctqxfdxxkssmqfkqdh.supabase.co;
         form-action 'none';
@@ -24,7 +24,7 @@
 <title>CS Connect</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=Sarabun:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=20260919i">
+<link rel="stylesheet" href="style.css?v=20260919j">
 </head>
 <body>
 
@@ -1790,54 +1790,48 @@
   </header>
 
   <main class="work-main">
-    <!-- โหมดรายการ -->
+    <!-- ===== โหมดรายการ -- สามแท็บ: ใบเสนอราคา / แม่แบบ / รายการราคา ===== -->
     <div id="quotationListMode">
       <div class="requests-content-heading">
         <div class="requests-content-heading-row">
           <div>
-            <h2>ใบเสนอราคา</h2>
+            <h2 id="quotationListTitle">ใบเสนอราคา</h2>
             <p id="quotationCount" class="requests-count"></p>
           </div>
           <div class="requests-heading-actions">
             <button type="button" id="quotationAddBtn" class="btn btn-primary">+ สร้างใบเสนอราคา</button>
+            <button type="button" id="priceItemAddBtn" class="btn btn-primary" hidden>+ เพิ่มรายการราคา</button>
           </div>
         </div>
+        <div class="requests-modes" id="quotationTabs">
+          <button type="button" class="requests-mode-btn active" data-quo-tab="docs">ใบเสนอราคา</button>
+          <button type="button" class="requests-mode-btn" data-quo-tab="templates">แม่แบบ</button>
+          <button type="button" class="requests-mode-btn" data-quo-tab="prices">รายการราคา</button>
+        </div>
         <div class="requests-search">
-          <input type="search" id="quotationSearch" placeholder="ค้นหาด้วยเลขที่ใบเสนอราคา, ชื่อลูกค้า, งาน...">
+          <input type="search" id="quotationSearch" placeholder="ค้นหาด้วยเรื่อง, ผู้รับ, เลขที่หนังสือ...">
         </div>
       </div>
       <p id="quotationError" class="form-error" hidden></p>
+      <p id="quotationNotice" class="form-success" hidden></p>
       <div id="quotationList" class="request-list"></div>
     </div>
 
-    <!-- โหมดฟอร์ม -->
+    <!-- ===== โหมดแก้ไขเอกสาร -- หน้ากระดาษ A4 ที่แก้ได้ตรงจุดเหมือน Word =====
+         ช่องที่แก้ได้ทุกช่องคือ .qf ที่มี data-field ชื่อเดียวกับคีย์ใน item.data
+         (ดู QUO_FIELD_DEFAULTS ใน app.js) -- เพิ่มช่องใหม่ = เพิ่ม element ที่มี
+         data-field ในหน้านี้ ไม่ต้องไปแก้ตัวอ่าน/ตัวเขียนใน JS
+         data-single = บรรทัดเดียว (กด Enter ไม่ขึ้นบรรทัด), ไม่มี = หลายบรรทัด
+         .qd-para = ย่อหน้าเนื้อความ ย่อหน้าแรกเข้า 2.5 ซม. ทุกบรรทัดที่กด Enter -->
     <div id="quotationFormMode" hidden>
-      <div class="requests-content-heading">
-        <h2 id="quotationFormTitle">สร้างใบเสนอราคา</h2>
-        <p id="quotationFormSubtitle" class="requests-count"></p>
-      </div>
-      <form id="quotationForm" class="auth-form request-form" novalidate>
-        <div class="field-row">
-          <div class="field">
-            <label for="quoNumber">เลขที่ใบเสนอราคา</label>
-            <input type="text" id="quoNumber" autocomplete="off" placeholder="เช่น QT-69-0001">
-          </div>
-          <div class="field">
-            <label for="quoDate">วันที่เสนอราคา</label>
-            <input type="date" id="quoDate">
-          </div>
+      <div class="quo-editor-bar">
+        <button type="button" id="quotationBackToListBtn" class="btn btn-ghost">← กลับรายการ</button>
+        <div class="quo-editor-title">
+          <h2 id="quotationFormTitle">ใบเสนอราคา</h2>
+          <p id="quotationFormSubtitle" class="requests-count"></p>
         </div>
-        <div class="field">
-          <label for="quoCustomer">ชื่อลูกค้า / หน่วยงาน</label>
-          <input type="text" id="quoCustomer" autocomplete="off" required>
-        </div>
-        <div class="field-row">
-          <div class="field">
-            <label for="quoPhone">เบอร์โทรศัพท์</label>
-            <input type="tel" id="quoPhone" autocomplete="off" inputmode="tel">
-          </div>
-          <div class="field">
-            <label for="quoStatus">สถานะ</label>
+        <div class="quo-editor-actions">
+          <label class="quo-bar-field" id="quoStatusField">สถานะ
             <select id="quoStatus">
               <option value="ร่าง">ร่าง</option>
               <option value="เสนอราคาแล้ว">เสนอราคาแล้ว</option>
@@ -1846,45 +1840,91 @@
               <option value="ส่งมอบงานแล้ว">ส่งมอบงานแล้ว</option>
               <option value="ยกเลิก">ยกเลิก</option>
             </select>
-          </div>
-        </div>
-        <div class="field">
-          <label for="quoSubject">งานที่เสนอราคา</label>
-          <input type="text" id="quoSubject" autocomplete="off" placeholder="เช่น บำรุงรักษาหม้อแปลง 250 kVA จำนวน 2 เครื่อง">
-        </div>
-
-        <!-- รายการราคา -- โครงร่างคร่าว ๆ ตามที่สั่ง: รายการ/จำนวน/หน่วย/ราคาต่อหน่วย
-             แล้วคิดรวม + VAT ให้เอง ยังไม่ผูกกับแคตตาล็อกพัสดุของงานประมาณการ -->
-        <div class="field-section">
-          <div class="field-section-head">
-            <h3>รายการ</h3>
-            <button type="button" id="quoAddLineBtn" class="btn btn-ghost">+ เพิ่มรายการ</button>
-          </div>
-          <div id="quoLines" class="quo-lines"></div>
-          <div class="quo-totals">
-            <div><span>รวมเป็นเงิน</span><strong id="quoSubtotal">0.00</strong></div>
-            <label class="checkbox-field">
-              <input type="checkbox" id="quoVatEnabled" checked>
-              <span>คิดภาษีมูลค่าเพิ่ม 7%</span>
-            </label>
-            <div><span>ภาษีมูลค่าเพิ่ม</span><strong id="quoVat">0.00</strong></div>
-            <div class="quo-total-grand"><span>รวมทั้งสิ้น</span><strong id="quoGrand">0.00</strong></div>
-          </div>
-        </div>
-
-        <div class="field">
-          <label for="quoNote">หมายเหตุ / เงื่อนไข</label>
-          <textarea id="quoNote" rows="3" placeholder="เช่น ยืนราคา 30 วัน, ราคานี้รวมค่าแรงและค่าเดินทางแล้ว"></textarea>
-        </div>
-
-        <p id="quotationFormError" class="form-error" hidden></p>
-        <div class="form-actions">
-          <button type="button" id="quotationBackToListBtn" class="btn btn-ghost">ย้อนกลับ</button>
-          <button type="button" id="quotationPrintBtn" class="btn btn-ghost">พิมพ์ใบเสนอราคา</button>
+          </label>
+          <label class="checkbox-field quo-bar-check"><input type="checkbox" id="quoThaiDigits"><span>เลขไทย</span></label>
+          <span id="quoDirty" class="quo-dirty" hidden>ยังไม่ได้บันทึก</span>
+          <button type="button" id="quotationDuplicateBtn" class="btn btn-ghost" hidden>ทำสำเนา</button>
+          <button type="button" id="quotationSaveTemplateBtn" class="btn btn-ghost">บันทึกเป็นแม่แบบ</button>
           <button type="button" id="quotationDeleteBtn" class="btn btn-ghost" hidden>ลบ</button>
-          <button type="submit" class="btn btn-primary">บันทึก</button>
+          <button type="button" id="quotationPrintBtn" class="btn btn-ghost">พิมพ์</button>
+          <button type="button" id="quotationSaveBtn" class="btn btn-primary">บันทึก</button>
         </div>
-      </form>
+      </div>
+      <p id="quotationFormError" class="form-error" hidden></p>
+      <p class="field-hint quo-editor-hint">คลิกข้อความบนกระดาษเพื่อแก้ไขได้ทันที -- กรอบประคือช่องที่แก้ได้ ช่องที่เว้นว่างจะไม่ถูกพิมพ์ เส้นสีชมพูคือจุดขึ้นหน้าใหม่โดยประมาณ</p>
+
+      <div class="quo-paper-wrap">
+        <article id="quoPaper" class="quo-paper">
+          <!-- ชั้นความเร็ว (ด่วน/ด่วนมาก/ด่วนที่สุด) -- สีแดง ตัวใหญ่ ข้างตรา ตามแบบที่ 1 -->
+          <div class="qf qd-urgency" data-field="urgency" data-single data-placeholder="ชั้นความเร็ว (ถ้ามี)"></div>
+
+          <header class="qd-head">
+            <img class="qd-seal" src="assets/pea-letterhead.png" alt="ตราการไฟฟ้าส่วนภูมิภาค">
+          </header>
+
+          <div class="qd-refrow">
+            <div class="qd-ref">ที่<span class="qd-gap2"></span><span class="qf" data-field="refNo" data-single data-placeholder="มท ...."></span></div>
+            <div class="qf qd-sender" data-field="sender" data-placeholder="หน่วยงานเจ้าของหนังสือ และที่อยู่"></div>
+          </div>
+
+          <div class="qd-date"><span class="qf" data-field="dateText" data-single data-placeholder="วันที่ เดือน ปี"></span></div>
+
+          <div class="qd-line"><span class="qd-label">เรื่อง</span><span class="qf qd-fill" data-field="subject" data-single data-placeholder="ขอเสนอราคา..."></span></div>
+          <div class="qd-line"><span class="qd-label">เรียน</span><span class="qf qd-fill" data-field="recipient" data-single data-placeholder="ตำแหน่ง/ชื่อผู้รับ และหน่วยงาน"></span></div>
+          <div class="qd-line" data-optional="reference"><span class="qd-label">อ้างถึง</span><span class="qf qd-fill" data-field="reference" data-single data-placeholder="(ถ้ามี -- เว้นว่างได้ บรรทัดนี้จะไม่ถูกพิมพ์)"></span></div>
+          <div class="qd-line" data-optional="enclosure"><span class="qd-label">สิ่งที่ส่งมาด้วย</span><span class="qf qd-fill" data-field="enclosure" data-single data-placeholder="(ถ้ามี)"></span></div>
+
+          <div class="qf qd-para qd-para-first" data-field="paraCause" data-placeholder="ภาคเหตุ -- ตามที่ ... (เหตุที่มีหนังสือไป)"></div>
+          <div class="qf qd-para" data-field="paraIntent" data-placeholder="ภาคความประสงค์ -- ... ขอนำเสนอ ... โดยมีรายละเอียด ดังนี้"></div>
+
+          <table class="qd-table">
+            <colgroup>
+              <col class="qd-col-no"><col><col class="qd-col-price"><col class="qd-col-qty"><col class="qd-col-amount">
+            </colgroup>
+            <thead>
+              <tr><th>ลำดับ</th><th>รายการ</th><th>ค่าใช้จ่าย<br>ต่อหน่วย</th><th>จำนวน</th><th>ค่าใช้จ่ายรวม<br>(บาท)</th></tr>
+            </thead>
+            <tbody id="quoLines"></tbody>
+            <tfoot>
+              <tr><td colspan="4" class="qd-sum-label">รวมเป็นเงิน</td><td id="quoSubtotal" class="qd-num"></td></tr>
+              <tr id="quoVatRow"><td colspan="4" class="qd-sum-label">ภาษีมูลค่าเพิ่ม</td><td id="quoVat" class="qd-num"></td></tr>
+              <tr><td colspan="4" class="qd-sum-label" id="quoGrandLabel">รวมเป็นเงินทั้งสิ้น (รวมภาษีมูลค่าเพิ่ม)</td><td id="quoGrand" class="qd-num"></td></tr>
+            </tfoot>
+          </table>
+          <div class="qd-table-tools qd-screen-only">
+            <button type="button" id="quoAddLineBtn" class="btn btn-ghost">+ เพิ่มแถวว่าง</button>
+            <button type="button" id="quoPickPriceBtn" class="btn btn-ghost">+ เลือกจากรายการราคา</button>
+            <label class="checkbox-field"><input type="checkbox" id="quoVatEnabled" checked><span>คิดภาษีมูลค่าเพิ่ม 7%</span></label>
+          </div>
+
+          <div class="qf qd-para" data-field="paraConclusion" data-placeholder="ภาคสรุป -- จึงเรียนมาเพื่อโปรดพิจารณา"></div>
+
+          <!-- คำลงท้าย + ลงนาม ต้องอยู่หน้าเดียวกันเสมอ (break-inside: avoid) -->
+          <div class="qd-signoff">
+            <div class="qd-closing"><span class="qf" data-field="closing" data-single data-placeholder="ขอแสดงความนับถือ"></span></div>
+            <div class="qd-sign">
+              <div class="qd-sign-space"></div>
+              <div class="qf" data-field="signerName" data-single data-placeholder="(พิมพ์ชื่อเต็ม)"></div>
+              <div class="qf" data-field="signerPosition" data-placeholder="ตำแหน่ง"></div>
+            </div>
+          </div>
+
+          <div class="qf qd-owner" data-field="ownerBlock" data-placeholder="หน่วยงานเจ้าของเรื่อง&#10;โทร. ...&#10;โทรสาร ..."></div>
+        </article>
+      </div>
+    </div>
+
+    <!-- เลือกรายการจากรายการราคา ใส่ลงตารางของใบเสนอราคา -->
+    <div id="quoPriceModal" class="modal-overlay" hidden>
+      <div class="modal-card modal-card-wide">
+        <h3>เลือกจากรายการราคา</h3>
+        <input type="search" id="quoPriceSearch" class="quo-price-search" placeholder="ค้นหารายการ...">
+        <div id="quoPriceList" class="quo-price-list"></div>
+        <p id="quoPriceNote" class="form-success" hidden></p>
+        <div class="modal-actions">
+          <button type="button" id="quoPriceCloseBtn" class="btn btn-primary">เสร็จ</button>
+        </div>
+      </div>
     </div>
   </main>
 </section>
@@ -2057,6 +2097,6 @@
      **ต้องเปลี่ยนเลขนี้ทุกครั้งที่แก้ app.js / style.css / track.js / qr.js**
      ไม่งั้นผู้ใช้บางคนจะยังได้ไฟล์เก่าไปอีกพักใหญ่ -->
 <script src="vendor/supabase.js?v=2.116.0"></script>
-<script src="app.js?v=20260919i"></script>
+<script src="app.js?v=20260919j"></script>
 </body>
 </html>

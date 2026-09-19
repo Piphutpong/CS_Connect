@@ -3909,80 +3909,11 @@ span.estimate-crumb {
 
 .field-section-head h3 { margin: 0; font-size: 16px; }
 
-.quo-lines {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-/* รายการ / จำนวน / หน่วย / ราคาต่อหน่วย / จำนวนเงิน / ลบ */
-.quo-line {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 80px 80px 110px 110px auto;
-  align-items: center;
-  gap: 8px;
-}
-
-.quo-line input {
-  width: 100%;
-  padding: 8px 10px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  font: inherit;
-  background: var(--white);
-}
-
-.quo-line-amount {
-  text-align: right;
-  font-family: var(--font-mono);
-  font-size: 14px;
-}
-
-.quo-line-remove { padding: 6px 10px; }
-
-.quo-totals {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  align-items: flex-end;
-  margin-top: 16px;
-  padding-top: 16px;
-  border-top: 1px solid var(--border);
-}
-
-.quo-totals > div {
-  display: flex;
-  gap: 16px;
-  align-items: baseline;
-  font-size: 14px;
-}
-
-.quo-totals strong {
-  font-family: var(--font-mono);
-  min-width: 120px;
-  text-align: right;
-}
-
-.quo-total-grand {
-  font-size: 16px;
-  font-weight: 700;
-  color: var(--volt-700);
-}
-
 .form-actions {
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
   margin-top: 24px;
-}
-
-/* จอแคบ: แถวรายการราคาซ้อนกันแทนที่จะบีบช่องจนกรอกไม่ได้ */
-@media (max-width: 860px) {
-  .quo-line {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-  .quo-line-desc { grid-column: 1 / -1; }
-  .quo-line-amount { text-align: left; }
 }
 
 /* ================================================================ เมนูซ้ายย่อ/ขยาย
@@ -4046,5 +3977,390 @@ span.estimate-crumb {
   .requests-sidebar.is-collapsed .requests-nav-item { justify-content: flex-start; padding: 10px 12px; }
   .requests-sidebar.is-collapsed .nav-badge {
     position: static; min-width: 20px; height: 20px; padding: 0 6px; font-size: 11px; margin-left: 2px;
+  }
+}
+
+/* ================================================================ ใบเสนอราคา
+   หน้ากระดาษ A4 ตาม "แบบที่ 1 หนังสือภายนอกภาษาไทย" ของระเบียบงานสารบรรณ กฟภ.
+   ขนาดทุกตัวเป็น mm/cm/pt จริง ไม่ใช่ px -- หน้าจอกับกระดาษที่พิมพ์ออกมาจึง
+   ตรงกันทั้งระยะขอบ ระยะย่อหน้า และการตัดบรรทัด (ฟอร์มพิมพ์ใช้ stylesheet
+   ไฟล์นี้ไฟล์เดียวกัน ดู printQuotation ใน app.js)
+
+   ฟอนต์ฝังมากับเว็บ (assets/fonts) ไม่พึ่งเครื่องที่เปิด -- TH Sarabun New คือ
+   ฟอนต์มาตรฐานหนังสือราชการ ส่วน TH SarabunIT๙ หน้าตาเหมือนกันทุกตัวอักษร
+   ต่างแค่วาดเลข 0-9 เป็นเลขไทย ๐-๙ ติ๊ก "เลขไทย" = สลับไปใช้ฟอนต์นี้ทั้งหน้า
+   ไม่ต้องแปลงข้อความจริง ข้อมูลที่บันทึกยังเป็นเลขอารบิกเสมอ ค้นหาได้ตามปกติ */
+@font-face { font-family: "QuoSarabun"; src: url("assets/fonts/THSarabunNew.ttf") format("truetype"); font-weight: 400; font-display: block; }
+@font-face { font-family: "QuoSarabun"; src: url("assets/fonts/THSarabunNew-Bold.ttf") format("truetype"); font-weight: 700; font-display: block; }
+@font-face { font-family: "QuoSarabunIT9"; src: url("assets/fonts/THSarabunIT9.ttf") format("truetype"); font-weight: 400; font-display: block; }
+@font-face { font-family: "QuoSarabunIT9"; src: url("assets/fonts/THSarabunIT9-Bold.ttf") format("truetype"); font-weight: 700; font-display: block; }
+
+/* แถบเครื่องมือเหนือกระดาษ -- ติดอยู่บนสุดตอนเลื่อนอ่านเอกสารยาว ๆ */
+.quo-editor-bar {
+  position: sticky;
+  top: var(--topbar-h);
+  z-index: 4;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 14px;
+  padding: 12px 0;
+  background: var(--paper);
+  border-bottom: 1px solid var(--border);
+}
+
+.quo-editor-title { flex: 1; min-width: 180px; }
+.quo-editor-title h2 { margin: 0; font-size: 20px; }
+.quo-editor-title p { margin: 2px 0 0; }
+
+.quo-editor-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.quo-bar-field { display: inline-flex; align-items: center; gap: 6px; font-size: 14px; }
+.quo-bar-field select { font: inherit; padding: 6px 8px; border-radius: 8px; border: 1px solid var(--border); background: var(--white); }
+.quo-bar-field[hidden] { display: none; }
+.quo-bar-check { margin: 0; }
+
+.quo-dirty {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--warning);
+}
+.quo-dirty[hidden] { display: none; }
+
+.quo-editor-hint { margin: 10px 0 0; }
+
+/* พื้นเทาให้กระดาษขาวลอยเด่นเหมือนหน้าจอ Word -- เลื่อนแนวนอนได้บนจอแคบ
+   แทนการย่อกระดาษ (ย่อแล้วตัดบรรทัดไม่ตรงกับที่พิมพ์ออกมา) */
+.quo-paper-wrap {
+  margin: 16px -28px 0;
+  padding: 24px 28px 40px;
+  background: #e9e6ef;
+  overflow-x: auto;
+}
+
+.quo-paper {
+  --qd-indent: 2.5cm;
+  position: relative;
+  box-sizing: border-box;
+  width: 210mm;
+  min-height: 297mm;
+  margin: 0 auto;
+  /* บน 1.5 / ขวา 2 / ล่าง 2 / ซ้าย 3 ซม. ตามแบบที่ 1 */
+  padding: 15mm 20mm 20mm 30mm;
+  background-color: #fff;
+  /* เส้นสีชมพูบอกจุดขึ้นหน้าใหม่โดยประมาณ: หน้าแรกเนื้อหาจบที่ 277 มม. (297 - ขอบ
+     ล่าง 20) หน้าต่อ ๆ ไปมีพื้นที่ 257 มม. (ขอบบน 20 + ล่าง 20) -- เริ่มลายที่ 20 มม.
+     แล้วเว้นทุก 257 มม. เส้นแรกจึงตกที่ 277 มม. พอดี */
+  background-image: repeating-linear-gradient(to bottom,
+    transparent 0, transparent calc(257mm - 1px), #f0a3c8 calc(257mm - 1px), #f0a3c8 257mm);
+  background-position: 0 20mm;
+  background-repeat: repeat-y;
+  box-shadow: 0 4px 18px rgba(34, 21, 48, 0.18);
+  color: #000;
+  font-family: "QuoSarabun", "TH Sarabun New", "TH SarabunPSK", Sarabun, sans-serif;
+  font-size: 16pt;
+  line-height: 1.15;
+}
+
+.quo-paper.is-thai-digits {
+  font-family: "QuoSarabunIT9", "TH SarabunIT๙", "QuoSarabun", Sarabun, sans-serif;
+}
+
+.quo-paper p { margin: 0; }
+
+/* ช่องที่แก้ได้ -- กรอบประจาง ๆ ให้รู้ว่าคลิกได้ ชี้แล้วเข้มขึ้น กำลังพิมพ์เป็นกรอบทึบ */
+.qf {
+  outline: 1px dashed #d4c8ea;
+  outline-offset: 1px;
+  border-radius: 2px;
+  min-width: 1.5em;
+  cursor: text;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.qf:hover { outline-color: #a78bda; }
+.qf:focus { outline: 1.5px solid #7c4dbf; background: #faf7ff; }
+.qf:empty::before {
+  content: attr(data-placeholder);
+  color: #a79fb5;
+  pointer-events: none;
+}
+/* ช่องบรรทัดเดียวที่อยู่กลางประโยค ต้องเป็น inline-block ถึงจะคลิกได้ตอนว่าง */
+span.qf { display: inline-block; vertical-align: top; }
+
+.qd-urgency {
+  position: absolute;
+  top: 25mm;
+  left: 80mm;
+  min-width: 30mm;
+  color: #d10000;
+  font-size: 32pt;
+  font-weight: 700;
+  line-height: 1;
+}
+.qd-urgency:empty::before { font-size: 14pt; font-weight: 400; }
+
+/* ตรา + ชื่อหน่วยงาน สูง 3.5 ซม. (1.5 ถึง 5 ซม. จากขอบบน ตามแบบที่ 1) */
+.qd-head { height: 35mm; }
+.qd-seal { display: block; height: 35mm; width: auto; }
+
+.qd-refrow {
+  display: flex;
+  align-items: flex-start;
+  gap: 8mm;
+  margin-top: 6pt;
+}
+.qd-ref { flex: 1; }
+.qd-gap2 { display: inline-block; width: 0.6em; }
+/* หน่วยงานเจ้าของหนังสือเริ่มที่ราว 13 ซม. จากขอบซ้ายกระดาษ */
+.qd-sender { width: 60mm; flex-shrink: 0; }
+
+/* วันที่เริ่มที่กึ่งกลางพื้นที่พิมพ์ */
+.qd-date { margin-top: 12pt; padding-left: 50%; }
+
+.qd-line {
+  display: flex;
+  align-items: flex-start;
+  gap: 1.1em;
+  margin-top: 6pt;
+}
+.qd-date + .qd-line { margin-top: 12pt; }
+.qd-label { flex-shrink: 0; }
+.qd-fill { flex: 1; }
+
+.qd-para {
+  margin-top: 6pt;
+  text-indent: var(--qd-indent);
+  text-align: justify;
+  text-justify: inter-character;
+}
+.qd-para > div + div { margin-top: 6pt; }
+.qd-para-first { margin-top: 12pt; }
+/* placeholder ไม่ต้องย่อหน้า -- ไม่งั้นข้อความแนะนำโดนดันไปกลางบรรทัด */
+.qd-para:empty { text-indent: 0; }
+
+/* ---------------------------------------------------------------- ตาราง */
+.qd-table {
+  width: 100%;
+  margin-top: 8pt;
+  border-collapse: collapse;
+  table-layout: fixed;
+  font-size: 14pt;
+  line-height: 1.1;
+}
+.qd-col-no { width: 13mm; }
+.qd-col-price { width: 25mm; }
+.qd-col-qty { width: 16mm; }
+.qd-col-amount { width: 27mm; }
+.qd-table th,
+.qd-table td {
+  border: 0.75pt solid #000;
+  padding: 1.5pt 4pt;
+  vertical-align: top;
+}
+.qd-table th {
+  background: #dbe5f1;
+  font-weight: 700;
+  text-align: center;
+  vertical-align: middle;
+}
+.qd-table tbody tr { break-inside: avoid; }
+.qd-table td.qd-no { text-align: center; }
+.qd-num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.qd-table td.qd-center { text-align: center; }
+.qd-table tfoot td { font-weight: 700; }
+.qd-sum-label { text-align: center; }
+.qd-table td .qf { display: block; outline-offset: -1px; min-height: 1.1em; }
+.qd-row { position: relative; }
+/* ปุ่มลบแถวอยู่นอกตาราง (ในขอบซ้ายของกระดาษ) ไม่เบียดคอลัมน์ */
+.qd-row-del {
+  position: absolute;
+  left: -9mm;
+  top: 1pt;
+  width: 7mm;
+  height: 7mm;
+  padding: 0;
+  border: 1px solid #e2c6c6;
+  border-radius: 50%;
+  background: #fff;
+  color: #b42318;
+  font: 700 12px/1 system-ui, sans-serif;
+  cursor: pointer;
+  opacity: 0.35;
+}
+.qd-row:hover .qd-row-del,
+.qd-row-del:focus { opacity: 1; }
+.qd-table-empty td { text-align: center; color: #a79fb5; font-size: 13pt; }
+
+.qd-table-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 14px;
+  margin-top: 6px;
+  font-family: var(--font-body);
+  font-size: 13px;
+}
+.qd-table-tools .btn { padding: 6px 12px; font-size: 13px; }
+.qd-table-tools .checkbox-field { margin: 0; }
+
+/* ---------------------------------------------------------------- ลงท้าย */
+.qd-signoff { break-inside: avoid; }
+.qd-closing { margin-top: 12pt; padding-left: 50%; }
+.qd-sign {
+  margin-left: 30%;
+  width: 54%;
+  text-align: center;
+}
+/* ที่ว่างลงลายมือชื่อ ~4 บรรทัดตามแบบ ("4 Enter") */
+.qd-sign-space { height: 2.6cm; }
+.qd-sign .qf { display: block; }
+
+.qd-owner { margin-top: 1.4cm; width: 70%; }
+
+/* ---------------------------------------------------------------- รายการ/แท็บ */
+.quo-template-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.quo-template-actions .btn { padding: 6px 12px; font-size: 13px; }
+
+/* ตารางรายการราคา (แท็บ "รายการราคา") -- แก้ในตารางได้ทันที กดบันทึกทีละแถว */
+.price-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--white);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+  font-size: 14px;
+}
+.price-table th,
+.price-table td {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  vertical-align: middle;
+}
+.price-table th { background: var(--volt-50); font-weight: 600; color: var(--volt-700); }
+.price-table input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 6px 8px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  font: inherit;
+  background: transparent;
+}
+.price-table input:hover { border-color: var(--border); }
+.price-table input:focus { border-color: var(--volt-500); background: var(--white); outline: none; }
+.price-table .price-col-price input { text-align: right; font-variant-numeric: tabular-nums; }
+.price-table .price-col-cat { width: 20%; }
+.price-table .price-col-price { width: 15%; }
+.price-table .price-col-actions { width: 150px; white-space: nowrap; text-align: right; }
+.price-table .price-col-actions .btn { padding: 5px 10px; font-size: 13px; }
+.price-row-dirty { background: #fffbeb; }
+.price-group-row td {
+  background: #f4f1f9;
+  font-weight: 600;
+  color: var(--ink-soft);
+  font-size: 13px;
+}
+
+/* ตัวเลือกรายการราคาในหน้าต่างเลือก */
+.quo-price-search {
+  width: 100%;
+  box-sizing: border-box;
+  margin: 10px 0;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font: inherit;
+}
+.quo-price-list {
+  max-height: 55vh;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+.quo-price-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+  font-size: 14px;
+}
+.quo-price-item:last-child { border-bottom: none; }
+.quo-price-item-name { flex: 1; }
+.quo-price-item-cat { display: block; color: var(--ink-soft); font-size: 12px; }
+.quo-price-item-price { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.quo-price-item .btn { padding: 5px 10px; font-size: 13px; }
+.quo-price-group {
+  padding: 6px 12px;
+  background: #f4f1f9;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--ink-soft);
+}
+
+/* ---------------------------------------------------------------- พิมพ์
+   หน้าต่างพิมพ์ใช้ stylesheet นี้ไฟล์เดียวกัน (body.quo-print-body) -- ตรงนี้คือ
+   ส่วนต่างเดียวระหว่างจอกับกระดาษ: ขอบกระดาษย้ายไปอยู่ที่ @page ไม่ใช่ padding
+   และหน้าที่ 2 ขึ้นไปมีเลขหน้า "- ๒ -" กลางบนตามแบบหนังสือราชการ
+   (margin box @top-center รองรับใน Chrome/Edge -- Firefox จะไม่พิมพ์เลขหน้า) */
+body.quo-print-body {
+  margin: 0;
+  padding: 24px 0;
+  background: #e9e6ef;
+  font-family: var(--font-body);
+}
+.quo-print-toolbar {
+  width: 210mm;
+  margin: 0 auto 16px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+@media print {
+  @page {
+    size: A4;
+    margin: 20mm 20mm 20mm 30mm;
+    @top-center {
+      content: "- " counter(page) " -";
+      font-family: "QuoSarabun", "TH Sarabun New", sans-serif;
+      font-size: 16pt;
+      vertical-align: bottom;
+      padding-bottom: 4mm;
+    }
+  }
+  @page :first {
+    margin-top: 15mm;
+    @top-center { content: none; }
+  }
+  /* เลขหน้าในหัวกระดาษเป็นเลขไทยตามตัวเลือก "เลขไทย" ด้วย -- margin box อ่านค่าจาก
+     body ไม่ได้ จึงใช้ named page แยกอีกชุดที่ตั้งฟอนต์ IT๙ ไว้ */
+  @page thaidigits {
+    @top-center {
+      content: "- " counter(page) " -";
+      font-family: "QuoSarabunIT9", "TH SarabunIT๙", sans-serif;
+      font-size: 16pt;
+      vertical-align: bottom;
+      padding-bottom: 4mm;
+    }
+  }
+  @page thaidigits:first { margin-top: 15mm; @top-center { content: none; } }
+  .quo-print-body .quo-paper.is-thai-digits { page: thaidigits; }
+  body.quo-print-body { padding: 0; background: #fff; }
+  .quo-print-toolbar { display: none; }
+  .quo-print-body .quo-paper {
+    width: auto;
+    min-height: 0;
+    padding: 0;
+    box-shadow: none;
+    background: none;
   }
 }
