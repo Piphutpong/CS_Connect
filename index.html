@@ -24,7 +24,7 @@
 <title>CS Connect</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=Sarabun:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=20260919e">
+<link rel="stylesheet" href="style.css?v=20260919f">
 </head>
 <body>
 
@@ -34,8 +34,11 @@
     <div class="brand-mark">CS</div>
     <p class="boot-text">กำลังโหลดข้อมูล...</p>
     <div id="bootError" class="boot-error" hidden>
-      <p>เชื่อมต่อฐานข้อมูลไม่สำเร็จ</p>
-      <p class="boot-error-hint">กรุณาตรวจสอบอินเทอร์เน็ตแล้วลองใหม่อีกครั้ง</p>
+      <!-- ข้อความจริงจากข้อผิดพลาด เติมด้วย showBootError() ใน app.js -- เดิมเป็น
+           ข้อความ "เชื่อมต่อฐานข้อมูลไม่สำเร็จ" ตายตัว ซึ่งขึ้นผิดทุกครั้งที่ปัญหา
+           จริงไม่ใช่เน็ตหลุด (เช่นเซสชันหมดอายุ) ทำให้เข้าใจผิดว่าต้องเช็คเน็ต -->
+      <p id="bootErrorMessage">เชื่อมต่อฐานข้อมูลไม่สำเร็จ</p>
+      <p class="boot-error-hint">กรุณาลองใหม่อีกครั้ง หรือตรวจสอบการเชื่อมต่ออินเทอร์เน็ต</p>
       <!-- เดิมเป็น onclick="location.reload()" ตรงนี้ ซึ่ง CSP script-src บล็อก
            ทั้งหมด ปุ่มนี้จึงถูกผูก event ใน app.js แทน (ดู bootRetryBtn) -->
       <button type="button" id="bootRetryBtn" class="btn btn-primary">ลองใหม่</button>
@@ -2052,6 +2055,6 @@
      **ต้องเปลี่ยนเลขนี้ทุกครั้งที่แก้ app.js / style.css / track.js / qr.js**
      ไม่งั้นผู้ใช้บางคนจะยังได้ไฟล์เก่าไปอีกพักใหญ่ -->
 <script src="vendor/supabase.js?v=2.116.0"></script>
-<script src="app.js?v=20260919e"></script>
+<script src="app.js?v=20260919f"></script>
 </body>
 </html>

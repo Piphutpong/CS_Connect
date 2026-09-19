@@ -11127,6 +11127,21 @@ ${sheetHtml}
   // network backend that is a visible wait, hence the boot overlay.
   const bootOverlay = document.getElementById("bootOverlay");
   const bootError = document.getElementById("bootError");
+  const bootErrorMessage = document.getElementById("bootErrorMessage");
+
+  /**
+   * แสดงข้อความจริงของข้อผิดพลาดตอนโหลดข้อมูลแรกไม่สำเร็จ -- ไม่ใช้ข้อความ
+   * "เชื่อมต่อฐานข้อมูลไม่สำเร็จ" ตายตัวอีกต่อไป เพราะเคยขึ้นผิดตอนสาเหตุจริง
+   * ไม่ใช่เน็ตหลุด (เช่นเซสชันหมดอายุที่หลุดมาไม่ตรงเงื่อนไข AUTH_REQUIRED พอดี)
+   * ทำให้ผู้ใช้เข้าใจผิดว่าต้องเช็คอินเทอร์เน็ตทั้งที่ไม่เกี่ยว -- friendlyError()
+   * แปลรหัสภายในเป็นภาษาไทยที่อ่านรู้เรื่องอยู่แล้ว จึงใช้ข้อความเดียวกับที่
+   * ฟอร์มอื่นในแอปนี้ใช้แจ้งผู้ใช้
+   */
+  function showBootError(err) {
+    console.error("CS Connect: โหลดข้อมูลไม่สำเร็จ", err);
+    bootErrorMessage.textContent = friendlyError(err, "เชื่อมต่อฐานข้อมูลไม่สำเร็จ กรุณาลองใหม่อีกครั้ง");
+    bootError.hidden = false;
+  }
 
   // ผูกที่นี่แทน onclick ใน HTML เพราะ CSP บล็อกสคริปต์ inline ทั้งหมด
   // ปุ่มนี้จะมองเห็นได้ก็ต่อเมื่อ init() ล้มเหลวไปแล้ว ซึ่งแปลว่าไฟล์นี้ทำงานอยู่
@@ -11139,9 +11154,21 @@ ${sheetHtml}
 
     // session ของแอปเป็นแค่ข้อมูลแสดงผล -- ถ้า session ของ Auth หายไปแล้ว (ถูกเตะ
     // ออก / ล้างข้อมูลเว็บ) ให้ทิ้งของแอปด้วย ไม่ต้องยิงโหลดที่รู้ว่าจะล้ม
-    if (session && !(await backend.hasSession())) {
-      clearSession();
-      session = null;
+    //
+    // ครอบ try/catch ไว้ด้วย -- เดิมไม่มี ถ้า getSession() ของ supabase-js ยิง
+    // เครือข่ายไปต่ออายุ token แล้วล้มเหลว (เช่นเน็ตหลุดพอดีจังหวะนี้) exception
+    // จะหลุดออกจาก init() ทั้งฟังก์ชันแบบไม่มีใครจับ หน้าจอค้างที่ "กำลังโหลด
+    // ข้อมูล..." ตลอดไปโดยไม่มีข้อความหรือปุ่มลองใหม่ให้เลย
+    if (session) {
+      try {
+        if (!(await backend.hasSession())) {
+          clearSession();
+          session = null;
+        }
+      } catch (err) {
+        showBootError(err);
+        return;
+      }
     }
 
     // A visitor who isn't signed in (e.g. someone here only to track a
@@ -11164,8 +11191,6 @@ ${sheetHtml}
       await refreshAll();
       await migrateLocalDataOnce();
     } catch (err) {
-      console.error("CS Connect: โหลดข้อมูลไม่สำเร็จ", err);
-
       // An expired or revoked token is not a connection problem -- drop the
       // dead session and let them sign in again rather than showing a retry
       // button that can never succeed. callAsUser() has usually handled this
@@ -11173,6 +11198,7 @@ ${sheetHtml}
       // this stays as the guard for the localBackend path, which never goes
       // through callAsUser at all.
       if (String(err.message).includes("AUTH_REQUIRED")) {
+        console.error("CS Connect: โหลดข้อมูลไม่สำเร็จ", err);
         handleAuthExpired();
         return;
       }
@@ -11180,7 +11206,7 @@ ${sheetHtml}
       // Otherwise stop at the overlay rather than dropping the user into an
       // app that looks like it has no data -- that would invite them to
       // re-enter work that already exists.
-      bootError.hidden = false;
+      showBootError(err);
       return;
     }
 
