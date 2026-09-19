@@ -11551,13 +11551,21 @@ ${sheetHtml}
     hideError(brochureEditError);
     setBusy(brochureSaveBtn, true, "กำลังบันทึก...");
     try {
+      // RPC แทนที่ทั้งก้อน data เวลาบันทึก (ไม่ใช่ merge ทีละคีย์) -- ฟอร์มนี้ไม่มี
+      // ช่องให้แก้ sourceAsset เลย แต่ก่อนหน้านี้ก็ไม่ได้ส่งค่าเดิมกลับไปด้วย
+      // ผลคือบันทึกทีไร sourceAsset (ที่ผูกไว้ตอนนำเข้าจากของเดิมใน assets/)
+      // หายไปทุกที ระบบเลยเข้าใจผิดว่าใบเดิมยังไม่ถูกนำเข้า แล้วโผล่ปุ่ม "แก้ไข"
+      // ของใบเดิมขึ้นมาอีกใบข้าง ๆ ใบที่เพิ่งแก้ -- เห็นเป็นโบรชัวร์เบิ้ล ต้อง
+      // ส่งค่าเดิมกลับไปด้วยทุกครั้งที่บันทึก ไม่ใช่แค่ตอนสร้างใหม่
+      const sourceAsset = brochureEditing?.data?.sourceAsset;
       await backend.saveWorkItem("brochure", {
         id: brochureEditing ? brochureEditing.id : newWorkItemId(),
         title,
         status: "",
         data: {
           description: brochureDescInput.value.trim(),
-          images: brochureEditPaths.slice()
+          images: brochureEditPaths.slice(),
+          ...(sourceAsset ? { sourceAsset } : {})
         }
       });
       closeBrochureEditor();
