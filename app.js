@@ -1757,11 +1757,41 @@
               font: inherit; padding: 5px 12px; border-radius: 6px; cursor: pointer;
               border: 1px solid #cdb9ea; background: #fff; color: #57298c;
             }
+            /* บนจอแสดงแต่ละ .print-page เป็นกระดาษ A4 จริง (กว้าง 210mm สูง 297mm
+               ขอบในเท่ากับ @page) ตลอดเวลา ไม่ใช่เฉพาะตอน Preview -- ปรับค่าในแถบ
+               ตั้งค่าแล้วเห็นผลบนแผ่นทันที ไม่ต้องสลับไปดูตัวอย่างไปมา
+               ใน @media print ด้านล่างล้างทั้งหมดนี้ทิ้ง เพราะเครื่องพิมพ์ใช้ขอบจาก
+               @page อยู่แล้ว ถ้าไม่ล้างขอบจะซ้อนกันสองชั้น */
+            body { background: #ece8f2; }
+            .print-page {
+              box-sizing: border-box; width: 210mm; min-height: 297mm;
+              padding: 1.5cm 2cm 1.5cm 3cm; margin: 0 auto 24px;
+              background: #fff; box-shadow: 0 2px 10px rgba(34, 21, 48, 0.18);
+            }
+            .print-setup, .actions { max-width: 210mm; margin-left: auto; margin-right: auto; box-sizing: border-box; }
+            .print-setup { position: sticky; top: 0; z-index: 2; }
+            /* แผ่นที่เนื้อหาล้นเกิน A4 -- ตอนพิมพ์จริงจะไหลไปขึ้นแผ่นใหม่เอง ทำให้
+               ลายเซ็นหลุดไปอยู่แผ่นถัดไป เตือนตั้งแต่บนจอ (ดู markOverflowPages) */
+            .print-page.is-overflow { outline: 3px solid #c0392b; outline-offset: 2px; }
+            .overflow-warning { color: #c0392b; font-weight: 600; }
+            .overflow-warning[hidden] { display: none; }
+            /* โหมดตัวอย่าง: ซ่อนทุกอย่างที่ไม่ได้อยู่บนกระดาษจริง (กรอบช่องแก้ไข,
+               ดรอปดาวน์ผู้ส่ง) แต่ "ไม่" ซ่อนแถบตั้งค่า -- ปรับขนาดตัวอักษร/จัดหน้า
+               ระหว่างดูตัวอย่างได้เลย */
+            body.is-preview [contenteditable] { outline: none; }
+            body.is-preview .sig-picker { display: none; }
+            .actions .btn-secondary { background: #fff; color: #57298c; border: 1px solid #57298c; margin-right: 8px; }
             @media print {
               [contenteditable="true"] { outline: none; }
               .sig-picker { display: none; }
               .actions { display: none; }
               .print-setup { display: none; }
+              .overflow-warning { display: none; }
+              body { background: #fff; }
+              .print-page {
+                width: auto; min-height: 0; padding: 0; margin: 0;
+                box-shadow: none; outline: none !important;
+              }
               /* The on-screen padding would stack on top of the @page margins
                  and make the printed edges measure wider than specified. */
               body { padding: 0; }
@@ -1780,10 +1810,14 @@
               ${setup.widths.map((w, i) => `<input type="number" class="setup-width" data-col="${i}" min="3" max="80" step="1" value="${w}" title="${escapeForPrint(i === 0 ? "ลำดับที่" : (i <= columns.length ? columns[i - 1].label : "หมายเหตุ"))}">`).join("")}
             </span>
             <button type="button" id="setupResetBtn">คืนค่าเริ่มต้น</button>
+            <span id="overflowWarning" class="overflow-warning" hidden></span>
           </div>
           <div id="printPages">${buildPages()}</div>
+          <!-- ขั้นตอน: แก้ไข -> ดูตัวอย่าง (Preview) -> พิมพ์ -> ยืนยันว่าพิมพ์แล้ว
+               ปุ่มพิมพ์ซ่อนไว้จนกว่าจะเข้าโหมดตัวอย่าง ให้ได้เห็นหน้าตาจริงก่อนทุกครั้ง -->
           <div class="actions">
-            <button type="button" id="confirmBtn">${escapeForPrint(actionLabel)}</button>
+            <button type="button" id="previewBtn" class="btn-secondary">ดูตัวอย่างก่อนพิมพ์ (Preview)</button>
+            <button type="button" id="confirmBtn" hidden>${escapeForPrint(actionLabel)}</button>
             <p>${escapeForPrint(actionNote)}</p>
           </div>
         </body>
@@ -1815,7 +1849,64 @@
       doc.documentElement.style.setProperty("--table-font", `${setup.fontSize}px`);
       wireSenderPicker(printWindow, senderOptions || []);
       wireSignatureMirroring(printWindow);
+      // วาดใหม่ได้ช่อง contenteditable="true" ชุดใหม่ -- ถ้ากำลังอยู่ในโหมดตัวอย่าง
+      // ต้องล็อกกลับเหมือนเดิม ไม่งั้นปรับค่าระหว่างดูตัวอย่างแล้วกรอบแก้ไขโผล่คืน
+      applyPreviewState();
+      markOverflowPages();
     }
+
+    /**
+     * ทำเครื่องหมายแผ่นที่เนื้อหายาวเกิน A4 -- วัดจากความสูงจริงที่วาดออกมาเทียบกับ
+     * กล่องทดสอบสูง 297mm (ให้เบราว์เซอร์แปลง mm เป็น px เอง ไม่เดาค่า DPI)
+     * ตอนพิมพ์จริงแผ่นแบบนี้จะไหลล้นไปอีกแผ่น ลายเซ็นหลุดจากตาราง จึงต้องเห็นก่อนพิมพ์
+     */
+    function markOverflowPages() {
+      const probe = doc.createElement("div");
+      probe.style.cssText = "position:absolute;visibility:hidden;height:297mm;width:1px;";
+      doc.body.appendChild(probe);
+      const limit = probe.getBoundingClientRect().height + 1;
+      probe.remove();
+
+      const over = [];
+      doc.querySelectorAll(".print-page").forEach((page, i) => {
+        const overflow = page.getBoundingClientRect().height > limit;
+        page.classList.toggle("is-overflow", overflow);
+        if (overflow) over.push(i + 1);
+      });
+
+      const warning = doc.getElementById("overflowWarning");
+      warning.hidden = !over.length;
+      warning.textContent = over.length
+        ? `แผ่นที่ ${over.join(", ")} ยาวเกิน 1 หน้า A4 -- ลดขนาดตัวอักษรหรือจำนวนรายการต่อแผ่น`
+        : "";
+    }
+
+    const previewBtn = doc.getElementById("previewBtn");
+    const confirmBtnEl = doc.getElementById("confirmBtn");
+    let previewing = false;
+
+    /**
+     * โหมดตัวอย่าง: ล็อกช่องแก้ไข ซ่อนกรอบ/ดรอปดาวน์ แล้วเผยปุ่มพิมพ์
+     * แถบตั้งค่ายังอยู่ -- ปรับแล้วเห็นผลบนแผ่นทันที ไม่ต้องสลับไปมา
+     *
+     * เลือกด้วย [contenteditable] (ไม่ระบุค่า) จึงจับได้ทั้งตอนเป็น true และ false
+     * ส่วนช่องสำเนาบนแผ่นที่ 2 เป็นต้นไปไม่มีแอตทริบิวต์นี้เลยตั้งแต่แรก จึงไม่ถูก
+     * เปิดให้แก้ไขตอนออกจากโหมดตัวอย่าง
+     */
+    function applyPreviewState() {
+      doc.body.classList.toggle("is-preview", previewing);
+      doc.querySelectorAll("[contenteditable]").forEach(el => {
+        el.setAttribute("contenteditable", previewing ? "false" : "true");
+      });
+      confirmBtnEl.hidden = !previewing;
+      previewBtn.textContent = previewing ? "กลับไปแก้ไข" : "ดูตัวอย่างก่อนพิมพ์ (Preview)";
+    }
+
+    previewBtn.addEventListener("click", () => {
+      previewing = !previewing;
+      applyPreviewState();
+      markOverflowPages();
+    });
 
     doc.documentElement.style.setProperty("--table-font", `${setup.fontSize}px`);
 
@@ -1830,6 +1921,7 @@
       // ขนาดตัวอักษรไม่เปลี่ยนการแบ่งแผ่น (แบ่งตามจำนวนรายการ ไม่ใช่ความสูงจริง)
       // จึงแค่ขยับตัวแปร CSS พอ ไม่ต้องวาดใหม่ -- ไม่ต้องเสี่ยงกับข้อความที่พิมพ์ค้างไว้
       doc.documentElement.style.setProperty("--table-font", `${value}px`);
+      markOverflowPages();
     });
 
     rowsEl.addEventListener("change", () => {
@@ -1854,6 +1946,8 @@
           const target = group.children[col];
           if (target) target.style.width = `${value}%`;
         });
+        // คอลัมน์แคบลง = ข้อความตัดบรรทัดมากขึ้น แผ่นอาจสูงเกินได้
+        markOverflowPages();
       });
     });
 
@@ -1871,6 +1965,94 @@
 
     wireSenderPicker(printWindow, senderOptions || []);
     wireSignatureMirroring(printWindow);
+    applyPreviewState();
+    // รอให้ฟอนต์จาก Google Fonts โหลดก่อนค่อยวัด -- วัดก่อนจะได้ความสูงของฟอนต์
+    // สำรองซึ่งต่างจากที่พิมพ์จริง
+    if (doc.fonts && doc.fonts.ready) doc.fonts.ready.then(markOverflowPages);
+    else markOverflowPages();
+  }
+
+  /**
+   * พิมพ์ก่อน แล้วค่อยเปลี่ยนสถานะ -- ตามลำดับที่เจ้าของงานสั่ง
+   *
+   * สคริปต์รู้ไม่ได้ว่าหน้าต่างพิมพ์ของเบราว์เซอร์ถูกกดพิมพ์หรือกดยกเลิก จึงถาม
+   * คนตรง ๆ หลังหน้าต่างพิมพ์ปิด ตอบ "ยกเลิก" = ไม่มีอะไรเปลี่ยนเลย กดพิมพ์ใหม่ได้
+   *
+   * อ่านข้อความที่แก้ไว้ (readDispatchDocument) ก่อนเปิดหน้าต่างพิมพ์ -- สิ่งที่
+   * เก็บลงสมุดต้องเป็นสิ่งที่อยู่บนกระดาษแผ่นที่เพิ่งพิมพ์ออกไป
+   *
+   * ถ้าพิมพ์แล้วแต่บันทึกไม่สำเร็จ ปุ่มจะเปลี่ยนเป็น "บันทึกสถานะอีกครั้ง" ซึ่งบันทึก
+   * อย่างเดียวไม่พิมพ์ซ้ำ -- กระดาษออกไปแล้ว ไม่ควรต้องพิมพ์อีกแผ่นเพื่อแก้ปัญหาเน็ต
+   */
+  function wirePrintThenConfirm(printWindow, { statusLabel, save }) {
+    const doc = printWindow.document;
+    const confirmBtn = doc.getElementById("confirmBtn");
+    const previewBtn = doc.getElementById("previewBtn");
+    const note = doc.querySelector(".actions p");
+    const idleLabel = confirmBtn.textContent;
+    let printedEdited = null;
+
+    function waitForPrintDialog() {
+      return new Promise(resolve => {
+        let settled = false;
+        const done = () => {
+          if (settled) return;
+          settled = true;
+          printWindow.removeEventListener("afterprint", done);
+          resolve();
+        };
+        printWindow.addEventListener("afterprint", done);
+        const started = Date.now();
+        printWindow.print();
+        // เบราว์เซอร์ส่วนใหญ่ (Chrome/Edge/Firefox) หยุดรอที่ print() จนหน้าต่าง
+        // ปิด -- ถ้ากลับมาช้ากว่าเสี้ยววินาทีแปลว่าหน้าต่างปิดไปแล้ว ไม่ต้องรอ
+        // afterprint อีก ส่วนเบราว์เซอร์ที่ไม่หยุดรอจะได้คำตอบจาก afterprint แทน
+        if (Date.now() - started > 300) done();
+      });
+    }
+
+    async function saveStatus() {
+      confirmBtn.disabled = true;
+      confirmBtn.textContent = "กำลังบันทึก...";
+      try {
+        await save(printedEdited);
+        confirmBtn.textContent = "พิมพ์และบันทึกเรียบร้อย";
+        previewBtn.hidden = true;
+        note.textContent = `เปลี่ยนสถานะเป็น "${statusLabel}" และเก็บสมุดเล่มนี้ไว้ในประวัติแล้ว ปิดหน้าต่างนี้ได้เลย`;
+      } catch (err) {
+        console.error(`CS Connect: บันทึกสถานะ "${statusLabel}" ไม่สำเร็จ`, err);
+        confirmBtn.disabled = false;
+        confirmBtn.textContent = "บันทึกสถานะอีกครั้ง";
+        note.textContent = "พิมพ์แล้วแต่บันทึกสถานะไม่สำเร็จ -- กดปุ่มด้านบนเพื่อบันทึกอีกครั้ง (ไม่พิมพ์ซ้ำ)";
+      }
+    }
+
+    confirmBtn.addEventListener("click", async () => {
+      if (printedEdited) {
+        await saveStatus();
+        return;
+      }
+
+      confirmBtn.disabled = true;
+      const edited = readDispatchDocument(printWindow);
+      await waitForPrintDialog();
+
+      const ok = printWindow.confirm(
+        `พิมพ์สมุดเรียบร้อยแล้วใช่หรือไม่?\n\n`
+        + `กด "ตกลง" เพื่อเปลี่ยนสถานะคำร้องทั้งหมดในสมุดเป็น "${statusLabel}" และเก็บสมุดไว้ในประวัติ\n`
+        + `กด "ยกเลิก" ถ้ายังไม่ได้พิมพ์ -- สถานะจะยังไม่เปลี่ยน`
+      );
+
+      if (!ok) {
+        confirmBtn.disabled = false;
+        confirmBtn.textContent = idleLabel;
+        note.textContent = "ยังไม่ได้เปลี่ยนสถานะ -- แก้ไข/ดูตัวอย่างแล้วกดพิมพ์ใหม่ได้เมื่อพร้อม";
+        return;
+      }
+
+      printedEdited = edited;
+      await saveStatus();
+    });
   }
 
   /** Reads back whatever staff actually typed into the document before printing. */
@@ -2012,44 +2194,18 @@
       senderOptions,
       receiver: { name: "", position: "" },
       editable: true,
-      actionLabel: "พิมพ์และยืนยันส่งแผนกมิเตอร์",
-      actionNote: 'แก้ไขข้อความในตารางหรือช่องเซ็นชื่อได้ก่อนกดปุ่มนี้ -- กดแล้วจะเปลี่ยนสถานะคำร้องทั้งหมดด้านบนเป็น "ส่งแผนกมิเตอร์แล้ว" บันทึกสมุดเล่มนี้ไว้ให้ย้อนดูภายหลัง และเปิดหน้าต่างพิมพ์ทันที'
+      actionLabel: "พิมพ์สมุดคุม",
+      actionNote: 'แก้ไขข้อความในตาราง/ช่องเซ็นชื่อ แล้วกด "ดูตัวอย่างก่อนพิมพ์" -- ปรับขนาดตัวอักษร/จัดหน้าในแถบด้านบนได้ตลอด เห็นผลบนแผ่นทันที กดพิมพ์แล้วระบบจะถามยืนยันก่อนเปลี่ยนสถานะเป็น "ส่งแผนกมิเตอร์แล้ว"'
     });
 
-    const confirmBtn = printWindow.document.getElementById("confirmBtn");
-    const confirmNote = printWindow.document.querySelector(".actions p");
-    confirmBtn.addEventListener("click", async () => {
-      confirmBtn.disabled = true;
-      confirmBtn.textContent = "กำลังบันทึก...";
-      try {
-        // Read the edits back out FIRST: what gets stored has to be what was
-        // actually on the paper, notes and signatures included, or a reprint
-        // won't match the copy the meter department signed.
-        const edited = readDispatchDocument(printWindow);
-        const finalRows = rows.map((row, i) => ({ ...row, note: edited.notes[i] ?? row.note }));
-
-        // Clicking this button is the point of confirmation -- there is no
-        // reliable way for a script to know whether the browser's own print
-        // dialog was actually completed or cancelled afterward, so intent to
-        // print (not confirmation the paper came out) is what the app can
-        // act on, same as most "Send" buttons don't wait for delivery
-        // confirmation before marking a message sent.
-        await markRecordsDispatchedToMeter(sorted.map(r => r.id), {
-          printedAt,
-          rows: finalRows,
-          sender: edited.sender,
-          receiver: edited.receiver
-        });
-
-        confirmBtn.textContent = "บันทึกแล้ว กำลังเปิดหน้าต่างพิมพ์...";
-        printWindow.print();
-        confirmBtn.textContent = "บันทึกและพิมพ์เรียบร้อย";
-        confirmNote.textContent = 'เปลี่ยนสถานะเป็น "ส่งแผนกมิเตอร์แล้ว" และเก็บสมุดเล่มนี้ไว้ในประวัติแล้ว ปิดหน้าต่างนี้ได้เลย';
-      } catch (err) {
-        console.error("CS Connect: บันทึกการส่งแผนกมิเตอร์ไม่สำเร็จ", err);
-        confirmBtn.disabled = false;
-        confirmBtn.textContent = "เกิดข้อผิดพลาด ลองใหม่อีกครั้ง";
-      }
+    wirePrintThenConfirm(printWindow, {
+      statusLabel: "ส่งแผนกมิเตอร์แล้ว",
+      save: (edited) => markRecordsDispatchedToMeter(sorted.map(r => r.id), {
+        printedAt,
+        rows: rows.map((row, i) => ({ ...row, note: edited.notes[i] ?? row.note })),
+        sender: edited.sender,
+        receiver: edited.receiver
+      })
     });
   }
 
@@ -2120,35 +2276,18 @@
       senderOptions,
       receiver: { name: "", position: "" },
       editable: true,
-      actionLabel: "พิมพ์และยืนยันส่ง ผสน.",
-      actionNote: 'แก้ไขข้อความในตารางหรือช่องเซ็นชื่อได้ก่อนกดปุ่มนี้ -- กดแล้วจะเปลี่ยนสถานะคำร้องทั้งหมดด้านบนเป็น "ส่ง ผสน. แล้ว" พร้อมบันทึกวันที่ส่ง เก็บสมุดเล่มนี้ไว้ให้ย้อนดูภายหลัง และเปิดหน้าต่างพิมพ์ทันที'
+      actionLabel: "พิมพ์สมุดคุม",
+      actionNote: 'แก้ไขข้อความในตาราง/ช่องเซ็นชื่อ แล้วกด "ดูตัวอย่างก่อนพิมพ์" -- ปรับขนาดตัวอักษร/จัดหน้าในแถบด้านบนได้ตลอด เห็นผลบนแผ่นทันที กดพิมพ์แล้วระบบจะถามยืนยันก่อนเปลี่ยนสถานะเป็น "ส่ง ผสน. แล้ว"'
     });
 
-    const confirmBtn = printWindow.document.getElementById("confirmBtn");
-    const confirmNote = printWindow.document.querySelector(".actions p");
-    confirmBtn.addEventListener("click", async () => {
-      confirmBtn.disabled = true;
-      confirmBtn.textContent = "กำลังบันทึก...";
-      try {
-        const edited = readDispatchDocument(printWindow);
-        const finalRows = rows.map((row, i) => ({ ...row, note: edited.notes[i] ?? row.note }));
-
-        await markRecordsSentGeneral(sorted.map(r => r.id), {
-          printedAt,
-          rows: finalRows,
-          sender: edited.sender,
-          receiver: edited.receiver
-        });
-
-        confirmBtn.textContent = "บันทึกแล้ว กำลังเปิดหน้าต่างพิมพ์...";
-        printWindow.print();
-        confirmBtn.textContent = "บันทึกและพิมพ์เรียบร้อย";
-        confirmNote.textContent = 'เปลี่ยนสถานะเป็น "ส่ง ผสน. แล้ว" และเก็บสมุดเล่มนี้ไว้ในประวัติแล้ว ปิดหน้าต่างนี้ได้เลย';
-      } catch (err) {
-        console.error("CS Connect: บันทึกการส่ง ผสน. ไม่สำเร็จ", err);
-        confirmBtn.disabled = false;
-        confirmBtn.textContent = "เกิดข้อผิดพลาด ลองใหม่อีกครั้ง";
-      }
+    wirePrintThenConfirm(printWindow, {
+      statusLabel: "ส่ง ผสน. แล้ว",
+      save: (edited) => markRecordsSentGeneral(sorted.map(r => r.id), {
+        printedAt,
+        rows: rows.map((row, i) => ({ ...row, note: edited.notes[i] ?? row.note })),
+        sender: edited.sender,
+        receiver: edited.receiver
+      })
     });
   }
 
@@ -2186,35 +2325,18 @@
       senderOptions,
       receiver: { name: "", position: "" },
       editable: true,
-      actionLabel: "พิมพ์และยืนยันส่ง ผบร.",
-      actionNote: 'แก้ไขข้อความในตารางหรือช่องเซ็นชื่อได้ก่อนกดปุ่มนี้ -- กดแล้วจะเปลี่ยนสถานะคำร้องทั้งหมดด้านบนเป็น "ส่ง ผบร." เก็บสมุดเล่มนี้ไว้ให้ย้อนดูภายหลัง และเปิดหน้าต่างพิมพ์ทันที'
+      actionLabel: "พิมพ์สมุดคุม",
+      actionNote: 'แก้ไขข้อความในตาราง/ช่องเซ็นชื่อ แล้วกด "ดูตัวอย่างก่อนพิมพ์" -- ปรับขนาดตัวอักษร/จัดหน้าในแถบด้านบนได้ตลอด เห็นผลบนแผ่นทันที กดพิมพ์แล้วระบบจะถามยืนยันก่อนเปลี่ยนสถานะเป็น "ส่ง ผบร."'
     });
 
-    const confirmBtn = printWindow.document.getElementById("confirmBtn");
-    const confirmNote = printWindow.document.querySelector(".actions p");
-    confirmBtn.addEventListener("click", async () => {
-      confirmBtn.disabled = true;
-      confirmBtn.textContent = "กำลังบันทึก...";
-      try {
-        const edited = readDispatchDocument(printWindow);
-        const finalRows = rows.map((row, i) => ({ ...row, note: edited.notes[i] ?? row.note }));
-
-        await markRecordsSentRevenue(sorted.map(r => r.id), {
-          printedAt,
-          rows: finalRows,
-          sender: edited.sender,
-          receiver: edited.receiver
-        });
-
-        confirmBtn.textContent = "บันทึกแล้ว กำลังเปิดหน้าต่างพิมพ์...";
-        printWindow.print();
-        confirmBtn.textContent = "บันทึกและพิมพ์เรียบร้อย";
-        confirmNote.textContent = 'เปลี่ยนสถานะเป็น "ส่ง ผบร." และเก็บสมุดเล่มนี้ไว้ในประวัติแล้ว ปิดหน้าต่างนี้ได้เลย';
-      } catch (err) {
-        console.error("CS Connect: บันทึกการส่ง ผบร. ไม่สำเร็จ", err);
-        confirmBtn.disabled = false;
-        confirmBtn.textContent = "เกิดข้อผิดพลาด ลองใหม่อีกครั้ง";
-      }
+    wirePrintThenConfirm(printWindow, {
+      statusLabel: "ส่ง ผบร.",
+      save: (edited) => markRecordsSentRevenue(sorted.map(r => r.id), {
+        printedAt,
+        rows: rows.map((row, i) => ({ ...row, note: edited.notes[i] ?? row.note })),
+        sender: edited.sender,
+        receiver: edited.receiver
+      })
     });
   }
 
