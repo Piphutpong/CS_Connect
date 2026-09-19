@@ -4984,9 +4984,12 @@
   function surveyQueueText(record) {
     const queue = surveyQueuePosition(record);
     if (!queue) return "";
-    return queue.assigned
-      ? `คิวรอสำรวจ: ลำดับที่ ${queue.position} จาก ${queue.total} งานของ ${record.assignee || "ผู้รับผิดชอบ"}`
-      : `คิวรอสำรวจ: ลำดับที่ ${queue.position} จาก ${queue.total} (ยังไม่ได้จ่ายงาน)`;
+    // คิวแรกคือ "ถึงคิวแล้ว" ส่วนคิวถัดไปบอกว่ายังต้องรออีกกี่คิว -- เป็นคำตอบ
+    // ตรง ๆ ของคำถามที่ลูกค้าโทรมาถาม ลำดับเต็มอยู่ในวงเล็บให้เจ้าหน้าที่อ้างอิง
+    const owner = queue.assigned ? `ของ ${record.assignee || "ผู้รับผิดชอบ"}` : "(ยังไม่ได้จ่ายงาน)";
+    const detail = `(ลำดับที่ ${queue.position} จาก ${queue.total} งาน ${owner})`;
+    const headline = queue.position === 1 ? "คิวปัจจุบัน" : `รออีก ${queue.position - 1} คิว`;
+    return `คิวรอสำรวจ: ${headline} ${detail}`;
   }
 
   function renderRequestsList() {
