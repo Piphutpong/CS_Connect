@@ -1358,6 +1358,8 @@
       return {
         ...r,
         jobStatus: "ส่งแผนกมิเตอร์แล้ว",
+        // วันเดียวกับที่พิมพ์ลงสมุดคุม -- วันที่บนคำร้องกับบนสมุดตรงกันเสมอ
+        meterSentDate: todayDateString(new Date(now)),
         statusHistory,
         updatedByName: byName,
         updatedByEmail: byEmail,
@@ -3930,6 +3932,8 @@
   const reqJobStatus = document.getElementById("reqJobStatus");
   const reqPaidDateField = document.getElementById("reqPaidDateField");
   const reqPaidDate = document.getElementById("reqPaidDate");
+  const reqMeterSentDateField = document.getElementById("reqMeterSentDateField");
+  const reqMeterSentDate = document.getElementById("reqMeterSentDate");
   const reqCreateExtendBtn = document.getElementById("reqCreateExtendBtn");
   const reqCoord = document.getElementById("reqCoord");
   const reqMapBtn = document.getElementById("reqMapBtn");
@@ -4353,12 +4357,34 @@
    */
   function syncPaidDateField() {
     const isPaid = reqJobStatus.value === "ชำระเงินแล้ว";
-    reqPaidDateField.hidden = !isPaid && !reqPaidDate.value;
+    // ส่งแผนกมิเตอร์แล้ว = ขั้นถัดจากชำระเงิน -- โชว์วันที่ส่งแทน ส่วนวันที่ชำระ
+    // ซ่อนไป (ค่ายังเก็บอยู่ในคำร้อง ไม่ได้ล้าง แค่ไม่ต้องเห็นแล้วในขั้นนี้)
+    const isSent = reqJobStatus.value === "ส่งแผนกมิเตอร์แล้ว";
+    reqPaidDateField.hidden = isSent || (!isPaid && !reqPaidDate.value);
     if (isPaid && !reqPaidDate.value) {
       reqPaidDate.value = todayDateString();
     }
+    reqMeterSentDateField.hidden = !isSent;
+    if (isSent && !reqMeterSentDate.value) {
+      reqMeterSentDate.value = todayDateString();
+    }
   }
   reqJobStatus.addEventListener("change", syncPaidDateField);
+
+  /**
+   * วันที่ส่งแผนกมิเตอร์ของคำร้อง -- ใบที่ส่งก่อนมีช่องนี้ไม่มีค่าเก็บไว้ จึงถอยไป
+   * อ่านเวลาในประวัติสถานะ ("ส่งแผนกมิเตอร์แล้ว" ครั้งล่าสุด) ซึ่งเป็นเวลาที่กด
+   * ยืนยันส่งจริง ดีกว่าปล่อยว่างแล้วให้ระบบเติมเป็นวันนี้ซึ่งผิดแน่ ๆ
+   */
+  function meterSentDateOf(r) {
+    if (!r) return "";
+    if (r.meterSentDate) return r.meterSentDate;
+    if (r.jobStatus !== "ส่งแผนกมิเตอร์แล้ว") return "";
+    const entry = (Array.isArray(r.statusHistory) ? r.statusHistory : [])
+      .filter(h => h && h.status === "ส่งแผนกมิเตอร์แล้ว" && h.at)
+      .pop();
+    return entry ? todayDateString(new Date(Number(entry.at))) : "";
+  }
 
   reqPurpose.addEventListener("change", () => {
     reqPurposeOtherField.hidden = reqPurpose.value !== "other";
@@ -6104,6 +6130,7 @@
     // เติมวันนี้ให้เฉพาะตอนช่องยังว่าง ถ้าตั้งค่าทีหลัง วันที่เดิมของคำร้องจะโดนข้าม
     // ไปแล้วช่องจะยังว่างตอนที่ change ทำงาน กลายเป็นเขียนวันนี้ทับของเดิม
     reqPaidDate.value = r.paidDate || "";
+    reqMeterSentDate.value = meterSentDateOf(r);
     document.getElementById("reqJobStatus").value = r.jobStatus || "รอตรวจสอบ";
     reqJobStatus.dispatchEvent(new Event("change"));
     document.getElementById("reqNote").value = r.note || "";
@@ -6263,6 +6290,12 @@
     const queueText = surveyQueueText(record);
     if (queueText) {
       lines.push({ label: "คิวรอสำรวจ", value: queueText.replace(/^คิวรอสำรวจ: /, "") });
+    }
+
+    // ใต้สถานะงานเช่นกัน -- คำถามถัดไปของคนที่ถามว่า "ส่งมิเตอร์หรือยัง" คือ "ส่งวันไหน"
+    const meterSent = record.type === "power" ? meterSentDateOf(record) : "";
+    if (meterSent) {
+      lines.push({ label: "วันที่ส่งแผนกมิเตอร์", value: formatThaiDate(meterSent), mono: true });
     }
 
     // มีเฉพาะคำร้องที่กรอกพิกัดไว้ -- ไม่ขึ้นขีดว่างให้รกในใบที่ไม่มี
@@ -7106,6 +7139,7 @@
       // ว่างได้เสมอแม้สถานะเป็น "ชำระเงินแล้ว" -- ช่องนี้เป็นความสะดวก ไม่ใช่กฎบังคับ
       // แบบเดียวกับ approvalDate ของขอขยายเขตฯ (ไม่มีการตรวจฝั่งเซิร์ฟเวอร์ผูกไว้)
       const paidDate = document.getElementById("reqPaidDate").value;
+      const meterSentDate = reqMeterSentDate.value;
       const note = document.getElementById("reqNote").value.trim();
       const coord = readCoordField(reqCoord);
 
@@ -7209,6 +7243,7 @@
         largeCustomer,
         jobStatus,
         paidDate,
+        meterSentDate,
         note,
         lat: coord.lat,
         lng: coord.lng

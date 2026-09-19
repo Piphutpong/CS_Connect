@@ -24,7 +24,7 @@
 <title>CS Connect</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=Sarabun:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=20260919j">
+<link rel="stylesheet" href="style.css?v=20260919k">
 </head>
 <body>
 
@@ -734,6 +734,12 @@
           <div class="field" id="reqPaidDateField" hidden>
             <label for="reqPaidDate">วันที่ชำระ</label>
             <input type="date" id="reqPaidDate">
+          </div>
+          <!-- ขึ้นเมื่อสถานะเป็น "ส่งแผนกมิเตอร์แล้ว" (แทนที่วันที่ชำระ) -- ยืนยันส่งจาก
+               สมุดคุมมิเตอร์ ระบบลงวันที่ให้เอง แก้เองได้ (ดู syncPaidDateField) -->
+          <div class="field" id="reqMeterSentDateField" hidden>
+            <label for="reqMeterSentDate">วันที่ส่งแผนกมิเตอร์</label>
+            <input type="date" id="reqMeterSentDate">
           </div>
           <!-- ผู้รับผิดชอบ -- เขียนได้ทางเดียวคือหัวหน้าจ่ายงานจากหน้า "งานขอใช้ไฟฟ้า"
                (assignRequests ฝั่งเซิร์ฟเวอร์) ช่องนี้แสดงอย่างเดียว และไม่ถูกส่งไปกับ
@@ -2097,6 +2103,6 @@
      **ต้องเปลี่ยนเลขนี้ทุกครั้งที่แก้ app.js / style.css / track.js / qr.js**
      ไม่งั้นผู้ใช้บางคนจะยังได้ไฟล์เก่าไปอีกพักใหญ่ -->
 <script src="vendor/supabase.js?v=2.116.0"></script>
-<script src="app.js?v=20260919j"></script>
+<script src="app.js?v=20260919k"></script>
 </body>
 </html>
