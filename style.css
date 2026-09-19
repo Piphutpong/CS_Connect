@@ -4053,12 +4053,14 @@ span.estimate-crumb {
   /* บน 1.5 / ขวา 2 / ล่าง 2 / ซ้าย 3 ซม. ตามแบบที่ 1 */
   padding: 15mm 20mm 20mm 30mm;
   background-color: #fff;
-  /* เส้นสีชมพูบอกจุดขึ้นหน้าใหม่โดยประมาณ: หน้าแรกเนื้อหาจบที่ 277 มม. (297 - ขอบ
-     ล่าง 20) หน้าต่อ ๆ ไปมีพื้นที่ 257 มม. (ขอบบน 20 + ล่าง 20) -- เริ่มลายที่ 20 มม.
-     แล้วเว้นทุก 257 มม. เส้นแรกจึงตกที่ 277 มม. พอดี */
+  /* เส้นสีชมพูบอกจุดขึ้นหน้าใหม่โดยประมาณ ให้ตรงกับที่ paginateQuotation จัดจริง:
+     หน้าแรกเนื้อหาจบที่ 268 มม. (297 - ขอบล่าง 20 - ที่คำต่อ 9) หน้าต่อ ๆ ไปมีพื้นที่
+     ~244 มม. (ขอบบน 15 + เลขหน้า ~6.5 + เว้น 6 pt ~2.1 + ขอบล่าง 20 + คำต่อ 9)
+     เริ่มลายที่ 24 มม. แล้วเว้นทุก 244 มม. เส้นแรกจึงตกที่ 268 มม.
+     เป็นแค่ประมาณ -- ย่อหน้าที่ถูกตัดข้ามหน้าตัดตรงรอยคำ ตำแหน่งจริงดูในหน้าต่างพิมพ์ */
   background-image: repeating-linear-gradient(to bottom,
-    transparent 0, transparent calc(257mm - 1px), #f0a3c8 calc(257mm - 1px), #f0a3c8 257mm);
-  background-position: 0 20mm;
+    transparent 0, transparent calc(244mm - 1px), #f0a3c8 calc(244mm - 1px), #f0a3c8 244mm);
+  background-position: 0 24mm;
   background-repeat: repeat-y;
   box-shadow: 0 4px 18px rgba(34, 21, 48, 0.18);
   color: #000;
@@ -4307,10 +4309,13 @@ span.qf { display: inline-block; vertical-align: top; }
 }
 
 /* ---------------------------------------------------------------- พิมพ์
-   หน้าต่างพิมพ์ใช้ stylesheet นี้ไฟล์เดียวกัน (body.quo-print-body) -- ตรงนี้คือ
-   ส่วนต่างเดียวระหว่างจอกับกระดาษ: ขอบกระดาษย้ายไปอยู่ที่ @page ไม่ใช่ padding
-   และหน้าที่ 2 ขึ้นไปมีเลขหน้า "- ๒ -" กลางบนตามแบบหนังสือราชการ
-   (margin box @top-center รองรับใน Chrome/Edge -- Firefox จะไม่พิมพ์เลขหน้า) */
+   หน้าต่างพิมพ์ใช้ stylesheet นี้ไฟล์เดียวกัน (body.quo-print-body) และจัดหน้าเอง
+   ทีละแผ่น (paginateQuotation ใน app.js) -- แต่ละ .qp-sheet คือกระดาษ A4 หนึ่งแผ่น
+   พอดี ขอบกระดาษอยู่ใน padding ของแผ่น @page จึงตั้งขอบเป็น 0 (named page
+   "quosheet" -- ไม่ไปกระทบการพิมพ์หน้าอื่นของแอป)
+
+   หน้าที่ 2 ขึ้นไป: "- ๒ -" กลางบน แล้วบรรทัดถัดมาเว้นก่อน 6 pt ตามแบบหนังสือราชการ
+   ทุกหน้าที่ยังไม่จบ: คำต่อ "/คำแรก ๆ ของหน้าถัดไป..." มุมล่างขวา */
 body.quo-print-body {
   margin: 0;
   padding: 24px 0;
@@ -4322,45 +4327,69 @@ body.quo-print-body {
   margin: 0 auto 16px;
   display: flex;
   justify-content: flex-end;
-  gap: 10px;
+  align-items: center;
+  gap: 12px;
+}
+.qp-status { font-size: 14px; color: var(--ink-soft); }
+
+/* ต้นฉบับก่อนจัดหน้า -- ต้อง "ถูกวาด" (ไม่ใช่ display:none) ฟอนต์ถึงจะโหลด แต่อยู่นอกจอ */
+.qp-source {
+  position: absolute;
+  left: -10000px;
+  top: 0;
+  visibility: hidden;
+}
+
+.qp-sheet.quo-paper {
+  display: flex;
+  flex-direction: column;
+  height: 297mm;
+  min-height: 0;
+  margin: 0 auto 24px;
+  background-image: none;
+  overflow: hidden;
+  page: quosheet;
+  break-after: page;
+}
+.qp-sheet.quo-paper:last-child { break-after: auto; }
+
+.qp-pageno {
+  text-align: center;
+  flex-shrink: 0;
+}
+
+/* พื้นที่เนื้อหาของแผ่น -- เว้นท้ายไว้หนึ่งบรรทัดสำหรับคำต่อ (9 มม.) */
+.qp-body {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  margin-bottom: 9mm;
+}
+/* ก้อนแรกของแผ่นไม่มีระยะบน -- หน้า 2+ ได้ระยะ 6 pt จากเลขหน้าแทน */
+.qp-body > :first-child { margin-top: 0; }
+.qp-pageno + .qp-body { margin-top: 6pt; }
+
+.qp-cont {
+  position: absolute;
+  right: 20mm;
+  bottom: 20mm;
+  line-height: 9mm;
+}
+
+/* ย่อหน้าที่ถูกตัดข้ามหน้า: ส่วนแรกเกลี่ยบรรทัดสุดท้ายเต็มบรรทัด ส่วนที่ต่อไม่ย่อหน้าซ้ำ */
+.qp-split-head { text-align-last: justify; }
+.qp-split-tail { text-indent: 0; }
+
+@page quosheet {
+  size: A4;
+  margin: 0;
 }
 
 @media print {
-  @page {
-    size: A4;
-    margin: 20mm 20mm 20mm 30mm;
-    @top-center {
-      content: "- " counter(page) " -";
-      font-family: "QuoSarabun", "TH Sarabun New", sans-serif;
-      font-size: 16pt;
-      vertical-align: bottom;
-      padding-bottom: 4mm;
-    }
-  }
-  @page :first {
-    margin-top: 15mm;
-    @top-center { content: none; }
-  }
-  /* เลขหน้าในหัวกระดาษเป็นเลขไทยตามตัวเลือก "เลขไทย" ด้วย -- margin box อ่านค่าจาก
-     body ไม่ได้ จึงใช้ named page แยกอีกชุดที่ตั้งฟอนต์ IT๙ ไว้ */
-  @page thaidigits {
-    @top-center {
-      content: "- " counter(page) " -";
-      font-family: "QuoSarabunIT9", "TH SarabunIT๙", sans-serif;
-      font-size: 16pt;
-      vertical-align: bottom;
-      padding-bottom: 4mm;
-    }
-  }
-  @page thaidigits:first { margin-top: 15mm; @top-center { content: none; } }
-  .quo-print-body .quo-paper.is-thai-digits { page: thaidigits; }
   body.quo-print-body { padding: 0; background: #fff; }
   .quo-print-toolbar { display: none; }
-  .quo-print-body .quo-paper {
-    width: auto;
-    min-height: 0;
-    padding: 0;
+  .qp-sheet.quo-paper {
+    margin: 0;
     box-shadow: none;
-    background: none;
   }
 }

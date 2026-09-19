@@ -12166,27 +12166,56 @@ ${sheetHtml}
 
   // ---------------------------------------------------------------- พิมพ์
   /**
-   * พิมพ์ = คัดลอกกระดาษบนจอทั้งแผ่นไปวางในหน้าต่างใหม่ แล้วถอดส่วนที่เป็นเครื่องมือ
-   * แก้ไขออก (กรอบประ, ข้อความแนะนำ, ปุ่ม, บรรทัดที่ไม่ได้กรอก) -- ไม่ได้สร้าง HTML
-   * ใหม่อีกชุด จึงไม่มีทางที่หน้าจอกับกระดาษจะวางตำแหน่งต่างกัน
+   * พิมพ์หนังสือเสนอราคา -- จัดหน้าเองทีละแผ่น ไม่ปล่อยให้เบราว์เซอร์ตัดหน้า
    *
-   * หน้าต่างใหม่โหลด style.css ตัวเดียวกัน (ลิงก์เต็มพร้อม ?v=) ขอบกระดาษ/เลขหน้า
-   * อยู่ใน @media print ของไฟล์นั้น หน้าต่างที่เปิดด้วย window.open สืบ CSP ของหน้านี้
-   * มาด้วย จึงห้ามมีสคริปต์ inline -- ปุ่มพิมพ์ผูก listener จากฝั่งนี้
+   * ต้องจัดเองเพราะหนังสือราชการมีสองอย่างที่เบราว์เซอร์ทำให้ไม่ได้:
+   *   1. "คำต่อ" มุมล่างขวาของทุกหน้าที่ยังไม่จบ -- "/" ตามด้วยคำแรก ๆ ของหน้าถัดไป
+   *      (เช่น "/หากท่านมีความ...") ต้องรู้ก่อนว่าหน้าถัดไปขึ้นต้นด้วยอะไร
+   *   2. หน้าที่ 2 ขึ้นไปมีเลขหน้า "- ๒ -" กลางบน แล้วบรรทัดถัดมาเว้นก่อน 6 pt
+   *
+   * วิธี: คัดลอกกระดาษบนจอ ถอดเครื่องมือแก้ไขออก แยกเป็นก้อน ๆ (หัวหนังสือ, บรรทัด
+   * เรื่อง/เรียน, ย่อหน้าทีละย่อหน้า, ตาราง, ลงนาม ...) แล้วเทใส่แผ่น A4 ทีละก้อนใน
+   * หน้าต่างพิมพ์ วัดความสูงจริงหลังฟอนต์โหลดแล้ว ก้อนไหนล้นแผ่น:
+   *   - ย่อหน้า: ตัดกลางย่อหน้าตรงรอยคำ (Intl.Segmenter) ส่วนที่เหลือขึ้นหน้าใหม่
+   *     โดยไม่ย่อหน้าซ้ำ บรรทัดสุดท้ายก่อนตัดเกลี่ยเต็มบรรทัดให้ดูต่อเนื่อง
+   *   - ตาราง: ตัดระหว่างแถว หัวตารางพิมพ์ซ้ำในหน้าใหม่
+   *   - ลงท้าย+ลงนาม / หน่วยงานเจ้าของเรื่อง / บรรทัดหัวหนังสือ: ยกไปทั้งก้อน
+   * วัดในหน้าต่างพิมพ์เองเพราะเป็นที่เดียวที่ฟอนต์/ขนาดตรงกับที่จะพิมพ์จริง
    */
+  const QP_CONT_WORDS = 3;
+
   function printQuotation() {
     const printWindow = window.open("", "_blank");
     if (!printWindow) return;
 
     const clone = quoPaper.cloneNode(true);
-    clone.removeAttribute("id");
-    clone.style.backgroundImage = "none";
     clone.querySelectorAll(".qd-screen-only").forEach(n => n.remove());
     clone.querySelectorAll("[data-optional]").forEach(line => {
       const field = line.querySelector("[data-field]");
       if (field && !field.textContent.trim()) line.remove();
     });
-    clone.querySelectorAll(".qd-urgency, .qd-para, .qd-owner").forEach(n => {
+
+    // ย่อหน้าหลายย่อหน้าในช่องเดียว -> ก้อนละหนึ่งย่อหน้า จะได้ตัดหน้าทีละย่อหน้าได้
+    // อ่านข้อความจากช่องจริงบนจอ (innerText ของ clone ที่ยังไม่ได้วาดใช้ไม่ได้)
+    clone.querySelectorAll(".qd-para[data-field]").forEach(para => {
+      const live = quoFieldEls.find(el => el.dataset.field === para.dataset.field);
+      const lines = (live ? quoReadField(live) : "").split("\n").map(t => t.trim()).filter(Boolean);
+      lines.forEach((text, i) => {
+        const p = document.createElement("div");
+        p.className = "qd-para";
+        if (i === 0 && para.classList.contains("qd-para-first")) p.classList.add("qd-para-first");
+        p.textContent = text;
+        para.before(p);
+      });
+      para.remove();
+    });
+    // ช่องหลายบรรทัดอื่น (ที่อยู่, ตำแหน่ง, หน่วยงานเจ้าของเรื่อง) เป็นข้อความธรรมดา
+    // บรรทัดละบรรทัด -- ไม่ต้องพก <div>/<br> ของ contenteditable ไปด้วย
+    clone.querySelectorAll(".qf[data-field]:not([data-single])").forEach(field => {
+      const live = quoFieldEls.find(el => el.dataset.field === field.dataset.field);
+      field.textContent = live ? quoReadField(live) : field.textContent;
+    });
+    clone.querySelectorAll(".qd-urgency, .qd-owner").forEach(n => {
       if (!n.textContent.trim()) n.remove();
     });
     clone.querySelectorAll("[contenteditable]").forEach(n => n.removeAttribute("contenteditable"));
@@ -12194,7 +12223,6 @@ ${sheetHtml}
       n.classList.remove("qf");
       n.removeAttribute("data-placeholder");
     });
-    // src ใน markup เป็นลิงก์สัมพัทธ์ -- หน้าต่างใหม่ต้องได้ลิงก์เต็ม
     const seal = clone.querySelector(".qd-seal");
     const liveSeal = quoPaper.querySelector(".qd-seal");
     if (seal && liveSeal) seal.setAttribute("src", liveSeal.src);
@@ -12202,6 +12230,7 @@ ${sheetHtml}
     const cssLink = document.querySelector('link[rel="stylesheet"][href*="style.css"]');
     const cssHref = cssLink ? cssLink.href : new URL("style.css", location.href).href;
     const title = quoReadField(quoFieldEls.find(el => el.dataset.field === "subject")) || "ใบเสนอราคา";
+    const thai = quoThaiDigits.checked;
 
     printWindow.document.write(`<!doctype html>
       <html lang="th">
@@ -12212,14 +12241,226 @@ ${sheetHtml}
         </head>
         <body class="quo-print-body">
           <div class="quo-print-toolbar">
-            <button type="button" id="printBtn" class="btn btn-primary">พิมพ์</button>
+            <span id="qpStatus" class="qp-status">กำลังจัดหน้า...</span>
+            <button type="button" id="printBtn" class="btn btn-primary" disabled>พิมพ์</button>
           </div>
-          ${clone.outerHTML}
+          <div id="qpSheets"></div>
+          <div id="qpSource" class="qp-source">${clone.outerHTML}</div>
         </body>
       </html>`);
     printWindow.document.close();
-    printWindow.document.getElementById("printBtn")
-      .addEventListener("click", () => printWindow.print());
+
+    const doc = printWindow.document;
+    const printBtn = doc.getElementById("printBtn");
+    printBtn.addEventListener("click", () => printWindow.print());
+
+    paginateQuotation(printWindow, thai)
+      .then(pageCount => {
+        doc.getElementById("qpStatus").textContent = `${pageCount} หน้า`;
+        printBtn.disabled = false;
+      })
+      .catch(err => {
+        console.error("CS Connect: จัดหน้าใบเสนอราคาไม่สำเร็จ", err);
+        doc.getElementById("qpStatus").textContent = "จัดหน้าไม่สำเร็จ -- ลองปิดหน้าต่างนี้แล้วกดพิมพ์อีกครั้ง";
+      });
+  }
+
+  async function paginateQuotation(printWindow, thai) {
+    const doc = printWindow.document;
+
+    // รอ stylesheet กับฟอนต์ให้ครบก่อนวัด -- วัดด้วยฟอนต์สำรองได้ความสูงผิด
+    const link = doc.querySelector('link[rel="stylesheet"]');
+    if (link && !link.sheet) {
+      await new Promise(resolve => {
+        link.addEventListener("load", resolve, { once: true });
+        link.addEventListener("error", resolve, { once: true });
+      });
+    }
+    const family = thai ? "QuoSarabunIT9" : "QuoSarabun";
+    await Promise.all([
+      doc.fonts.load(`16pt "${family}"`),
+      doc.fonts.load(`bold 16pt "${family}"`)
+    ]).catch(() => {});
+    await doc.fonts.ready;
+
+    const source = doc.querySelector("#qpSource .quo-paper");
+    const sheets = doc.getElementById("qpSheets");
+    const urgency = source.querySelector(".qd-urgency");
+    if (urgency) urgency.remove();
+    const blocks = Array.from(source.children);
+
+    const pages = [];
+    function newSheet() {
+      const sheet = doc.createElement("section");
+      sheet.className = "qp-sheet quo-paper" + (thai ? " is-thai-digits" : "");
+      if (pages.length) {
+        const no = doc.createElement("div");
+        no.className = "qp-pageno";
+        no.textContent = `- ${pages.length + 1} -`;
+        sheet.appendChild(no);
+      }
+      const body = doc.createElement("div");
+      body.className = "qp-body";
+      sheet.appendChild(body);
+      sheets.appendChild(sheet);
+      const page = { sheet, body };
+      pages.push(page);
+      return page;
+    }
+
+    const overflows = (body) => body.scrollHeight > body.clientHeight + 1;
+    let page = newSheet();
+    if (urgency) page.sheet.appendChild(urgency);
+
+    const queue = blocks.slice();
+    let guard = 0;
+    while (queue.length && guard++ < 2000) {
+      const block = queue.shift();
+      page.body.appendChild(block);
+      if (!overflows(page.body)) continue;
+
+      // ก้อนแรกของแผ่นแล้วยังล้น = ใหญ่กว่าหนึ่งแผ่น ต้องตัด (ย่อหน้า/ตาราง) ไม่งั้นวนไม่จบ
+      const alone = page.body.firstElementChild === block;
+      let rest = null;
+      if (block.classList.contains("qd-para")) rest = splitParagraph(doc, block, page.body, alone);
+      else if (block.classList.contains("qd-table")) rest = splitTable(doc, block, page.body, alone);
+
+      if (rest === "whole") {
+        block.remove();
+        page = newSheet();
+        queue.unshift(block);
+      } else if (rest) {
+        page = newSheet();
+        queue.unshift(rest);
+      } else if (!alone) {
+        // ก้อนที่ตัดไม่ได้ (บรรทัดหัว, ลงนาม ...) ยกไปทั้งก้อน
+        block.remove();
+        page = newSheet();
+        queue.unshift(block);
+      } else {
+        // ก้อนเดียวใหญ่กว่าแผ่นและตัดไม่ได้ -- ปล่อยล้นดีกว่าวนไม่รู้จบ
+        page = newSheet();
+      }
+    }
+
+    // หน้าสุดท้ายว่าง (เกิดได้ถ้าก้อนสุดท้ายพอดีขอบ) -- ทิ้ง
+    while (pages.length > 1 && !pages[pages.length - 1].body.firstElementChild) {
+      pages.pop().sheet.remove();
+    }
+
+    // คำต่อท้ายหน้า: "/" + คำแรก ๆ ของหน้าถัดไป
+    pages.forEach((p, i) => {
+      if (i === pages.length - 1) return;
+      const next = pages[i + 1].body.firstElementChild;
+      const words = firstWordsOf(next);
+      if (!words) return;
+      const cont = doc.createElement("div");
+      cont.className = "qp-cont";
+      cont.textContent = `/${words}...`;
+      p.sheet.appendChild(cont);
+    });
+
+    doc.getElementById("qpSource").remove();
+    return pages.length;
+  }
+
+  /**
+   * ตัดย่อหน้าให้พอดีที่เหลือบนแผ่น -- คืนก้อนที่เหลือ (ไปขึ้นหน้าใหม่), "whole" ถ้า
+   * แม้แต่บรรทัดเดียวก็ไม่พอ (ยกไปทั้งย่อหน้า) หรือ null ถ้าตัดไม่ได้เลย
+   */
+  function splitParagraph(doc, block, body, alone) {
+    const text = block.textContent;
+    const fits = (k) => {
+      block.textContent = text.slice(0, k);
+      return body.scrollHeight <= body.clientHeight + 1;
+    };
+
+    let lo = 0;
+    let hi = text.length;
+    while (lo < hi) {
+      const mid = Math.ceil((lo + hi) / 2);
+      if (fits(mid)) lo = mid; else hi = mid - 1;
+    }
+
+    // ตัดตรงรอยคำ ไม่ตัดกลางคำ
+    let cut = lo;
+    const Segmenter = doc.defaultView.Intl && doc.defaultView.Intl.Segmenter;
+    if (Segmenter && cut < text.length) {
+      let best = 0;
+      for (const seg of new Segmenter("th", { granularity: "word" }).segment(text)) {
+        if (seg.index <= cut) best = seg.index; else break;
+      }
+      cut = best;
+    }
+
+    if (cut <= 0) {
+      block.textContent = text;
+      return alone ? null : "whole";
+    }
+
+    block.textContent = text.slice(0, cut).trimEnd();
+    block.classList.add("qp-split-head");
+    const rest = block.cloneNode(false);
+    rest.classList.remove("qp-split-head", "qd-para-first");
+    rest.classList.add("qp-split-tail");
+    rest.textContent = text.slice(cut).trimStart();
+    return rest.textContent ? rest : null;
+  }
+
+  /** ตัดตารางระหว่างแถว -- หัวตารางพิมพ์ซ้ำบนหน้าใหม่ แถวรวมเงินยังอยู่ใน tfoot (ตัวหนา) */
+  function splitTable(doc, table, body, alone) {
+    const rowsLeft = () => Array.from(table.querySelectorAll("tbody > tr, tfoot > tr"));
+    const moved = [];
+    while (body.scrollHeight > body.clientHeight + 1 && rowsLeft().length) {
+      const rows = rowsLeft();
+      const row = rows[rows.length - 1];
+      moved.unshift({ row, foot: row.parentElement.tagName === "TFOOT" });
+      row.remove();
+    }
+
+    const ensure = (t, tag) => t.querySelector(tag) || t.appendChild(doc.createElement(tag));
+
+    // ไม่เหลือแถวบนหน้านี้เลย (มีแต่หัวตาราง) -- ยกทั้งตารางไปหน้าใหม่
+    if (!rowsLeft().length) {
+      moved.forEach(({ row, foot }) => ensure(table, foot ? "tfoot" : "tbody").appendChild(row));
+      return alone ? null : "whole";
+    }
+
+    const rest = table.cloneNode(false);
+    const colgroup = table.querySelector("colgroup");
+    const thead = table.querySelector("thead");
+    if (colgroup) rest.appendChild(colgroup.cloneNode(true));
+    if (thead) rest.appendChild(thead.cloneNode(true));
+    rest.appendChild(doc.createElement("tbody"));
+    moved.forEach(({ row, foot }) => ensure(rest, foot ? "tfoot" : "tbody").appendChild(row));
+    return rest;
+  }
+
+  /** คำแรก ๆ ของก้อนแรกบนหน้าถัดไป สำหรับคำต่อท้ายหน้า */
+  function firstWordsOf(block) {
+    if (!block) return "";
+    let text;
+    if (block.classList.contains("qd-table")) {
+      const firstRow = block.querySelector("tbody > tr, tfoot > tr");
+      const cells = firstRow ? Array.from(firstRow.cells) : [];
+      // แถวข้อมูล: ข้ามช่องลำดับ ใช้ช่องรายการ / แถวรวม: ใช้ข้อความป้ายรวม
+      text = (cells.length > 1 && cells[0].classList.contains("qd-no") ? cells[1] : cells[0] || block).textContent;
+    } else {
+      text = block.textContent;
+    }
+    text = String(text || "").replace(/\s+/g, " ").trim();
+    if (!text) return "";
+
+    const Segmenter = typeof Intl !== "undefined" && Intl.Segmenter;
+    if (!Segmenter) return text.slice(0, 12);
+    let count = 0;
+    let end = 0;
+    for (const seg of new Segmenter("th", { granularity: "word" }).segment(text)) {
+      end = seg.index + seg.segment.length;
+      if (seg.isWordLike) count += 1;
+      if (count >= QP_CONT_WORDS) break;
+    }
+    return text.slice(0, end).trim();
   }
 
   document.getElementById("quotationPrintBtn").addEventListener("click", printQuotation);
