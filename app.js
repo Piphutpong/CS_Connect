@@ -156,7 +156,7 @@
         { label: "Google Sheet: Check list จ้างเหมา Turnkey", url: "https://docs.google.com/spreadsheets/d/1Ys-uVEzhEOJIS5MbxdoXYWrfR2UwXX70r-mzQE9yAJg/edit?usp=sharing" }
       ]
       // รูปโบรชัวร์ 3 ใบที่เคยแปะไว้ตรงนี้ย้ายไปอยู่ในหน้าโบรชัวร์แล้ว (ปุ่ม
-      // "โบรชัวร์" บนการ์ดนี้ -- ดู BUILTIN_BROCHURES) ที่นั่นดาวน์โหลด/คัดลอกส่งไลน์ได้
+      // "โบรชัวร์" บนการ์ดนี้ -- ที่นั่นเพิ่ม/แก้ไข/ดาวน์โหลด/คัดลอกส่งไลน์ได้
     }
   };
 
@@ -11275,100 +11275,6 @@ ${sheetHtml}
 
   let brochures = [];
 
-  /**
-   * โบรชัวร์ 3 ใบเดิมที่เคยอยู่บนหน้างานธุรกิจเสริม (ไฟล์ใน assets/ ของเว็บ)
-   *
-   * แสดงในแกลเลอรีเสมอจนกว่าจะถูก "นำเข้า" -- นำเข้า = อัปรูปขึ้น Storage แล้ว
-   * สร้างเป็นโบรชัวร์ปกติที่แก้ไข/ลบได้ ผูกกลับด้วย data.sourceAsset เพื่อรู้ว่าใบ
-   * ไหนนำเข้าไปแล้ว ไม่แสดงซ้ำ ก่อนนำเข้าก็ดูรูป/ดาวน์โหลด/คัดลอกส่งไลน์ได้แล้ว
-   * (ไฟล์อยู่โดเมนเดียวกับหน้าเว็บ ไม่ต้องขอ signed URL)
-   */
-  const BUILTIN_BROCHURES = [
-    { src: "assets/side-business-maintenance.png", title: "บริการบำรุงรักษาระบบไฟฟ้า" },
-    { src: "assets/side-business-transformer.png", title: "บริการบำรุงรักษาหม้อแปลงไฟฟ้า" },
-    { src: "assets/side-business-thermal.png", title: "บริการตรวจสอบจุดร้อน" }
-  ];
-
-  function pendingBuiltinBrochures() {
-    const imported = new Set(brochures.map(b => b.data && b.data.sourceAsset).filter(Boolean));
-    return BUILTIN_BROCHURES
-      .filter(b => !imported.has(b.src))
-      .map(b => ({ builtin: true, title: b.title, data: { images: [b.src], description: "" } }));
-  }
-
-  /** path ในรายการ -> URL ที่ <img> เปิดได้ (ของเดิมใน assets/ ใช้ path ตรง ๆ) */
-  function brochureImageUrl(item, path) {
-    return item.builtin ? Promise.resolve(path) : fileUrl("brochure", path);
-  }
-
-  /**
-   * โหลดรูปในโดเมนเดียวกัน (assets/...) เป็น data URL โดยไม่ใช้ fetch()
-   *
-   * fetch() ไปหาไฟล์ในโดเมนตัวเองก็จริง แต่ CSP ของหน้านี้ (connect-src) อนุญาต
-   * เฉพาะโฮสต์ Supabase เท่านั้น ไม่มี 'self' -- fetch() ไปที่ assets/ จึงถูกบล็อก
-   * เงียบ ๆ เห็นแค่ "Failed to fetch" ที่หาสาเหตุไม่ได้เลยว่าเพราะ CSP ไม่ใช่เน็ต
-   * img-src กลับอนุญาต 'self' อยู่แล้ว จึงวาดผ่าน img ธรรมดาแล้วส่งเข้า canvas
-   * แทน -- รูปโดเมนเดียวกันไม่ทำให้ canvas "เปื้อน" (tainted) จึง toDataURL()
-   * ออกมาได้โดยไม่ต้องพึ่ง connect-src เลย
-   */
-  function loadLocalImageAsDataUrl(src) {
-    return new Promise((resolve, reject) => {
-      const img = new Image();
-      img.onload = () => {
-        const canvas = document.createElement("canvas");
-        canvas.width = img.naturalWidth;
-        canvas.height = img.naturalHeight;
-        canvas.getContext("2d").drawImage(img, 0, 0);
-        resolve(canvas.toDataURL("image/png"));
-      };
-      img.onerror = () => reject(new Error("โหลดไฟล์ " + src + " ไม่สำเร็จ"));
-      img.src = src;
-    });
-  }
-
-  /**
-   * นำเข้าโบรชัวร์เดิมหนึ่งใบเป็นแถวจริงในฐานข้อมูล -- อัปรูปขึ้น Storage แล้ว
-   * สร้างเป็น work_item ปกติที่แก้ไข/ลบได้ ผูกกลับด้วย data.sourceAsset กัน
-   * นำเข้าซ้ำ (ดู pendingBuiltinBrochures) เรียกจากปุ่ม "แก้ไข" บนการ์ดโดยตรง
-   * ไม่มีปุ่ม "นำเข้า" แยกต่างหากอีกต่อไป -- กดแก้ไขครั้งแรกก็นำเข้าให้เลยในตัว
-   * ผู้ใช้ไม่ต้องรู้ด้วยซ้ำว่ามีขั้นตอน "นำเข้า" อยู่เบื้องหลัง
-   */
-  async function importSingleBuiltinBrochure(item) {
-    const src = item.data.images[0];
-    const dataUrl = await loadLocalImageAsDataUrl(src);
-    const path = await backend.uploadBrochureImage(dataUrl);
-    return backend.saveWorkItem("brochure", {
-      id: newWorkItemId(),
-      title: item.title,
-      status: "",
-      data: { description: "", images: [path], sourceAsset: src }
-    });
-  }
-
-  /**
-   * ปุ่ม "แก้ไข" บนการ์ด -- ใบที่นำเข้าแล้วเปิดฟอร์มแก้ไขตรง ๆ ส่วนใบเดิมจาก
-   * assets/ (item.builtin) ยังไม่มีแถวในฐานข้อมูลให้แก้ จึงนำเข้าให้ก่อนในตัว
-   * ปุ่มเดียวจบ ไม่ต้องมีขั้นตอน "นำเข้า" แยกที่ต้องมาอธิบายว่าทำไมต้องกดสองที
-   */
-  async function handleBrochureEditClick(item, btn) {
-    if (!item.builtin) {
-      openBrochureEditor(item);
-      return;
-    }
-
-    hideError(brochureError);
-    setBusy(btn, true, "กำลังเตรียมแก้ไข...");
-    try {
-      const imported = await importSingleBuiltinBrochure(item);
-      brochures.push(imported);
-      renderBrochures();
-      openBrochureEditor(imported);
-    } catch (err) {
-      showError(brochureError, moduleErrorText(err));
-    } finally {
-      setBusy(btn, false);
-    }
-  }
   // โบรชัวร์ที่กำลังแก้อยู่ (null = กำลังสร้างใหม่) และรายการ path รูปของมัน --
   // แยกจาก brochures เพื่อให้กดยกเลิกแล้วของเดิมไม่ถูกแตะ
   let brochureEditing = null;
@@ -11389,7 +11295,7 @@ ${sheetHtml}
 
   function renderBrochures() {
     brochureList.innerHTML = "";
-    const shown = brochures.concat(pendingBuiltinBrochures());
+    const shown = brochures;
     brochureCount.textContent = "ทั้งหมด " + shown.length + " รายการ";
 
     if (!shown.length) {
@@ -11417,7 +11323,7 @@ ${sheetHtml}
         // public URL อยู่ในโค้ดเลย) -- แปะ data-path ไว้กันกรณี URL มาช้าแล้ว
         // ผู้ใช้เปลี่ยนหน้าไปแล้ว จะได้ไม่เอา URL ไปใส่รูปของรายการอื่น
         img.dataset.path = images[0];
-        brochureImageUrl(item, images[0]).then(url => {
+        fileUrl("brochure", images[0]).then(url => {
           if (url && img.dataset.path === images[0]) img.src = url;
         });
         img.addEventListener("click", () => openBrochureViewer(item, 0));
@@ -11449,14 +11355,11 @@ ${sheetHtml}
         actions.appendChild(viewBtn);
       }
 
-      // ของเดิมจาก assets/ (item.builtin) ยังไม่มีแถวในฐานข้อมูลให้แก้ -- ปุ่มนี้
-      // นำเข้าให้ก่อนแล้วเปิดฟอร์มแก้ไขต่อทันที ผู้ใช้กดปุ่มเดียวจบ ไม่ต้องรู้ด้วย
-      // ซ้ำว่ามีขั้นตอน "นำเข้า" อยู่เบื้องหลัง (ดู handleBrochureEditClick)
       const editBtn = document.createElement("button");
       editBtn.type = "button";
       editBtn.className = "btn btn-ghost";
       editBtn.textContent = "แก้ไข";
-      editBtn.addEventListener("click", () => handleBrochureEditClick(item, editBtn));
+      editBtn.addEventListener("click", () => openBrochureEditor(item));
       actions.appendChild(editBtn);
 
       body.append(title, desc, actions);
@@ -11551,21 +11454,13 @@ ${sheetHtml}
     hideError(brochureEditError);
     setBusy(brochureSaveBtn, true, "กำลังบันทึก...");
     try {
-      // RPC แทนที่ทั้งก้อน data เวลาบันทึก (ไม่ใช่ merge ทีละคีย์) -- ฟอร์มนี้ไม่มี
-      // ช่องให้แก้ sourceAsset เลย แต่ก่อนหน้านี้ก็ไม่ได้ส่งค่าเดิมกลับไปด้วย
-      // ผลคือบันทึกทีไร sourceAsset (ที่ผูกไว้ตอนนำเข้าจากของเดิมใน assets/)
-      // หายไปทุกที ระบบเลยเข้าใจผิดว่าใบเดิมยังไม่ถูกนำเข้า แล้วโผล่ปุ่ม "แก้ไข"
-      // ของใบเดิมขึ้นมาอีกใบข้าง ๆ ใบที่เพิ่งแก้ -- เห็นเป็นโบรชัวร์เบิ้ล ต้อง
-      // ส่งค่าเดิมกลับไปด้วยทุกครั้งที่บันทึก ไม่ใช่แค่ตอนสร้างใหม่
-      const sourceAsset = brochureEditing?.data?.sourceAsset;
       await backend.saveWorkItem("brochure", {
         id: brochureEditing ? brochureEditing.id : newWorkItemId(),
         title,
         status: "",
         data: {
           description: brochureDescInput.value.trim(),
-          images: brochureEditPaths.slice(),
-          ...(sourceAsset ? { sourceAsset } : {})
+          images: brochureEditPaths.slice()
         }
       });
       closeBrochureEditor();
@@ -11616,7 +11511,7 @@ ${sheetHtml}
     brochureViewerImage.removeAttribute("src");
     brochureViewerModal.hidden = false;
 
-    const url = await brochureImageUrl(item, images[index]);
+    const url = await fileUrl("brochure", images[index]);
     if (!url) return;
     brochureViewerImage.src = url;
     brochureViewerImage.alt = item.title || "โบรชัวร์";

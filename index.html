@@ -24,7 +24,7 @@
 <title>CS Connect</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=Sarabun:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=20260919h">
+<link rel="stylesheet" href="style.css?v=20260919i">
 </head>
 <body>
 
@@ -1692,9 +1692,11 @@
 </section>
 
 <!-- ===== โบรชัวร์ธุรกิจเสริม ===== -->
-<!-- แกลเลอรีโบรชัวร์ที่เจ้าหน้าที่เพิ่ม/แก้เองได้ -- ต่างจาก SERVICES.sideBusiness.images
-     ที่เป็นรูปตายตัวใน assets/ ซึ่งแก้ได้ด้วยการแก้โค้ดเท่านั้น รูปในหน้านี้อยู่บน
-     Storage และข้อมูลอยู่ในตาราง work_items (kind = 'brochure') -->
+<!-- แกลเลอรีโบรชัวร์ที่เจ้าหน้าที่เพิ่ม/แก้ไข/ลบเองได้ทั้งหมด -- รูปเก็บบน
+     Storage และข้อมูลอยู่ในตาราง work_items (kind = 'brochure') ไม่มีรูปตายตัว
+     ในไฟล์เว็บอีกต่อไป (เคยมี 3 ใบใน assets/ เป็นค่าตั้งต้น ถูกถอดออกแล้ว
+     ตามที่เจ้าของระบบขอ เพราะสร้างความสับสนเรื่องแก้ไข/ลบไม่ได้ -- ใช้ปุ่ม
+     "+ เพิ่มโบรชัวร์" ในหน้านี้แทน) -->
 <section id="brochureView" class="app-view" hidden>
   <header class="topbar">
     <div class="topbar-brand">
@@ -2055,6 +2057,6 @@
      **ต้องเปลี่ยนเลขนี้ทุกครั้งที่แก้ app.js / style.css / track.js / qr.js**
      ไม่งั้นผู้ใช้บางคนจะยังได้ไฟล์เก่าไปอีกพักใหญ่ -->
 <script src="vendor/supabase.js?v=2.116.0"></script>
-<script src="app.js?v=20260919h"></script>
+<script src="app.js?v=20260919i"></script>
 </body>
 </html>
