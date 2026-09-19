@@ -24,7 +24,7 @@
 <title>CS Connect</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=Sarabun:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=20260919m">
+<link rel="stylesheet" href="style.css?v=20260919n">
 </head>
 <body>
 
@@ -1852,16 +1852,24 @@
           <button type="button" id="quotationDuplicateBtn" class="btn btn-ghost" hidden>ทำสำเนา</button>
           <button type="button" id="quotationSaveTemplateBtn" class="btn btn-ghost">บันทึกเป็นแม่แบบ</button>
           <button type="button" id="quotationDeleteBtn" class="btn btn-ghost" hidden>ลบ</button>
-          <button type="button" id="quoPreviewToggle" class="btn btn-ghost" aria-pressed="true">ซ่อนตัวอย่างหน้าพิมพ์</button>
           <button type="button" id="quotationPrintBtn" class="btn btn-ghost">พิมพ์</button>
           <button type="button" id="quotationSaveBtn" class="btn btn-primary">บันทึก</button>
         </div>
       </div>
       <p id="quotationFormError" class="form-error" hidden></p>
-      <p class="field-hint quo-editor-hint">ซ้าย: คลิกข้อความบนกระดาษเพื่อแก้ไข (กรอบประคือช่องที่แก้ได้ ช่องที่เว้นว่างจะไม่ถูกพิมพ์) -- ขวา: ตัวอย่างหน้าพิมพ์จริง อัปเดตเองขณะพิมพ์ คลิกบนตัวอย่างเพื่อไปยังช่องนั้น</p>
+      <!-- เครื่องมือของเนื้อเอกสาร -- อยู่นอกกระดาษ เพื่อให้กระดาษบนจอมีแต่สิ่งที่
+           พิมพ์ออกไปจริง (หน้าบนจอจึงตรงกับหน้าที่พิมพ์) -->
+      <div class="quo-doc-tools">
+        <button type="button" id="quoAddLineBtn" class="btn btn-ghost">+ เพิ่มแถวในตาราง</button>
+        <button type="button" id="quoPickPriceBtn" class="btn btn-ghost">+ เลือกจากรายการราคา</button>
+        <label class="checkbox-field"><input type="checkbox" id="quoVatEnabled" checked><span>คิดภาษีมูลค่าเพิ่ม 7%</span></label>
+        <span class="quo-doc-tools-sep" aria-hidden="true"></span>
+        <button type="button" class="btn btn-ghost" data-quo-optional="reference">+ อ้างถึง</button>
+        <button type="button" class="btn btn-ghost" data-quo-optional="enclosure">+ สิ่งที่ส่งมาด้วย</button>
+        <span id="quoPageCount" class="quo-page-count"></span>
+      </div>
+      <p class="field-hint quo-editor-hint">กระดาษนี้คือหน้าที่จะพิมพ์ออกไป -- คลิกข้อความเพื่อแก้ไข (กรอบประคือช่องที่แก้ได้) กด Enter หรือเคาะเพิ่มเพื่อดันบรรทัดลงหน้าถัดไปได้ คำต่อท้ายหน้า "/..." แก้ได้ (ลบให้ว่าง = ใช้ค่าอัตโนมัติ)</p>
 
-      <!-- สองคอลัมน์: กระดาษแก้ไข (ต่อเนื่อง) | ตัวอย่างหน้าพิมพ์ (แบ่งหน้าจริง)
-           ตัวอย่างจัดหน้าด้วย paginateQuotationInto ตัวเดียวกับหน้าต่างพิมพ์ -->
       <div class="quo-workspace">
       <div class="quo-paper-wrap">
         <article id="quoPaper" class="quo-paper">
@@ -1901,11 +1909,6 @@
               <tr><td colspan="4" class="qd-sum-label" id="quoGrandLabel">รวมเป็นเงินทั้งสิ้น (รวมภาษีมูลค่าเพิ่ม)</td><td id="quoGrand" class="qd-num"></td></tr>
             </tfoot>
           </table>
-          <div class="qd-table-tools qd-screen-only">
-            <button type="button" id="quoAddLineBtn" class="btn btn-ghost">+ เพิ่มแถวว่าง</button>
-            <button type="button" id="quoPickPriceBtn" class="btn btn-ghost">+ เลือกจากรายการราคา</button>
-            <label class="checkbox-field"><input type="checkbox" id="quoVatEnabled" checked><span>คิดภาษีมูลค่าเพิ่ม 7%</span></label>
-          </div>
 
           <div class="qf qd-para" data-field="paraConclusion" data-placeholder="ภาคสรุป -- จึงเรียนมาเพื่อโปรดพิจารณา"></div>
 
@@ -1923,19 +1926,6 @@
         </article>
       </div>
 
-      <aside id="quoPreview" class="quo-preview" aria-label="ตัวอย่างหน้าพิมพ์">
-        <div class="quo-preview-head">
-          <strong>ตัวอย่างหน้าพิมพ์</strong>
-          <span id="quoPreviewStatus" class="quo-preview-status"></span>
-        </div>
-        <div id="quoPreviewScroll" class="quo-preview-scroll">
-          <div id="quoPreviewScale" class="quo-preview-scale">
-            <div id="quoPreviewSheets" class="quo-preview-sheets"></div>
-          </div>
-        </div>
-        <!-- ที่พักต้นฉบับระหว่างจัดหน้า -- ต้องถูกวาด (ไม่ใช่ hidden) แต่อยู่นอกจอ -->
-        <div id="quoPreviewSource" class="qp-source"></div>
-      </aside>
       </div>
     </div>
 
@@ -2122,6 +2112,6 @@
      **ต้องเปลี่ยนเลขนี้ทุกครั้งที่แก้ app.js / style.css / track.js / qr.js**
      ไม่งั้นผู้ใช้บางคนจะยังได้ไฟล์เก่าไปอีกพักใหญ่ -->
 <script src="vendor/supabase.js?v=2.116.0"></script>
-<script src="app.js?v=20260919m"></script>
+<script src="app.js?v=20260919n"></script>
 </body>
 </html>
