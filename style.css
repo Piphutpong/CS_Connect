@@ -4034,13 +4034,74 @@ span.estimate-crumb {
 
 .quo-editor-hint { margin: 10px 0 0; }
 
-/* พื้นเทาให้กระดาษขาวลอยเด่นเหมือนหน้าจอ Word -- เลื่อนแนวนอนได้บนจอแคบ
-   แทนการย่อกระดาษ (ย่อแล้วตัดบรรทัดไม่ตรงกับที่พิมพ์ออกมา) */
-.quo-paper-wrap {
+/* พื้นเทาให้กระดาษขาวลอยเด่นเหมือนหน้าจอ Word -- สองคอลัมน์: กระดาษแก้ไข |
+   ตัวอย่างหน้าพิมพ์ กระดาษแก้ไขเลื่อนแนวนอนได้บนจอแคบแทนการย่อ (ย่อแล้วตัด
+   บรรทัดไม่ตรงกับที่พิมพ์ออกมา) ส่วนตัวอย่างย่อได้ เพราะจัดหน้าที่ขนาดจริงเสมอ */
+.quo-workspace {
+  display: flex;
+  align-items: flex-start;
+  gap: 20px;
   margin: 16px -28px 0;
   padding: 24px 28px 40px;
   background: #e9e6ef;
+}
+
+.quo-paper-wrap {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 100%;
   overflow-x: auto;
+}
+
+/* ตัวอย่างหน้าพิมพ์ -- ติดอยู่ใต้แถบเครื่องมือ เลื่อนดูหน้าในกรอบของตัวเอง
+   กระดาษแก้ไขยาวแค่ไหนก็ยังเห็นตัวอย่างอยู่ข้าง ๆ */
+.quo-preview {
+  flex: 1 1 0;
+  min-width: 240px;
+  position: sticky;
+  top: calc(var(--topbar-h) + 84px);
+  max-height: calc(100vh - var(--topbar-h) - 104px);
+  display: flex;
+  flex-direction: column;
+  background: #dcd7e4;
+  border-radius: 10px;
+  overflow: hidden;
+}
+/* toggle ด้วย hidden -- display:flex ข้างบนชนะ [hidden] ของเบราว์เซอร์ (Gotcha) */
+.quo-preview[hidden] { display: none; }
+
+.quo-preview-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+  padding: 8px 12px;
+  background: #cfc8da;
+  font-size: 13px;
+}
+.quo-preview-status { color: var(--ink-soft); }
+
+.quo-preview-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 12px 4px;
+}
+
+/* กล่องขนาดหลังย่อ (JS ตั้ง width/height) -- transform ไม่เปลี่ยนขนาดในเลย์เอาต์
+   ถ้าไม่มีกล่องนี้ กรอบเลื่อนจะยาวเท่าขนาดจริงแม้ภาพจะย่อแล้ว */
+.quo-preview-scale { position: relative; margin: 0 auto; }
+.quo-preview-sheets {
+  width: 210mm;
+  transform-origin: top left;
+}
+.quo-preview-sheets .qp-sheet { margin: 0 0 10mm; cursor: pointer; }
+.quo-preview-sheets [data-field]:hover,
+.quo-preview-sheets .qd-table:hover { background-color: rgba(124, 77, 191, 0.08); }
+
+@media (max-width: 1200px) {
+  .quo-workspace { flex-direction: column; align-items: stretch; }
+  .quo-preview { position: static; max-height: none; }
 }
 
 .quo-paper {
@@ -4053,6 +4114,16 @@ span.estimate-crumb {
   /* บน 1.5 / ขวา 2 / ล่าง 2 / ซ้าย 3 ซม. ตามแบบที่ 1 */
   padding: 15mm 20mm 20mm 30mm;
   background-color: #fff;
+  box-shadow: 0 4px 18px rgba(34, 21, 48, 0.18);
+  color: #000;
+  font-family: "QuoSarabun", "TH Sarabun New", "TH SarabunPSK", Sarabun, sans-serif;
+  font-size: 16pt;
+  line-height: 1.15;
+}
+
+/* เส้นสีชมพูบอกจุดขึ้นหน้าใหม่ -- ขึ้นเฉพาะตอนซ่อนตัวอย่างหน้าพิมพ์ (เปิดตัวอย่าง
+   อยู่ก็เห็นหน้าจริงแล้ว เส้นประมาณจะเกะกะเปล่า ๆ) */
+#quotationFormMode.is-preview-hidden #quoPaper {
   /* เส้นสีชมพูบอกจุดขึ้นหน้าใหม่โดยประมาณ ให้ตรงกับที่ paginateQuotation จัดจริง:
      หน้าแรกเนื้อหาจบที่ 268 มม. (297 - ขอบล่าง 20 - ที่คำต่อ 9) หน้าต่อ ๆ ไปมีพื้นที่
      ~244 มม. (ขอบบน 15 + เลขหน้า ~6.5 + เว้น 6 pt ~2.1 + ขอบล่าง 20 + คำต่อ 9)
@@ -4062,11 +4133,6 @@ span.estimate-crumb {
     transparent 0, transparent calc(244mm - 1px), #f0a3c8 calc(244mm - 1px), #f0a3c8 244mm);
   background-position: 0 24mm;
   background-repeat: repeat-y;
-  box-shadow: 0 4px 18px rgba(34, 21, 48, 0.18);
-  color: #000;
-  font-family: "QuoSarabun", "TH Sarabun New", "TH SarabunPSK", Sarabun, sans-serif;
-  font-size: 16pt;
-  line-height: 1.15;
 }
 
 .quo-paper.is-thai-digits {

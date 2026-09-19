@@ -24,7 +24,7 @@
 <title>CS Connect</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=Sarabun:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=20260919l">
+<link rel="stylesheet" href="style.css?v=20260919m">
 </head>
 <body>
 
@@ -1852,13 +1852,17 @@
           <button type="button" id="quotationDuplicateBtn" class="btn btn-ghost" hidden>ทำสำเนา</button>
           <button type="button" id="quotationSaveTemplateBtn" class="btn btn-ghost">บันทึกเป็นแม่แบบ</button>
           <button type="button" id="quotationDeleteBtn" class="btn btn-ghost" hidden>ลบ</button>
+          <button type="button" id="quoPreviewToggle" class="btn btn-ghost" aria-pressed="true">ซ่อนตัวอย่างหน้าพิมพ์</button>
           <button type="button" id="quotationPrintBtn" class="btn btn-ghost">พิมพ์</button>
           <button type="button" id="quotationSaveBtn" class="btn btn-primary">บันทึก</button>
         </div>
       </div>
       <p id="quotationFormError" class="form-error" hidden></p>
-      <p class="field-hint quo-editor-hint">คลิกข้อความบนกระดาษเพื่อแก้ไขได้ทันที -- กรอบประคือช่องที่แก้ได้ ช่องที่เว้นว่างจะไม่ถูกพิมพ์ เส้นสีชมพูคือจุดขึ้นหน้าใหม่โดยประมาณ (กด "พิมพ์" เพื่อดูการจัดหน้าจริง พร้อมคำต่อท้ายหน้าและเลขหน้า)</p>
+      <p class="field-hint quo-editor-hint">ซ้าย: คลิกข้อความบนกระดาษเพื่อแก้ไข (กรอบประคือช่องที่แก้ได้ ช่องที่เว้นว่างจะไม่ถูกพิมพ์) -- ขวา: ตัวอย่างหน้าพิมพ์จริง อัปเดตเองขณะพิมพ์ คลิกบนตัวอย่างเพื่อไปยังช่องนั้น</p>
 
+      <!-- สองคอลัมน์: กระดาษแก้ไข (ต่อเนื่อง) | ตัวอย่างหน้าพิมพ์ (แบ่งหน้าจริง)
+           ตัวอย่างจัดหน้าด้วย paginateQuotationInto ตัวเดียวกับหน้าต่างพิมพ์ -->
+      <div class="quo-workspace">
       <div class="quo-paper-wrap">
         <article id="quoPaper" class="quo-paper">
           <!-- ชั้นความเร็ว (ด่วน/ด่วนมาก/ด่วนที่สุด) -- สีแดง ตัวใหญ่ ข้างตรา ตามแบบที่ 1 -->
@@ -1917,6 +1921,21 @@
 
           <div class="qf qd-owner" data-field="ownerBlock" data-placeholder="หน่วยงานเจ้าของเรื่อง&#10;โทร. ...&#10;โทรสาร ..."></div>
         </article>
+      </div>
+
+      <aside id="quoPreview" class="quo-preview" aria-label="ตัวอย่างหน้าพิมพ์">
+        <div class="quo-preview-head">
+          <strong>ตัวอย่างหน้าพิมพ์</strong>
+          <span id="quoPreviewStatus" class="quo-preview-status"></span>
+        </div>
+        <div id="quoPreviewScroll" class="quo-preview-scroll">
+          <div id="quoPreviewScale" class="quo-preview-scale">
+            <div id="quoPreviewSheets" class="quo-preview-sheets"></div>
+          </div>
+        </div>
+        <!-- ที่พักต้นฉบับระหว่างจัดหน้า -- ต้องถูกวาด (ไม่ใช่ hidden) แต่อยู่นอกจอ -->
+        <div id="quoPreviewSource" class="qp-source"></div>
+      </aside>
       </div>
     </div>
 
@@ -2103,6 +2122,6 @@
      **ต้องเปลี่ยนเลขนี้ทุกครั้งที่แก้ app.js / style.css / track.js / qr.js**
      ไม่งั้นผู้ใช้บางคนจะยังได้ไฟล์เก่าไปอีกพักใหญ่ -->
 <script src="vendor/supabase.js?v=2.116.0"></script>
-<script src="app.js?v=20260919l"></script>
+<script src="app.js?v=20260919m"></script>
 </body>
 </html>

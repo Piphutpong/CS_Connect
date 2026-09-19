@@ -11832,6 +11832,7 @@ ${sheetHtml}
   quoThaiDigits.addEventListener("change", () => {
     quoPaper.classList.toggle("is-thai-digits", quoThaiDigits.checked);
     setQuoDirty(true);
+    scheduleQuoPreview(0);
   });
 
   quoStatus.addEventListener("change", () => setQuoDirty(true));
@@ -11923,6 +11924,7 @@ ${sheetHtml}
     });
 
     updateQuoTotals();
+    scheduleQuoPreview();
   }
 
   function updateQuoLineAmount(tr, line, skipTotals) {
@@ -12032,6 +12034,7 @@ ${sheetHtml}
     quotationListMode.hidden = true;
     quotationFormMode.hidden = false;
     window.scrollTo(0, 0);
+    scheduleQuoPreview(0);
   }
 
   function renderQuoSubtitle() {
@@ -12184,11 +12187,17 @@ ${sheetHtml}
    */
   const QP_CONT_WORDS = 3;
 
-  function printQuotation() {
-    const printWindow = window.open("", "_blank");
-    if (!printWindow) return;
-
+  /**
+   * สำเนากระดาษบนจอที่ถอดเครื่องมือแก้ไขออกแล้ว พร้อมจัดหน้า -- ใช้ร่วมกันทั้ง
+   * ตัวอย่างหน้าพิมพ์ข้างกระดาษ (renderQuoPreview) และหน้าต่างพิมพ์ (printQuotation)
+   * สองที่จึงจัดหน้าออกมาเหมือนกันทุกบรรทัด
+   *
+   * ทุกก้อนยังพก data-field ของช่องต้นทางไว้ -- คลิกบนตัวอย่างแล้วพากลับไปช่องนั้น
+   * บนกระดาษแก้ไขได้
+   */
+  function buildQuotationClone() {
     const clone = quoPaper.cloneNode(true);
+    clone.removeAttribute("id");
     clone.querySelectorAll(".qd-screen-only").forEach(n => n.remove());
     clone.querySelectorAll("[data-optional]").forEach(line => {
       const field = line.querySelector("[data-field]");
@@ -12203,6 +12212,7 @@ ${sheetHtml}
       lines.forEach((text, i) => {
         const p = document.createElement("div");
         p.className = "qd-para";
+        p.dataset.field = para.dataset.field;
         if (i === 0 && para.classList.contains("qd-para-first")) p.classList.add("qd-para-first");
         p.textContent = text;
         para.before(p);
@@ -12226,7 +12236,25 @@ ${sheetHtml}
     const seal = clone.querySelector(".qd-seal");
     const liveSeal = quoPaper.querySelector(".qd-seal");
     if (seal && liveSeal) seal.setAttribute("src", liveSeal.src);
+    return clone;
+  }
 
+  /** รอฟอนต์ของหนังสือโหลดครบก่อนวัด -- วัดด้วยฟอนต์สำรองได้ความสูงผิด */
+  async function waitQuoFonts(doc, thai) {
+    const family = thai ? "QuoSarabunIT9" : "QuoSarabun";
+    await Promise.all([
+      doc.fonts.load(`16pt "${family}"`),
+      doc.fonts.load(`bold 16pt "${family}"`),
+      doc.fonts.load(`14pt "${family}"`)
+    ]).catch(() => {});
+    await doc.fonts.ready;
+  }
+
+  function printQuotation() {
+    const printWindow = window.open("", "_blank");
+    if (!printWindow) return;
+
+    const clone = buildQuotationClone();
     const cssLink = document.querySelector('link[rel="stylesheet"][href*="style.css"]');
     const cssHref = cssLink ? cssLink.href : new URL("style.css", location.href).href;
     const title = quoReadField(quoFieldEls.find(el => el.dataset.field === "subject")) || "ใบเสนอราคา";
@@ -12254,7 +12282,20 @@ ${sheetHtml}
     const printBtn = doc.getElementById("printBtn");
     printBtn.addEventListener("click", () => printWindow.print());
 
-    paginateQuotation(printWindow, thai)
+    (async () => {
+      const link = doc.querySelector('link[rel="stylesheet"]');
+      if (link && !link.sheet) {
+        await new Promise(resolve => {
+          link.addEventListener("load", resolve, { once: true });
+          link.addEventListener("error", resolve, { once: true });
+        });
+      }
+      await waitQuoFonts(doc, thai);
+      const source = doc.querySelector("#qpSource .quo-paper");
+      const pageCount = paginateQuotationInto(doc, source, doc.getElementById("qpSheets"), thai);
+      doc.getElementById("qpSource").remove();
+      return pageCount;
+    })()
       .then(pageCount => {
         doc.getElementById("qpStatus").textContent = `${pageCount} หน้า`;
         printBtn.disabled = false;
@@ -12265,26 +12306,13 @@ ${sheetHtml}
       });
   }
 
-  async function paginateQuotation(printWindow, thai) {
-    const doc = printWindow.document;
-
-    // รอ stylesheet กับฟอนต์ให้ครบก่อนวัด -- วัดด้วยฟอนต์สำรองได้ความสูงผิด
-    const link = doc.querySelector('link[rel="stylesheet"]');
-    if (link && !link.sheet) {
-      await new Promise(resolve => {
-        link.addEventListener("load", resolve, { once: true });
-        link.addEventListener("error", resolve, { once: true });
-      });
-    }
-    const family = thai ? "QuoSarabunIT9" : "QuoSarabun";
-    await Promise.all([
-      doc.fonts.load(`16pt "${family}"`),
-      doc.fonts.load(`bold 16pt "${family}"`)
-    ]).catch(() => {});
-    await doc.fonts.ready;
-
-    const source = doc.querySelector("#qpSource .quo-paper");
-    const sheets = doc.getElementById("qpSheets");
+  /**
+   * เทก้อนของเอกสาร (ลูกของ source) ลงแผ่น A4 ใน sheetsEl ทีละก้อน -- ทำงานแบบ
+   * synchronous ล้วน (ผู้เรียกรอฟอนต์ให้เสร็จก่อน) เรียกซ้อนกันจึงไม่มีทางแทรกกัน
+   * source ต้องถูกวาดอยู่ในเอกสาร (.qp-source) และจะถูกย้ายก้อนออกจนหมด
+   */
+  function paginateQuotationInto(doc, source, sheetsEl, thai) {
+    sheetsEl.innerHTML = "";
     const urgency = source.querySelector(".qd-urgency");
     if (urgency) urgency.remove();
     const blocks = Array.from(source.children);
@@ -12302,7 +12330,7 @@ ${sheetHtml}
       const body = doc.createElement("div");
       body.className = "qp-body";
       sheet.appendChild(body);
-      sheets.appendChild(sheet);
+      sheetsEl.appendChild(sheet);
       const page = { sheet, body };
       pages.push(page);
       return page;
@@ -12360,9 +12388,108 @@ ${sheetHtml}
       p.sheet.appendChild(cont);
     });
 
-    doc.getElementById("qpSource").remove();
     return pages.length;
   }
+
+  // ---------------------------------------------------------------- ตัวอย่างหน้าพิมพ์สด
+  /**
+   * ตัวอย่างหน้าพิมพ์ข้างกระดาษแก้ไข -- จัดหน้าด้วยฟังก์ชันเดียวกับตอนพิมพ์ทุกประการ
+   * เห็นทันทีว่าอะไรตกหน้าไหน คำต่อท้ายหน้าคืออะไร ไม่ต้องกดพิมพ์กลับไปกลับมา
+   *
+   * แก้ไขตรงบนแผ่นที่แบ่งหน้าแล้วไม่ได้โดยตั้งใจ -- ย่อหน้าที่คร่อมสองหน้าคือหนึ่ง
+   * ช่องที่ถูกหั่นเป็นสองชิ้น ถ้าให้พิมพ์ในนั้นแล้วจัดหน้าใหม่ทุกตัวอักษร เคอร์เซอร์
+   * จะกระโดดข้ามหน้าไปมา คลิกบนตัวอย่างจึงพาไปช่องเดียวกันบนกระดาษแก้ไขแทน
+   *
+   * จัดหน้าใหม่หลังหยุดพิมพ์ 300 มิลลิวินาที -- แต่ละรอบวัดความสูงหลายสิบครั้ง
+   * (ตัดย่อหน้าด้วย binary search) ทำทุกตัวอักษรจะหน่วงการพิมพ์
+   * ย่อ/ขยายด้วย transform ซึ่งไม่เปลี่ยน scrollHeight/clientHeight ที่ใช้วัด --
+   * ตัวอย่างจึงจัดหน้าที่ขนาดจริงเสมอ ไม่ว่าจะแสดงเล็กแค่ไหน
+   */
+  const quoPreview = document.getElementById("quoPreview");
+  const quoPreviewScroll = document.getElementById("quoPreviewScroll");
+  const quoPreviewScale = document.getElementById("quoPreviewScale");
+  const quoPreviewSheets = document.getElementById("quoPreviewSheets");
+  const quoPreviewSource = document.getElementById("quoPreviewSource");
+  const quoPreviewStatus = document.getElementById("quoPreviewStatus");
+  let quoPreviewTimer = null;
+  let quoPreviewRun = 0;
+
+  function scheduleQuoPreview(delay) {
+    clearTimeout(quoPreviewTimer);
+    quoPreviewTimer = setTimeout(renderQuoPreview, delay == null ? 300 : delay);
+  }
+
+  async function renderQuoPreview() {
+    if (quotationFormMode.hidden || quoPreview.hidden) return;
+    const run = ++quoPreviewRun;
+    const thai = quoThaiDigits.checked;
+    quoPreviewStatus.textContent = "กำลังจัดหน้า...";
+    await waitQuoFonts(document, thai);
+    // มีรอบใหม่เริ่มระหว่างรอฟอนต์ -- รอบนี้ล้าสมัยแล้ว ทิ้ง
+    if (run !== quoPreviewRun || quotationFormMode.hidden) return;
+
+    const clone = buildQuotationClone();
+    quoPreviewSource.innerHTML = "";
+    quoPreviewSource.appendChild(clone);
+    let pageCount = 0;
+    try {
+      pageCount = paginateQuotationInto(document, clone, quoPreviewSheets, thai);
+    } catch (err) {
+      console.error("CS Connect: จัดหน้าตัวอย่างไม่สำเร็จ", err);
+      quoPreviewStatus.textContent = "จัดหน้าไม่สำเร็จ";
+      return;
+    } finally {
+      quoPreviewSource.innerHTML = "";
+    }
+    quoPreviewStatus.textContent = `${pageCount} หน้า`;
+    fitQuoPreview();
+  }
+
+  /** ย่อตัวอย่างให้พอดีความกว้างคอลัมน์ (ไม่ขยายเกินขนาดจริง) */
+  function fitQuoPreview() {
+    const probe = document.createElement("div");
+    probe.style.cssText = "position:absolute;visibility:hidden;width:210mm;height:1px;";
+    document.body.appendChild(probe);
+    const paperPx = probe.getBoundingClientRect().width;
+    probe.remove();
+
+    const available = quoPreviewScroll.clientWidth - 8;
+    const scale = Math.max(0.3, Math.min(1, available / paperPx));
+    quoPreviewSheets.style.transform = `scale(${scale})`;
+    quoPreviewScale.style.width = `${paperPx * scale}px`;
+    quoPreviewScale.style.height = `${quoPreviewSheets.offsetHeight * scale}px`;
+  }
+
+  if (window.ResizeObserver) {
+    new ResizeObserver(() => { if (!quoPreview.hidden) fitQuoPreview(); }).observe(quoPreviewScroll);
+  }
+
+  // ทุกการพิมพ์บนกระดาษ (ช่องข้อความ + ช่องในตาราง) bubble มาที่นี่ที่เดียว
+  quoPaper.addEventListener("input", () => scheduleQuoPreview());
+
+  // คลิกบนตัวอย่าง -> ไปที่ช่องเดียวกันบนกระดาษแก้ไข
+  quoPreviewSheets.addEventListener("click", (e) => {
+    const table = e.target.closest(".qd-table");
+    if (table) {
+      quoPaper.querySelector(".qd-table").scrollIntoView({ behavior: "smooth", block: "center" });
+      return;
+    }
+    const target = e.target.closest("[data-field]");
+    if (!target) return;
+    const field = quoFieldEls.find(el => el.dataset.field === target.dataset.field);
+    if (!field) return;
+    field.scrollIntoView({ behavior: "smooth", block: "center" });
+    field.focus({ preventScroll: true });
+  });
+
+  document.getElementById("quoPreviewToggle").addEventListener("click", (e) => {
+    const show = quoPreview.hidden;
+    quoPreview.hidden = !show;
+    e.currentTarget.textContent = show ? "ซ่อนตัวอย่างหน้าพิมพ์" : "แสดงตัวอย่างหน้าพิมพ์";
+    e.currentTarget.setAttribute("aria-pressed", String(show));
+    quotationFormMode.classList.toggle("is-preview-hidden", !show);
+    if (show) renderQuoPreview();
+  });
 
   /**
    * ตัดย่อหน้าให้พอดีที่เหลือบนแผ่น -- คืนก้อนที่เหลือ (ไปขึ้นหน้าใหม่), "whole" ถ้า
@@ -12899,6 +13026,8 @@ ${sheetHtml}
     quoPriceList.innerHTML = "";
     quoPriceModal.hidden = true;
     quoFieldEls.forEach(el => { el.innerHTML = ""; });
+    quoPreviewSheets.innerHTML = "";
+    quoPreviewSource.innerHTML = "";
     setQuoDirty(false);
   }
 
