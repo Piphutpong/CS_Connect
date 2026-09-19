@@ -11301,25 +11301,68 @@ ${sheetHtml}
     return item.builtin ? Promise.resolve(path) : fileUrl("brochure", path);
   }
 
-  async function importBuiltinBrochures(btn) {
+  /**
+   * โหลดรูปในโดเมนเดียวกัน (assets/...) เป็น data URL โดยไม่ใช้ fetch()
+   *
+   * fetch() ไปหาไฟล์ในโดเมนตัวเองก็จริง แต่ CSP ของหน้านี้ (connect-src) อนุญาต
+   * เฉพาะโฮสต์ Supabase เท่านั้น ไม่มี 'self' -- fetch() ไปที่ assets/ จึงถูกบล็อก
+   * เงียบ ๆ เห็นแค่ "Failed to fetch" ที่หาสาเหตุไม่ได้เลยว่าเพราะ CSP ไม่ใช่เน็ต
+   * img-src กลับอนุญาต 'self' อยู่แล้ว จึงวาดผ่าน img ธรรมดาแล้วส่งเข้า canvas
+   * แทน -- รูปโดเมนเดียวกันไม่ทำให้ canvas "เปื้อน" (tainted) จึง toDataURL()
+   * ออกมาได้โดยไม่ต้องพึ่ง connect-src เลย
+   */
+  function loadLocalImageAsDataUrl(src) {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement("canvas");
+        canvas.width = img.naturalWidth;
+        canvas.height = img.naturalHeight;
+        canvas.getContext("2d").drawImage(img, 0, 0);
+        resolve(canvas.toDataURL("image/png"));
+      };
+      img.onerror = () => reject(new Error("โหลดไฟล์ " + src + " ไม่สำเร็จ"));
+      img.src = src;
+    });
+  }
+
+  /**
+   * นำเข้าโบรชัวร์เดิมหนึ่งใบเป็นแถวจริงในฐานข้อมูล -- อัปรูปขึ้น Storage แล้ว
+   * สร้างเป็น work_item ปกติที่แก้ไข/ลบได้ ผูกกลับด้วย data.sourceAsset กัน
+   * นำเข้าซ้ำ (ดู pendingBuiltinBrochures) เรียกจากปุ่ม "แก้ไข" บนการ์ดโดยตรง
+   * ไม่มีปุ่ม "นำเข้า" แยกต่างหากอีกต่อไป -- กดแก้ไขครั้งแรกก็นำเข้าให้เลยในตัว
+   * ผู้ใช้ไม่ต้องรู้ด้วยซ้ำว่ามีขั้นตอน "นำเข้า" อยู่เบื้องหลัง
+   */
+  async function importSingleBuiltinBrochure(item) {
+    const src = item.data.images[0];
+    const dataUrl = await loadLocalImageAsDataUrl(src);
+    const path = await backend.uploadBrochureImage(dataUrl);
+    return backend.saveWorkItem("brochure", {
+      id: newWorkItemId(),
+      title: item.title,
+      status: "",
+      data: { description: "", images: [path], sourceAsset: src }
+    });
+  }
+
+  /**
+   * ปุ่ม "แก้ไข" บนการ์ด -- ใบที่นำเข้าแล้วเปิดฟอร์มแก้ไขตรง ๆ ส่วนใบเดิมจาก
+   * assets/ (item.builtin) ยังไม่มีแถวในฐานข้อมูลให้แก้ จึงนำเข้าให้ก่อนในตัว
+   * ปุ่มเดียวจบ ไม่ต้องมีขั้นตอน "นำเข้า" แยกที่ต้องมาอธิบายว่าทำไมต้องกดสองที
+   */
+  async function handleBrochureEditClick(item, btn) {
+    if (!item.builtin) {
+      openBrochureEditor(item);
+      return;
+    }
+
     hideError(brochureError);
-    setBusy(btn, true, "กำลังนำเข้า...");
+    setBusy(btn, true, "กำลังเตรียมแก้ไข...");
     try {
-      // ทีละใบ -- ใบที่สามพังไม่ควรทำให้สองใบแรกที่เข้าไปแล้วหาย
-      for (const item of pendingBuiltinBrochures()) {
-        const src = item.data.images[0];
-        const res = await fetch(src);
-        if (!res.ok) throw new Error(`โหลดไฟล์ ${src} ไม่สำเร็จ`);
-        const dataUrl = await readFileAsDataUrl(await res.blob());
-        const path = await backend.uploadBrochureImage(dataUrl);
-        await backend.saveWorkItem("brochure", {
-          id: newWorkItemId(),
-          title: item.title,
-          status: "",
-          data: { description: "", images: [path], sourceAsset: src }
-        });
-      }
-      await openBrochureView();
+      const imported = await importSingleBuiltinBrochure(item);
+      brochures.push(imported);
+      renderBrochures();
+      openBrochureEditor(imported);
     } catch (err) {
       showError(brochureError, moduleErrorText(err));
     } finally {
@@ -11346,27 +11389,8 @@ ${sheetHtml}
 
   function renderBrochures() {
     brochureList.innerHTML = "";
-    const builtins = pendingBuiltinBrochures();
-    const shown = brochures.concat(builtins);
-    brochureCount.textContent = `ทั้งหมด ${shown.length} รายการ`;
-
-    // ยังมีโบรชัวร์เดิมที่ยังไม่ได้นำเข้า -- บอกไว้บนสุดพร้อมปุ่ม
-    const notice = document.getElementById("brochureBuiltinNotice");
-    if (notice) notice.remove();
-    if (builtins.length) {
-      const bar = document.createElement("div");
-      bar.id = "brochureBuiltinNotice";
-      bar.className = "brochure-builtin-notice";
-      const text = document.createElement("span");
-      text.textContent = `โบรชัวร์เดิม ${builtins.length} ใบจากหน้างานธุรกิจเสริม ดู/ดาวน์โหลด/คัดลอกได้เลย -- นำเข้าเพื่อแก้ไขชื่อ คำอธิบาย หรือรูปได้`;
-      const btn = document.createElement("button");
-      btn.type = "button";
-      btn.className = "btn btn-ghost";
-      btn.textContent = "นำเข้าเป็นโบรชัวร์ที่แก้ไขได้";
-      btn.addEventListener("click", () => importBuiltinBrochures(btn));
-      bar.append(text, btn);
-      brochureList.before(bar);
-    }
+    const shown = brochures.concat(pendingBuiltinBrochures());
+    brochureCount.textContent = "ทั้งหมด " + shown.length + " รายการ";
 
     if (!shown.length) {
       const empty = document.createElement("div");
@@ -11425,15 +11449,15 @@ ${sheetHtml}
         actions.appendChild(viewBtn);
       }
 
-      // ของเดิมที่ยังไม่นำเข้าไม่มีแถวในฐานข้อมูลให้แก้ -- ใช้ปุ่มนำเข้าด้านบน
-      if (!item.builtin) {
-        const editBtn = document.createElement("button");
-        editBtn.type = "button";
-        editBtn.className = "btn btn-ghost";
-        editBtn.textContent = "แก้ไข";
-        editBtn.addEventListener("click", () => openBrochureEditor(item));
-        actions.appendChild(editBtn);
-      }
+      // ของเดิมจาก assets/ (item.builtin) ยังไม่มีแถวในฐานข้อมูลให้แก้ -- ปุ่มนี้
+      // นำเข้าให้ก่อนแล้วเปิดฟอร์มแก้ไขต่อทันที ผู้ใช้กดปุ่มเดียวจบ ไม่ต้องรู้ด้วย
+      // ซ้ำว่ามีขั้นตอน "นำเข้า" อยู่เบื้องหลัง (ดู handleBrochureEditClick)
+      const editBtn = document.createElement("button");
+      editBtn.type = "button";
+      editBtn.className = "btn btn-ghost";
+      editBtn.textContent = "แก้ไข";
+      editBtn.addEventListener("click", () => handleBrochureEditClick(item, editBtn));
+      actions.appendChild(editBtn);
 
       body.append(title, desc, actions);
       card.append(thumb, body);

@@ -4048,18 +4048,3 @@ span.estimate-crumb {
     position: static; min-width: 20px; height: 20px; padding: 0 6px; font-size: 11px; margin-left: 2px;
   }
 }
-
-/* แถบแจ้งว่ายังมีโบรชัวร์เดิม (assets/) ที่ยังไม่นำเข้าเป็นแบบแก้ไขได้ */
-.brochure-builtin-notice {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px 16px;
-  margin-top: 16px;
-  padding: 12px 16px;
-  border: 1px dashed var(--volt-300);
-  border-radius: 12px;
-  background: var(--volt-50);
-  font-size: 14px;
-}
