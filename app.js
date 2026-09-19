@@ -480,10 +480,22 @@
 
     const RETRY_ATTEMPTS = 3;
 
-    function isTransient(error) {
-      const status = Number(error?.status) || 0;
+    /**
+     * ล้มเพราะเครือข่าย/เซิร์ฟเวอร์ล่มชั่วคราว (ลองใหม่ได้) หรือเพราะฐานข้อมูล
+     * "ตัดสินแล้วว่าไม่รับ" (ลองใหม่กี่ทีก็ไม่ผ่าน)
+     *
+     * สถานะ HTTP ไม่ได้อยู่บน error ของ supabase-js แต่อยู่บนคำตอบ ({ status })
+     * เดิมอ่าน error.status ซึ่งไม่มีอยู่จริง ได้ 0 ทุกครั้ง -- ทุกข้อผิดพลาดทางธุรกิจ
+     * (เลข WBS ซ้ำ, เบอร์โทรผิดรูปแบบ, เลขที่คำร้องซ้ำ) จึงถูกนับเป็น "เชื่อมต่อฐาน
+     * ข้อมูลไม่สำเร็จ" แถมถูกยิงซ้ำ 3 รอบก่อนแจ้ง ตอนนี้ดูสองอย่าง: มี code จาก
+     * ฐานข้อมูล (เช่น P0001 ของ app.fail) = เซิร์ฟเวอร์ตอบมาแล้ว ไม่ใช่เน็ตหลุด
+     */
+    function isTransient(error, status) {
+      const httpStatus = Number(status ?? error?.status) || 0;
       const message = String(error?.message || "");
-      return status === 0 || status === 408 || status === 429 || status >= 500
+      if (httpStatus === 408 || httpStatus === 429 || httpStatus >= 500) return true;
+      if (error?.code) return false;
+      return httpStatus === 0
         || /Failed to fetch|NetworkError|Load failed|fetch failed/i.test(message);
     }
 
@@ -498,25 +510,34 @@
       if (error?.code === "42501" || /permission denied for function|JWT expired|invalid JWT|JWSError/i.test(message)) {
         return new Error("AUTH_REQUIRED");
       }
+      // เลข WBS ซ้ำ -- ขึ้นต้นด้วยประโยคที่บอกให้แก้ไข แล้วค่อยตามด้วยรายละเอียด
+      // จากฐานข้อมูล (ซ้ำกับคำร้องใบไหน) ที่เจ้าหน้าที่ใช้หาใบที่ชนกัน
+      if (/WBS/.test(message) && /ซ้ำ|ถูกใช้/.test(message)) {
+        return new Error(`หมายเลข WBS ซ้ำ กรุณาแก้ไขให้ถูกต้อง (${message})`);
+      }
       return new Error(message || "ฐานข้อมูลตอบกลับผิดพลาด");
     }
 
     async function rpc(name, args) {
       let lastError = null;
+      let lastStatus = 0;
 
       for (let attempt = 1; attempt <= RETRY_ATTEMPTS; attempt++) {
         let data;
         let error;
+        let status;
         try {
-          ({ data, error } = await client.rpc(name, args || {}));
+          ({ data, error, status } = await client.rpc(name, args || {}));
         } catch (err) {
           error = err;
+          status = 0;
         }
 
         if (!error) return data;
 
         lastError = error;
-        const canRetry = isTransient(error) && attempt < RETRY_ATTEMPTS && RETRYABLE_RPCS.has(name);
+        lastStatus = status;
+        const canRetry = isTransient(error, status) && attempt < RETRY_ATTEMPTS && RETRYABLE_RPCS.has(name);
         if (!canRetry) break;
 
         // ถอยห่างขึ้นเรื่อย ๆ แทนที่จะยิงรัว
@@ -524,7 +545,7 @@
         await new Promise(resolve => setTimeout(resolve, 400 * attempt));
       }
 
-      if (isTransient(lastError)) {
+      if (isTransient(lastError, lastStatus)) {
         throw new Error("เชื่อมต่อฐานข้อมูลไม่สำเร็จ กรุณาตรวจสอบอินเทอร์เน็ตแล้วลองใหม่อีกครั้ง");
       }
       throw normalizeError(lastError);
