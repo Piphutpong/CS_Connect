@@ -154,14 +154,9 @@
       icon: '<svg viewBox="0 0 24 24" fill="none"><rect x="3" y="7" width="18" height="13" rx="2" stroke="currentColor" stroke-width="1.6"/><path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M3 12h18" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>',
       links: [
         { label: "Google Sheet: Check list จ้างเหมา Turnkey", url: "https://docs.google.com/spreadsheets/d/1Ys-uVEzhEOJIS5MbxdoXYWrfR2UwXX70r-mzQE9yAJg/edit?usp=sharing" }
-      ],
-      // โบรชัวร์ 3 ใบที่เจ้าของระบบส่งมาให้แปะไว้ -- ไฟล์อยู่ใน assets/ (ดู
-      // .service-gallery ใน style.css ที่ไม่ eager-load รูปพวกนี้ตอนเปิดหน้าแรก)
-      images: [
-        { src: "assets/side-business-maintenance.png", alt: "บริการบำรุงรักษาระบบไฟฟ้า" },
-        { src: "assets/side-business-transformer.png", alt: "บริการบำรุงรักษาหม้อแปลงไฟฟ้า" },
-        { src: "assets/side-business-thermal.png", alt: "บริการตรวจสอบจุดร้อน" }
       ]
+      // รูปโบรชัวร์ 3 ใบที่เคยแปะไว้ตรงนี้ย้ายไปอยู่ในหน้าโบรชัวร์แล้ว (ปุ่ม
+      // "โบรชัวร์" บนการ์ดนี้ -- ดู BUILTIN_BROCHURES) ที่นั่นดาวน์โหลด/คัดลอกส่งไลน์ได้
     }
   };
 
@@ -3625,8 +3620,8 @@
       // (หน้ารายละเอียดของโมดูลงาน -- แท็บแผนผัง/ภาพหน้างาน/ประมาณการ -- ยังอยู่
       // เหมือนเดิม เปิดได้จากการกดการ์ดคำร้องขยายเขตฯ ใบใดก็ได้)
       if (WORK_KIND_TITLES[key]) {
-        saveNavState({ card: "requests", filter: key });
-        openRequestsView(key);
+        saveNavState({ card: key });
+        openWorkList(key);
         return;
       }
 
@@ -3775,6 +3770,21 @@
   // เพราะแต่ละแท็บมีชุดงานคนละชุด กดดูของตัวเองในแท็บหนึ่งแล้วไปโผล่อีกแท็บ
   // จะเห็นหน้าว่างที่ดูเหมือนไม่มีงาน (เหตุผลเดียวกับที่ setWorkKind ล้างชิป)
   let requestsMineOnly = false;
+
+  // โหมดหน้างาน (ดูบล็อก "หน้างาน" ท้ายไฟล์) -- null = งานรับคำร้องปกติ,
+  // "power" | "extend" = หน้างานขอใช้ไฟฟ้า / งานขยายเขตฯ
+  let requestsWorkKind = null;
+  // "list" = รายการคำร้อง, "people" = คำร้องในมือแต่ละคน (หัวหน้า)
+  let requestsWorkView = "list";
+  // หน้าคำร้องในมือ: null = ยังอยู่หน้ารายชื่อคน, "" = งานที่ยังไม่ได้จ่าย,
+  // อีเมล = งานของคนนั้น (ตัวพิมพ์เล็ก)
+  let requestsPersonKey = null;
+  // id ของการ์ดที่เห็นอยู่ล่าสุด -- ให้ปุ่ม "เลือกทั้งหมด" เลือกตามที่ตาเห็น
+  let lastRenderedIds = [];
+  const requestsTopbarTitle = document.getElementById("requestsTopbarTitle");
+  const requestsSelectAllBtn = document.getElementById("requestsSelectAllBtn");
+  const requestsSelectClearBtn = document.getElementById("requestsSelectClearBtn");
+  const workNavItems = document.querySelectorAll(".requests-nav-item[data-work-view]");
   const requestsSortBtn = document.getElementById("requestsSortBtn");
   const requestsSortLabel = document.getElementById("requestsSortLabel");
   const extendWorkSortBtn = document.getElementById("extendWorkSortBtn");
@@ -4786,21 +4796,32 @@
   }
 
   /**
-   * สถานะตั้งต้นของคำร้องแต่ละประเภท -- ใบที่ยังอยู่สถานะนี้แปลว่ายังไม่มีใคร
-   * ดำเนินการอะไรต่อ ใช้นิยาม "Output" ในกล่องสรุป (ดู renderRequestsSummary)
+   * สถานะแต่ละตัวนับเป็น "กำลังดำเนินการ" หรือ "ดำเนินการแล้ว" -- ตามที่เจ้าของงาน
+   * กำหนดไว้ตรงตัว ใช้ทั้งแท็บในงานรับคำร้องและหน้างานของประเภทเดียวกัน
+   *
+   * Input      = คำร้องที่รับเข้ามา (นับตามวันที่รับคำร้องในช่วงที่เลือก)
+   * Inprogress = ใน Input ที่สถานะยังอยู่ในชุด inprogress
+   * Output     = ใน Input ที่สถานะอยู่ในชุด output
+   * สองชุดครอบคลุมทุกสถานะในดรอปดาวน์พอดี Input จึงเท่ากับ Inprogress + Output
+   * เว้นแต่มีใบเก่าที่สถานะไม่อยู่ในดรอปดาวน์ -- กรณีนั้นบอกไว้ในกล่องด้วย
    */
-  const REQUEST_OPENING_STATUS = { power: "รอตรวจสอบ" };
+  const STATUS_BUCKETS = {
+    power: {
+      inprogress: ["รอตรวจสอบ", "รอเอกสารเพิ่มเติม", "รอแก้ไข", "รอขยายเขตฯ", "ผมต. ตีกลับ"],
+      output: ["รอชำระเงิน", "ชำระเงินแล้ว", "ไม่มีค่าใช้จ่าย", "ส่งแผนกมิเตอร์แล้ว", "ยกเลิกคำร้อง", "จัดเก็บเอกสาร (ผบส.)"]
+    },
+    extend: {
+      inprogress: ["รอจ่ายงาน", "รอสำรวจ", "รอเขียนผัง", "รอประมาณการ", "ส่งตรวจแผนผังและประมาณการ",
+        "เสนออนุมัติ", "รอเอกสารเพิ่มเติม", "อื่นๆ (หมายเหตุเพิ่มเติม)"],
+      output: ["อนุมัติและแจ้งค่าใช้จ่ายแล้ว", "ส่ง ผบร.", "ส่ง ผปบ.", "ส่ง ผกส.",
+        "ส่งหนังสือแจ้ง ทต./อบต. แล้ว", "หมดกำหนดยืนราคา", "ยกเลิกคำร้อง"]
+    }
+  };
 
   /**
-   * กล่องสรุปเหนือรายการ: จำนวนคำร้องแยกตามสถานะ และเมื่อเลือกช่วงวันที่ไว้จะมี
-   * Input/Output ของช่วงนั้นด้วย
-   *
-   * Input  = คำร้องที่ "รับเข้ามา" ในช่วง (นับจากวันที่รับคำร้อง)
-   * Output = คำร้องที่ "ถูกดำเนินการ" ในช่วง คือมีการเปลี่ยนสถานะไปเป็นสถานะอื่น
-   *          ที่ไม่ใช่สถานะตั้งต้น โดยดูจาก statusHistory ว่ามีรายการที่เวลา (at)
-   *          ตกอยู่ในช่วงที่เลือก -- จงใจนับจาก "เวลาที่เปลี่ยนสถานะ" ไม่ใช่วันที่
-   *          รับคำร้อง เพราะใบที่รับมาก่อนหน้าแล้วเพิ่งมาดำเนินการในช่วงนี้ ก็ถือ
-   *          เป็นผลงานของช่วงนี้ Input กับ Output จึงเป็นคนละชุดคำร้องกันได้
+   * กล่องสรุปเหนือรายการ: จำนวนคำร้องแยกตามสถานะ (กดแล้วกระโดดไปกลุ่มนั้น) และ
+   * สำหรับขอใช้ไฟฟ้า/ขอขยายเขตฯ มีแถว Input / Inprogress / Output ของช่วงที่
+   * เลือกด้วย -- ไม่เลือกช่วง = นับทั้งหมดที่แสดงอยู่
    */
   function renderRequestsSummary(statusCountSource) {
     const statuses = requestStatusesFor(currentRequestFilter);
@@ -4833,42 +4854,39 @@
     });
     requestsSummary.appendChild(counts);
 
-    if (!hasRange) return;
+    const buckets = STATUS_BUCKETS[currentRequestFilter];
+    if (!buckets) return;
 
-    const opening = REQUEST_OPENING_STATUS[currentRequestFilter];
-    const ofType = getRequests().filter(r => r.type === currentRequestFilter);
-    const input = ofType.filter(requestsDateFilterMatches).length;
-    const output = opening
-      ? ofType.filter(r => actedOnInRange(r, opening)).length
-      : null;
+    const input = statusCountSource.length;
+    const inprogress = statusCountSource.filter(r => buckets.inprogress.indexOf(r.jobStatus) !== -1).length;
+    const output = statusCountSource.filter(r => buckets.output.indexOf(r.jobStatus) !== -1).length;
+    const unclassified = input - inprogress - output;
 
     const io = document.createElement("div");
     io.className = "requests-summary-io";
 
-    const rangeText = `${requestsDateFromValue ? formatThaiDate(requestsDateFromValue) : "เริ่มแรก"}`
-      + ` – ${requestsDateToValue ? formatThaiDate(requestsDateToValue) : "ปัจจุบัน"}`;
-
-    const inputEl = document.createElement("span");
-    inputEl.className = "requests-summary-io-item";
-    inputEl.innerHTML = `<span>Input (รับเข้า)</span>`;
-    const inputValue = document.createElement("strong");
-    inputValue.textContent = String(input);
-    inputEl.appendChild(inputValue);
-    io.appendChild(inputEl);
-
-    if (output !== null) {
-      const outputEl = document.createElement("span");
-      outputEl.className = "requests-summary-io-item";
-      outputEl.innerHTML = `<span>Output (ดำเนินการแล้ว)</span>`;
-      const outputValue = document.createElement("strong");
-      outputValue.textContent = String(output);
-      outputEl.appendChild(outputValue);
-      io.appendChild(outputEl);
-    }
+    [
+      { label: "Input (รับเข้า)", value: input, tone: "" },
+      { label: "Inprogress (กำลังดำเนินการ)", value: inprogress, tone: "tone-warning" },
+      { label: "Output (ดำเนินการแล้ว)", value: output, tone: "tone-success" }
+    ].forEach(entry => {
+      const el = document.createElement("span");
+      el.className = `requests-summary-io-item ${entry.tone}`.trim();
+      const label = document.createElement("span");
+      label.textContent = entry.label;
+      const value = document.createElement("strong");
+      value.textContent = String(entry.value);
+      el.append(label, value);
+      io.appendChild(el);
+    });
 
     const rangeEl = document.createElement("span");
     rangeEl.className = "requests-summary-range";
-    rangeEl.textContent = `ช่วง ${rangeText}`;
+    rangeEl.textContent = hasRange
+      ? `รับคำร้องช่วง ${requestsDateFromValue ? formatThaiDate(requestsDateFromValue) : "เริ่มแรก"}`
+        + ` – ${requestsDateToValue ? formatThaiDate(requestsDateToValue) : "ปัจจุบัน"}`
+      : "ทุกช่วงเวลา (เลือกช่วงวันที่รับคำร้องด้านบนเพื่อดูรายช่วง)";
+    if (unclassified > 0) rangeEl.textContent += ` · สถานะอื่น ${unclassified} ใบ`;
     io.appendChild(rangeEl);
 
     requestsSummary.appendChild(io);
@@ -4906,29 +4924,6 @@
   function cssEscape(value) {
     if (window.CSS && typeof CSS.escape === "function") return CSS.escape(value);
     return String(value).replace(/["\\\]\[().#:>+~*^$|]/g, "\\$&");
-  }
-
-  /**
-   * ใบนี้ถูกเปลี่ยนสถานะไปเป็นสถานะอื่น (ที่ไม่ใช่สถานะตั้งต้น) ในช่วงที่เลือกไหม
-   *
-   * statusHistory เก็บ at เป็น epoch ms ส่วนช่องกรองเป็นวันที่ YYYY-MM-DD จึงต้อง
-   * แปลงขอบช่วงเป็นต้นวัน/ท้ายวันก่อนเทียบ ใบเก่าที่ไม่มี at (ข้อมูลก่อนมีฟิลด์นี้)
-   * นับไม่ได้ ก็ข้ามไป ดีกว่าเดาแล้วรายงานตัวเลขที่ไม่จริง
-   */
-  function actedOnInRange(record, openingStatus) {
-    const history = Array.isArray(record.statusHistory) ? record.statusHistory : [];
-    const from = requestsDateFromValue ? new Date(`${requestsDateFromValue}T00:00:00`).getTime() : null;
-    const to = requestsDateToValue ? new Date(`${requestsDateToValue}T23:59:59.999`).getTime() : null;
-
-    return history.some(entry => {
-      if (!entry || !entry.at) return false;
-      if (entry.status === openingStatus) return false;
-      const at = Number(entry.at);
-      if (!Number.isFinite(at)) return false;
-      if (from !== null && at < from) return false;
-      if (to !== null && at > to) return false;
-      return true;
-    });
   }
 
   /** ผ่านทุกใบเมื่อไม่ได้เปิด "งานของฉัน" ไว้ -- ตัวกรองนี้เป็นตัวเลือก ไม่ใช่มุมมอง */
@@ -4981,18 +4976,39 @@
     // be scrolled to.
     window.scrollTo(0, 0);
     updateTabBadges();
+    applyRequestsMode();
 
-    // แท็บ payment/meter ย้ายไปเป็นชิปในหน้างานขอใช้ไฟฟ้าแล้ว (ช่างตรวจสอบทำงาน
-    // จบที่นั่น) เหลือ derived tab ในหน้านี้แค่คุมส่ง ผสน./ผบร. ซึ่งเป็นงาน
-    // ธุรการที่จบในหน้ารับคำร้องเหมือนกับคำร้องทั่วไป/ขอเงินประกันคืนต้นทางของมัน
+    // ปุ่มเลือกทั้งหมด/ล้างค่า ซ่อนก่อนเสมอ -- โหมดประวัติการส่งออกจากฟังก์ชันนี้
+    // กลางทาง และไม่มีอะไรให้เลือกในโหมดนั้น (ด้านล่างเปิดคืนเมื่อมีตะกร้าจริง)
+    requestsSelectAllBtn.hidden = true;
+    requestsSelectClearBtn.hidden = true;
+
+    // derived tab ทั้งสี่ (แจ้งเตือนการรับชำระเงิน/คุมคำร้องมิเตอร์/คุมคำร้องทั่วไป/
+    // คุมคำร้องขอรับเงินประกันคืน) คือการกรองคำร้องที่มีอยู่แล้วด้วยสถานะ
     const derivedFilter = DERIVED_TAB_FILTERS[currentRequestFilter];
     // ทั้งแท็บ ไม่กรองด้วยคำค้น -- ใช้ตัดสินว่า id ที่เลือกไว้ (ตะกร้าเช็คบ็อก)
     // ยังอยู่ในแท็บนี้ไหม แยกจาก filtered ด้านล่างซึ่งกรองด้วยคำค้นด้วย เพื่อไม่ให้
     // ค้นหาคำอื่นแล้วเลือกที่หน้าจอไม่เห็นชั่วคราวถูกตัดออกจากตะกร้าไปเงียบ ๆ
-    const eligibleForTab = getRequests().filter(derivedFilter || (r => r.type === currentRequestFilter));
-    // ปุ่ม "งานของฉัน" มีเฉพาะประเภทที่จ่ายงานได้จริง -- สลับแท็บแล้วต้องปิดเอง
-    // ไม่งั้นแท็บที่ไม่มีการจ่ายงานจะถูกกรองเหลือศูนย์โดยไม่มีปุ่มให้กดปลด
-    const mineAvailable = Boolean(WORK_KIND_ASSIGNABLE[currentRequestFilter]);
+    //
+    // หน้าคำร้องในมือของหัวหน้า: เลือกคนแล้ว = เหลือเฉพาะงานของคนนั้น
+    const personFilter = (requestsWorkKind && requestsWorkView === "people" && requestsPersonKey !== null)
+      ? (r => String(r.assigneeEmail || "").toLowerCase() === requestsPersonKey)
+      : (() => true);
+    const eligibleForTab = getRequests()
+      .filter(derivedFilter || (r => r.type === currentRequestFilter))
+      .filter(personFilter);
+
+    // หน้ารายชื่อคนของหัวหน้า (ยังไม่ได้เลือกคน) -- ไม่ใช่รายการคำร้อง วาดการ์ด
+    // รายคนแทน แล้วออกเลย ไม่มีกล่องสรุป/ค้นหาให้กรองรายชื่อ
+    if (requestsWorkKind && requestsWorkView === "people" && requestsPersonKey === null) {
+      renderRequestsPeople(eligibleForTab.filter(requestsDateFilterMatches));
+      return;
+    }
+
+    // ปุ่ม "งานของฉัน" มีเฉพาะหน้างาน (ขอใช้ไฟฟ้า/ขยายเขตฯ) ที่จ่ายงานได้จริง --
+    // หน้ารับคำร้องไม่มีใครถูกจ่ายงานให้ ปุ่มจะกรองเหลือศูนย์ตลอด
+    const mineAvailable = Boolean(requestsWorkKind && WORK_KIND_ASSIGNABLE[currentRequestFilter])
+      && requestsWorkView === "list";
     if (!mineAvailable && requestsMineOnly) requestsMineOnly = false;
     requestsMineBtn.hidden = !mineAvailable;
     requestsMineBtn.classList.toggle("active", requestsMineOnly);
@@ -5005,8 +5021,10 @@
         .filter(r => matchesSearch(r, currentSearchQuery))
     );
 
-    requestsListTitle.textContent = REQUEST_TYPES[currentRequestFilter];
+    requestsListTitle.textContent = requestsListHeading();
     requestsListCount.textContent = `ทั้งหมด ${filtered.length} รายการ`;
+    // "เลือกทั้งหมด" เลือกเฉพาะที่เห็นอยู่บนจอตอนนี้ -- จำไว้ให้ปุ่มใช้
+    lastRenderedIds = filtered.map(r => r.id);
     requestsAddBtn.hidden = Boolean(derivedFilter);
     // เพิ่มหลายคำร้องมีเฉพาะขอใช้ไฟฟ้า
     requestsAddBatchBtn.hidden = Boolean(derivedFilter) || currentRequestFilter !== "power";
@@ -5077,8 +5095,25 @@
       requestsSummary.innerHTML = "";
     }
 
+    // หัวหน้าในหน้างาน: ติ๊กการ์ดเพื่อจ่ายงาน (ตะกร้าเดียวกับหน้าคิวงานเดิม
+    // extendSelection) -- ตัดเฉพาะ id ที่ไม่อยู่ในหน้านี้แล้วจริง ๆ ไม่ใช่ที่แค่
+    // ถูกซ่อนด้วยคำค้น เหมือนตะกร้าของสมุดคุม
+    const isAssignTab = Boolean(requestsWorkKind) && canAssignWork();
+    if (isAssignTab) {
+      const eligibleIds = new Set(eligibleForTab.map(r => r.id));
+      extendSelection.forEach(id => { if (!eligibleIds.has(id)) extendSelection.delete(id); });
+    } else if (requestsWorkKind) {
+      extendSelection.clear();
+    }
+    if (requestsWorkKind) renderAssignBar();
+
+    const selection = activeRequestsSelection();
+    requestsSelectAllBtn.hidden = !selection;
+    requestsSelectClearBtn.hidden = !selection;
+    if (selection) requestsSelectClearBtn.disabled = selection.size === 0;
+
     renderRequestCardsInto(requestsList, filtered, {
-      isMeterTab, isGeneralTab, isRevenueTab, groupByStatus,
+      isMeterTab, isGeneralTab, isRevenueTab, isAssignTab, groupByStatus,
       searchQuery: currentSearchQuery,
       onArchiveMerged: renderRequestsList
     });
@@ -5090,7 +5125,7 @@
    * เลือกหลายใบเพื่อพิมพ์สมุดคุม
    */
   function renderRequestCardsInto(listEl, filtered, {
-    isMeterTab = false, isGeneralTab = false, isRevenueTab = false,
+    isMeterTab = false, isGeneralTab = false, isRevenueTab = false, isAssignTab = false,
     searchQuery = "", onArchiveMerged = renderRequestsList, groupByStatus = false
   } = {}) {
     listEl.innerHTML = "";
@@ -5300,6 +5335,7 @@
           else meterSelection.delete(r.id);
           meterPrintBtn.disabled = meterSelection.size === 0;
           updateSelectionButtonLabel(meterPrintBtn, meterSelection.size);
+          requestsSelectClearBtn.disabled = meterSelection.size === 0;
         });
         selectWrap.appendChild(checkbox);
         card.appendChild(selectWrap);
@@ -5324,6 +5360,28 @@
           else generalSelection.delete(r.id);
           generalPrintBtn.disabled = generalSelection.size === 0;
           updateSelectionButtonLabel(generalPrintBtn, generalSelection.size);
+          requestsSelectClearBtn.disabled = generalSelection.size === 0;
+        });
+        selectWrap.appendChild(checkbox);
+        card.appendChild(selectWrap);
+      }
+
+      // หัวหน้าเลือกงานเพื่อจ่ายงาน (หน้างานขอใช้ไฟฟ้า/ขยายเขตฯ) -- กลไกเดียวกับ
+      // ตะกร้าของสมุดคุม แต่ใช้แถบจ่ายงาน (#extendAssignBar) แทนปุ่มพิมพ์
+      if (isAssignTab) {
+        card.classList.add("has-card-select");
+        const selectWrap = document.createElement("label");
+        selectWrap.className = "request-card-select";
+        const checkbox = document.createElement("input");
+        checkbox.type = "checkbox";
+        checkbox.checked = extendSelection.has(r.id);
+        checkbox.setAttribute("aria-label", `เลือกคำร้อง ${r.requestNumber || r.customerName || ""} เพื่อจ่ายงาน`);
+        checkbox.addEventListener("click", (e) => e.stopPropagation());
+        checkbox.addEventListener("change", () => {
+          if (checkbox.checked) extendSelection.add(r.id);
+          else extendSelection.delete(r.id);
+          renderAssignBar();
+          requestsSelectClearBtn.disabled = extendSelection.size === 0;
         });
         selectWrap.appendChild(checkbox);
         card.appendChild(selectWrap);
@@ -5346,6 +5404,7 @@
           else revenueSelection.delete(r.id);
           revenuePrintBtn.disabled = revenueSelection.size === 0;
           updateSelectionButtonLabel(revenuePrintBtn, revenueSelection.size);
+          requestsSelectClearBtn.disabled = revenueSelection.size === 0;
         });
         selectWrap.appendChild(checkbox);
         card.appendChild(selectWrap);
@@ -5845,6 +5904,7 @@
   });
 
   function openRequestsView(filter) {
+    leaveWorkMode();
     switchRequestsTab(filter || "power");
     showView("requests");
   }
@@ -10401,8 +10461,8 @@ ${sheetHtml}
    * นับจากงานที่มีอยู่จริง ไม่ได้ไล่จากรายชื่อเจ้าหน้าที่ทั้งหมด: หน้านี้ตอบคำถาม
    * "ตอนนี้งานอยู่ในมือใครบ้าง" คนที่ไม่มีงานค้างจึงไม่ต้องมีอยู่ในรายการ
    */
-  function renderPeopleList(jobs) {
-    extendWorkList.innerHTML = "";
+  function renderPeopleList(jobs, listEl = extendWorkList, onPick = null) {
+    listEl.innerHTML = "";
 
     const byPerson = new Map();
     jobs.forEach(record => {
@@ -10424,7 +10484,7 @@ ${sheetHtml}
       const empty = document.createElement("div");
       empty.className = "request-empty";
       empty.textContent = "ยังไม่มีงานในระบบ";
-      extendWorkList.appendChild(empty);
+      listEl.appendChild(empty);
       return;
     }
 
@@ -10464,12 +10524,16 @@ ${sheetHtml}
 
       card.append(top, chips);
       card.addEventListener("click", () => {
+        if (onPick) {
+          onPick(person.key);
+          return;
+        }
         extendPersonEmail = person.key;
         extendSelection.clear();
         renderExtendWork();
       });
 
-      extendWorkList.appendChild(card);
+      listEl.appendChild(card);
     });
   }
 
@@ -10787,7 +10851,7 @@ ${sheetHtml}
 
   document.getElementById("extendAssignClearBtn").addEventListener("click", () => {
     extendSelection.clear();
-    renderExtendWork();
+    rerenderAssignScreen();
   });
 
   extendAssignBtn.addEventListener("click", async (e) => {
@@ -10822,7 +10886,7 @@ ${sheetHtml}
       extendAssignSuccess.hidden = false;
 
       extendSelection.clear();
-      renderExtendWork();
+      rerenderAssignScreen();
     } catch (err) {
       console.error("CS Connect assign error:", err);
       showError(extendAssignError, friendlyError(err, "จ่ายงานไม่สำเร็จ กรุณาลองใหม่อีกครั้ง"));
@@ -10830,6 +10894,208 @@ ${sheetHtml}
       setBusy(btn, false);
     }
   });
+
+
+  // ================================================================ หน้างาน
+  // งานขอใช้ไฟฟ้า / งานขยายเขตระบบจำหน่ายไฟฟ้า ใช้หน้ารายการเดียวกับแท็บ
+  // ขอใช้ไฟฟ้า/ขอขยายเขตฯ ในงานรับคำร้อง (ตัววาดรายการ/กล่องสรุป/ตัวกรองชุดเดียว)
+  // ต่างกันแค่ชื่อบนแถบบน เมนูซ้าย (ของงานนั้นเอง ไม่เอาเมนูงานรับคำร้องมา)
+  // และสิ่งที่หัวหน้าใช้: ติ๊กจ่ายงาน + คำร้องในมือแต่ละคน
+  //
+  // requestsWorkKind = null -> หน้างานรับคำร้องปกติ
+  //                    "power" | "extend" -> หน้างานของประเภทนั้น
+  // (สถานะ requestsWorkKind/requestsWorkView/requestsPersonKey และ element
+  // ของหน้านี้ประกาศไว้ต้นไฟล์ข้าง requestsMineOnly -- renderRequestsList อ่าน
+  // มันทุกครั้ง ประกาศไว้ท้ายไฟล์เสี่ยงโดน temporal dead zone)
+
+  // แถบจ่ายงานอยู่ในหน้าคิวงานเดิม (#extendWorkView) -- ย้ายโหนดจริงมาใช้ใน
+  // หน้ารายการตอนเป็นหน้างาน แล้วคืนกลับเมื่อออก (appendChild พา listener ไปด้วย
+  // เหมือนที่ทำกับฟอร์ม) จุดยึดเป็น comment node เพื่อกลับไปที่ "เดิม" จริง
+  const assignNodes = [extendAssignBar, extendAssignError, extendAssignSuccess];
+  const assignHomeAnchor = document.createComment("assign bar home");
+  extendAssignBar.parentElement.insertBefore(assignHomeAnchor, extendAssignBar);
+
+  function mountAssignBar(inWork) {
+    if (inWork) {
+      assignNodes.forEach(node => requestsList.parentElement.insertBefore(node, requestsList));
+    } else {
+      assignHomeAnchor.after(...assignNodes);
+    }
+  }
+
+  /** ชื่อแถบบน + เมนูซ้าย ตามโหมด -- เรียกทุกครั้งที่วาดรายการ */
+  function applyRequestsMode() {
+    const inWork = Boolean(requestsWorkKind);
+    requestsTopbarTitle.textContent = inWork ? WORK_KIND_TITLES[requestsWorkKind] : "งานรับคำร้อง";
+    requestsNavItems.forEach(item => { item.hidden = inWork; });
+    workNavItems.forEach(item => {
+      const view = item.dataset.workView;
+      item.hidden = !inWork || (view === "people" && !canAssignWork());
+      item.classList.toggle("active", inWork && view === requestsWorkView);
+    });
+  }
+
+  function requestsListHeading() {
+    if (requestsWorkKind && requestsWorkView === "people") {
+      if (requestsPersonKey === null) return "คำร้องในมือแต่ละคน";
+      if (!requestsPersonKey) return "คำร้องที่ยังไม่ได้จ่ายงาน";
+      const owner = getRequests().find(r => String(r.assigneeEmail || "").toLowerCase() === requestsPersonKey);
+      return `คำร้องของ ${owner && owner.assignee ? owner.assignee : requestsPersonKey}`;
+    }
+    return REQUEST_TYPES[currentRequestFilter];
+  }
+
+  function openWorkList(kind) {
+    requestsWorkKind = kind;
+    requestsWorkView = "list";
+    requestsPersonKey = null;
+    requestsMineOnly = false;
+    setWorkKind(kind);
+    extendSelection.clear();
+    hideError(extendAssignError);
+    extendAssignSuccess.hidden = true;
+    mountAssignBar(true);
+    switchRequestsTab(kind);
+    showView("requests");
+
+    if (canAssignWork()) {
+      refreshStaffRoster()
+        .then(fillAssigneeSelect)
+        .catch(err => {
+          console.error("CS Connect staff list error:", err);
+          showError(extendAssignError, friendlyError(err, "โหลดรายชื่อเจ้าหน้าที่ไม่สำเร็จ"));
+        });
+    }
+  }
+
+  function leaveWorkMode() {
+    if (!requestsWorkKind) return;
+    requestsWorkKind = null;
+    requestsWorkView = "list";
+    requestsPersonKey = null;
+    requestsMineOnly = false;
+    extendSelection.clear();
+    mountAssignBar(false);
+    extendAssignBar.hidden = true;
+  }
+
+  workNavItems.forEach(item => {
+    item.addEventListener("click", () => {
+      requestsWorkView = item.dataset.workView;
+      requestsPersonKey = null;
+      extendSelection.clear();
+      requestsMineOnly = false;
+      currentSearchQuery = "";
+      requestsSearchInput.value = "";
+      renderRequestsList();
+    });
+  });
+
+  /** หน้ารายชื่อคนของหัวหน้า -- การ์ดหนึ่งใบต่อคน กดแล้วเห็นคำร้องของคนนั้น */
+  function renderRequestsPeople(jobs) {
+    requestsListTitle.textContent = requestsListHeading();
+    requestsListCount.textContent = `ทั้งหมด ${jobs.length} รายการ`;
+    requestsSummary.hidden = true;
+    requestsSummary.innerHTML = "";
+    requestsAddBtn.hidden = true;
+    requestsAddBatchBtn.hidden = true;
+    requestsMineBtn.hidden = true;
+    extendAssignBar.hidden = true;
+    renderPeopleList(jobs, requestsList, key => {
+      requestsPersonKey = key;
+      extendSelection.clear();
+      renderRequestsList();
+    });
+  }
+
+  /** จ่ายงาน/ล้างการเลือกเสร็จ -- วาดหน้าที่ผู้ใช้กำลังดูอยู่จริงใหม่ */
+  function rerenderAssignScreen() {
+    if (!views.requests.hidden) renderRequestsList();
+    else renderExtendWork();
+  }
+
+  /**
+   * ตะกร้าที่ปุ่มเลือกทั้งหมด/ล้างค่าจะกระทำ -- คืน null เมื่อหน้านี้ไม่มีอะไรให้เลือก
+   * (แท็บปกติ หรือโหมดประวัติการส่ง)
+   */
+  function activeRequestsSelection() {
+    if (currentRequestFilter === "meter" && meterMode === "pending") return meterSelection;
+    if (currentRequestFilter === "generalDispatch" && generalMode === "pending") return generalSelection;
+    if (currentRequestFilter === "revenueDispatch" && revenueMode === "pending") return revenueSelection;
+    if (requestsWorkKind && canAssignWork() && !(requestsWorkView === "people" && requestsPersonKey === null)) {
+      return extendSelection;
+    }
+    return null;
+  }
+
+  requestsSelectAllBtn.addEventListener("click", () => {
+    const selection = activeRequestsSelection();
+    if (!selection) return;
+    lastRenderedIds.forEach(id => selection.add(id));
+    renderRequestsList();
+  });
+
+  requestsSelectClearBtn.addEventListener("click", () => {
+    const selection = activeRequestsSelection();
+    if (!selection) return;
+    selection.clear();
+    renderRequestsList();
+  });
+
+  // ================================================================ เมนูซ้ายย่อ/ขยาย
+  // ทุก .requests-sidebar ในแอป (งานรับคำร้อง/หน้างาน และแถบขั้นตอนในหน้า
+  // รายละเอียดคำร้อง) -- ย่อแล้วเหลือแต่ไอคอน ชื่อเมนูยังอยู่ใน title ให้ชี้ดูได้
+  // จำสถานะไว้ในเบราว์เซอร์เครื่องนี้ (ความสะดวกส่วนตัว ไม่ใช่ข้อมูลที่ต้องแชร์)
+  const SIDEBAR_COLLAPSED_KEY = "csconnect_sidebarCollapsed";
+
+  function readSidebarCollapsed() {
+    try { return localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === "1"; } catch { return false; }
+  }
+
+  function writeSidebarCollapsed(collapsed) {
+    try { localStorage.setItem(SIDEBAR_COLLAPSED_KEY, collapsed ? "1" : "0"); } catch { /* ไม่เป็นไร */ }
+  }
+
+  function applySidebarCollapsed(collapsed) {
+    document.querySelectorAll(".requests-sidebar").forEach(nav => {
+      nav.classList.toggle("is-collapsed", collapsed);
+      const toggle = nav.querySelector(".sidebar-toggle");
+      if (!toggle) return;
+      toggle.setAttribute("aria-expanded", String(!collapsed));
+      toggle.title = collapsed ? "ขยายเมนู" : "ย่อเมนู";
+      toggle.querySelector(".sidebar-toggle-label").textContent = collapsed ? "ขยายเมนู" : "ย่อเมนู";
+    });
+  }
+
+  document.querySelectorAll(".requests-sidebar").forEach(nav => {
+    // ห่อข้อความชื่อเมนูด้วย span -- ย่อเมนูต้องซ่อนข้อความได้ แต่ข้อความเปล่า
+    // (text node) ถูกเลือกด้วย CSS ไม่ได้ ทำครั้งเดียวตอนโหลด ไม่แตะ markup
+    nav.querySelectorAll(".requests-nav-item").forEach(item => {
+      Array.from(item.childNodes).forEach(node => {
+        if (node.nodeType === Node.TEXT_NODE && node.textContent.trim()) {
+          const label = document.createElement("span");
+          label.className = "nav-label";
+          label.textContent = node.textContent.trim();
+          node.replaceWith(label);
+        }
+      });
+      const label = item.querySelector(".nav-label");
+      if (label && !item.title) item.title = label.textContent;
+    });
+
+    const toggle = document.createElement("button");
+    toggle.type = "button";
+    toggle.className = "sidebar-toggle";
+    toggle.innerHTML = '<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg><span class="sidebar-toggle-label"></span>';
+    toggle.addEventListener("click", () => {
+      const collapsed = !nav.classList.contains("is-collapsed");
+      writeSidebarCollapsed(collapsed);
+      applySidebarCollapsed(collapsed);
+    });
+    nav.prepend(toggle);
+  });
+
+  applySidebarCollapsed(readSidebarCollapsed());
 
   // ---------- init ----------
   // Everything downstream reads from the cache synchronously, so the one and
@@ -10958,6 +11224,58 @@ ${sheetHtml}
   const brochureCopyBtn = document.getElementById("brochureCopyBtn");
 
   let brochures = [];
+
+  /**
+   * โบรชัวร์ 3 ใบเดิมที่เคยอยู่บนหน้างานธุรกิจเสริม (ไฟล์ใน assets/ ของเว็บ)
+   *
+   * แสดงในแกลเลอรีเสมอจนกว่าจะถูก "นำเข้า" -- นำเข้า = อัปรูปขึ้น Storage แล้ว
+   * สร้างเป็นโบรชัวร์ปกติที่แก้ไข/ลบได้ ผูกกลับด้วย data.sourceAsset เพื่อรู้ว่าใบ
+   * ไหนนำเข้าไปแล้ว ไม่แสดงซ้ำ ก่อนนำเข้าก็ดูรูป/ดาวน์โหลด/คัดลอกส่งไลน์ได้แล้ว
+   * (ไฟล์อยู่โดเมนเดียวกับหน้าเว็บ ไม่ต้องขอ signed URL)
+   */
+  const BUILTIN_BROCHURES = [
+    { src: "assets/side-business-maintenance.png", title: "บริการบำรุงรักษาระบบไฟฟ้า" },
+    { src: "assets/side-business-transformer.png", title: "บริการบำรุงรักษาหม้อแปลงไฟฟ้า" },
+    { src: "assets/side-business-thermal.png", title: "บริการตรวจสอบจุดร้อน" }
+  ];
+
+  function pendingBuiltinBrochures() {
+    const imported = new Set(brochures.map(b => b.data && b.data.sourceAsset).filter(Boolean));
+    return BUILTIN_BROCHURES
+      .filter(b => !imported.has(b.src))
+      .map(b => ({ builtin: true, title: b.title, data: { images: [b.src], description: "" } }));
+  }
+
+  /** path ในรายการ -> URL ที่ <img> เปิดได้ (ของเดิมใน assets/ ใช้ path ตรง ๆ) */
+  function brochureImageUrl(item, path) {
+    return item.builtin ? Promise.resolve(path) : fileUrl("brochure", path);
+  }
+
+  async function importBuiltinBrochures(btn) {
+    hideError(brochureError);
+    setBusy(btn, true, "กำลังนำเข้า...");
+    try {
+      // ทีละใบ -- ใบที่สามพังไม่ควรทำให้สองใบแรกที่เข้าไปแล้วหาย
+      for (const item of pendingBuiltinBrochures()) {
+        const src = item.data.images[0];
+        const res = await fetch(src);
+        if (!res.ok) throw new Error(`โหลดไฟล์ ${src} ไม่สำเร็จ`);
+        const dataUrl = await readFileAsDataUrl(await res.blob());
+        const path = await backend.uploadBrochureImage(dataUrl);
+        await backend.saveWorkItem("brochure", {
+          id: newWorkItemId(),
+          title: item.title,
+          status: "",
+          data: { description: "", images: [path], sourceAsset: src }
+        });
+      }
+      await openBrochureView();
+    } catch (err) {
+      showError(brochureError, moduleErrorText(err));
+    } finally {
+      setBusy(btn, false);
+    }
+  }
   // โบรชัวร์ที่กำลังแก้อยู่ (null = กำลังสร้างใหม่) และรายการ path รูปของมัน --
   // แยกจาก brochures เพื่อให้กดยกเลิกแล้วของเดิมไม่ถูกแตะ
   let brochureEditing = null;
@@ -10978,9 +11296,29 @@ ${sheetHtml}
 
   function renderBrochures() {
     brochureList.innerHTML = "";
-    brochureCount.textContent = `ทั้งหมด ${brochures.length} รายการ`;
+    const builtins = pendingBuiltinBrochures();
+    const shown = brochures.concat(builtins);
+    brochureCount.textContent = `ทั้งหมด ${shown.length} รายการ`;
 
-    if (!brochures.length) {
+    // ยังมีโบรชัวร์เดิมที่ยังไม่ได้นำเข้า -- บอกไว้บนสุดพร้อมปุ่ม
+    const notice = document.getElementById("brochureBuiltinNotice");
+    if (notice) notice.remove();
+    if (builtins.length) {
+      const bar = document.createElement("div");
+      bar.id = "brochureBuiltinNotice";
+      bar.className = "brochure-builtin-notice";
+      const text = document.createElement("span");
+      text.textContent = `โบรชัวร์เดิม ${builtins.length} ใบจากหน้างานธุรกิจเสริม ดู/ดาวน์โหลด/คัดลอกได้เลย -- นำเข้าเพื่อแก้ไขชื่อ คำอธิบาย หรือรูปได้`;
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "btn btn-ghost";
+      btn.textContent = "นำเข้าเป็นโบรชัวร์ที่แก้ไขได้";
+      btn.addEventListener("click", () => importBuiltinBrochures(btn));
+      bar.append(text, btn);
+      brochureList.before(bar);
+    }
+
+    if (!shown.length) {
       const empty = document.createElement("div");
       empty.className = "request-empty";
       empty.textContent = 'ยังไม่มีโบรชัวร์ -- กด "+ เพิ่มโบรชัวร์" เพื่อเริ่ม';
@@ -10988,7 +11326,7 @@ ${sheetHtml}
       return;
     }
 
-    brochures.forEach(item => {
+    shown.forEach(item => {
       const data = item.data || {};
       const images = Array.isArray(data.images) ? data.images : [];
 
@@ -11005,7 +11343,7 @@ ${sheetHtml}
         // public URL อยู่ในโค้ดเลย) -- แปะ data-path ไว้กันกรณี URL มาช้าแล้ว
         // ผู้ใช้เปลี่ยนหน้าไปแล้ว จะได้ไม่เอา URL ไปใส่รูปของรายการอื่น
         img.dataset.path = images[0];
-        fileUrl("brochure", images[0]).then(url => {
+        brochureImageUrl(item, images[0]).then(url => {
           if (url && img.dataset.path === images[0]) img.src = url;
         });
         img.addEventListener("click", () => openBrochureViewer(item, 0));
@@ -11037,12 +11375,15 @@ ${sheetHtml}
         actions.appendChild(viewBtn);
       }
 
-      const editBtn = document.createElement("button");
-      editBtn.type = "button";
-      editBtn.className = "btn btn-ghost";
-      editBtn.textContent = "แก้ไข";
-      editBtn.addEventListener("click", () => openBrochureEditor(item));
-      actions.appendChild(editBtn);
+      // ของเดิมที่ยังไม่นำเข้าไม่มีแถวในฐานข้อมูลให้แก้ -- ใช้ปุ่มนำเข้าด้านบน
+      if (!item.builtin) {
+        const editBtn = document.createElement("button");
+        editBtn.type = "button";
+        editBtn.className = "btn btn-ghost";
+        editBtn.textContent = "แก้ไข";
+        editBtn.addEventListener("click", () => openBrochureEditor(item));
+        actions.appendChild(editBtn);
+      }
 
       body.append(title, desc, actions);
       card.append(thumb, body);
@@ -11193,7 +11534,7 @@ ${sheetHtml}
     brochureViewerImage.removeAttribute("src");
     brochureViewerModal.hidden = false;
 
-    const url = await fileUrl("brochure", images[index]);
+    const url = await brochureImageUrl(item, images[index]);
     if (!url) return;
     brochureViewerImage.src = url;
     brochureViewerImage.alt = item.title || "โบรชัวร์";
@@ -11970,6 +12311,8 @@ ${sheetHtml}
    * ที่วาดไว้แล้วจึงยังอยู่ใน DOM ให้คนถัดไปที่เครื่องเดียวกันเปิด devtools อ่านได้
    */
   function clearModuleScreens() {
+    // หน้างาน (ขอใช้ไฟฟ้า/ขยายเขตฯ) ต้องไม่ค้างเป็นโหมดหน้างานให้คนถัดไป
+    leaveWorkMode();
     brochures = [];
     quotations = [];
     vocCases = [];

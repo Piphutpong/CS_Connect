@@ -24,7 +24,7 @@
 <title>CS Connect</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=Sarabun:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=20260919b">
+<link rel="stylesheet" href="style.css?v=20260919c">
 </head>
 <body>
 
@@ -359,7 +359,9 @@
       <button id="requestsBackBtn" class="btn btn-ghost btn-icon" aria-label="ย้อนกลับ">
         <svg viewBox="0 0 24 24" fill="none"><path d="M15 18l-6-6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
       </button>
-      <span class="topbar-title">งานรับคำร้อง</span>
+      <!-- เปลี่ยนตามว่าเปิดมาจากการ์ดไหน: งานรับคำร้อง / งานขอใช้ไฟฟ้า /
+           งานขยายเขตฯ (ดู applyRequestsMode ใน app.js) -->
+      <span id="requestsTopbarTitle" class="topbar-title">งานรับคำร้อง</span>
     </div>
     <div class="topbar-user">
       <span id="userGreeting3" class="user-greeting"></span>
@@ -410,6 +412,18 @@
         คุมคำร้องขอรับเงินประกันคืน
         <span class="nav-badge" data-badge-for="revenueDispatch" hidden></span>
       </button>
+
+      <!-- เมนูของหน้างานขอใช้ไฟฟ้า/งานขยายเขตฯ -- หน้าเดียวกับงานรับคำร้อง แต่
+           ซ่อนเมนูของงานรับคำร้องทั้งหมดแล้วโชว์ชุดนี้แทน (ดู applyRequestsMode)
+           "คำร้องในมือแต่ละคน" เฉพาะหัวหน้างาน/ผู้ดูแลระบบ -->
+      <button type="button" class="requests-nav-item" data-work-view="list" hidden>
+        <svg viewBox="0 0 24 24" fill="none"><path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+        รายการคำร้อง
+      </button>
+      <button type="button" class="requests-nav-item" data-work-view="people" hidden>
+        <svg viewBox="0 0 24 24" fill="none"><circle cx="9" cy="8" r="3.2" stroke="currentColor" stroke-width="1.6"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><path d="M16 5.2a3 3 0 0 1 0 5.6M18 14.3c1.8.8 3 2.7 3 4.7" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+        คำร้องในมือแต่ละคน
+      </button>
     </nav>
 
     <main class="requests-content">
@@ -428,6 +442,10 @@
                    การจ่ายงานจริง (ขอใช้ไฟฟ้า/ขอขยายเขตฯ ดู WORK_KIND_ASSIGNABLE)
                    เพราะแท็บอื่นไม่มีใครถูกจ่ายงาน ปุ่มจะกรองเหลือศูนย์ตลอด -->
               <button type="button" id="requestsMineBtn" class="btn btn-ghost" aria-pressed="false" hidden>งานของฉัน</button>
+              <!-- เลือกทั้งหมด = ทุกใบที่เห็นอยู่ในรายการตอนนี้ (หลังค้นหา/กรองวันที่)
+                   ใช้ได้ในแท็บคุมคำร้องทั้งสาม และตอนหัวหน้าจ่ายงานในหน้างาน -->
+              <button type="button" id="requestsSelectAllBtn" class="btn btn-ghost" hidden>เลือกทั้งหมด</button>
+              <button type="button" id="requestsSelectClearBtn" class="btn btn-ghost" hidden>ล้างค่าการเลือก</button>
               <!-- เลือกด้วย checkbox บนการ์ด -> เปิดเอกสารแก้ไขได้ -> ยืนยัน ->
                    เปลี่ยนสถานะ+เก็บสมุด+พิมพ์ (ดู openGeneralDispatchPrint /
                    openRevenueDispatchPrint ใน app.js) โผล่เฉพาะแท็บของตัวเอง -->
@@ -2034,6 +2052,6 @@
      **ต้องเปลี่ยนเลขนี้ทุกครั้งที่แก้ app.js / style.css / track.js / qr.js**
      ไม่งั้นผู้ใช้บางคนจะยังได้ไฟล์เก่าไปอีกพักใหญ่ -->
 <script src="vendor/supabase.js?v=2.116.0"></script>
-<script src="app.js?v=20260919b"></script>
+<script src="app.js?v=20260919c"></script>
 </body>
 </html>
