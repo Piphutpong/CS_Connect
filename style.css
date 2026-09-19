@@ -175,6 +175,21 @@ button:active {
   box-shadow: none;
 }
 
+/* ปุ่มสลับที่ "ติดอยู่" (เช่น "งานของฉัน") -- ต้องเห็นชัดว่ากำลังกรองอยู่
+   ไม่งั้นรายการที่สั้นลงจะดูเหมือนข้อมูลหาย ไม่ใช่ตัวกรองที่เปิดค้างไว้ */
+.btn-ghost.active {
+  background: var(--volt-50);
+  border-color: var(--volt-500);
+  color: var(--volt-700);
+}
+
+/* บรรทัดคิวรอสำรวจบนการ์ด -- เน้นกว่าบรรทัด meta อื่นเล็กน้อยเพราะเป็นตัวเลข
+   ที่คนเปิดการ์ดมาหาโดยตรงเวลาลูกค้าโทรถามว่า "อีกกี่คิว" */
+.request-meta-queue {
+  color: var(--volt-700);
+  font-weight: 600;
+}
+
 .btn:disabled:hover {
   background: var(--volt-500);
   box-shadow: none;
@@ -880,6 +895,15 @@ button:active {
   background: var(--volt-50);
 }
 
+/* ทั้งสามคลาสนี้ประกาศ display แบบไม่มีเงื่อนไข และทั้งสามถูกสลับด้วยแอตทริบิวต์
+   hidden จริง (#serviceLinks/#serviceGallery ใน event listener ของ .service-card,
+   #extendListSheetLink ใน setWorkKind) -- ไม่มี override นี้ display ข้างบนชนะ
+   กฎ [hidden] { display: none } ของเบราว์เซอร์ที่ specificity เท่ากัน แล้วซ่อน
+   ไม่ลงเงียบ ๆ เจอตอนกวาดตรวจตามวิธีในหัวข้อ Gotcha ของ CLAUDE.md */
+.service-links[hidden],
+.service-gallery[hidden],
+.service-link-item[hidden] { display: none; }
+
 .service-link-item svg {
   flex-shrink: 0;
   width: 18px;
@@ -1474,6 +1498,32 @@ button:active {
 .requests-summary-item strong {
   font-family: var(--font-mono);
   font-size: 14px;
+}
+
+/* เป็น <button> จริง กดแล้วกระโดดไปกลุ่มสถานะนั้น (ดู jumpToStatusGroup) --
+   ต้องล้างสไตล์ปุ่มของเบราว์เซอร์ทิ้งเพื่อให้หน้าตาเหมือนป้ายเดิมทุกอย่าง */
+.requests-summary-item {
+  cursor: pointer;
+  font-family: inherit;
+  transition: transform 0.12s ease, box-shadow 0.12s ease;
+}
+
+.requests-summary-item:hover { transform: translateY(-1px); box-shadow: var(--shadow-sm); }
+.requests-summary-item:active { transform: none; }
+
+/* สถานะที่ยังไม่มีคำร้องเลย -- คงไว้ในที่เดิมแต่จางลง เพราะคนกดโดยจำตำแหน่ง
+   ป้ายที่หายไปทำให้ทุกป้ายหลังจากนั้นเลื่อน (เหตุผลเดียวกับชิปในหน้าคิวงาน) */
+.requests-summary-item.is-empty { opacity: 0.45; }
+
+/* กะพริบกลุ่มที่เพิ่งถูกกระโดดมา -- ไม่งั้นพอเลื่อนถึงแล้วไม่มีอะไรบอกว่า
+   "ตรงนี้แหละ" โดยเฉพาะตอนกลุ่มอยู่กลางรายการยาว ๆ */
+.status-group.is-jumped {
+  animation: statusGroupFlash 1.6s ease;
+}
+
+@keyframes statusGroupFlash {
+  0%, 100% { background: transparent; }
+  15% { background: var(--volt-50); }
 }
 
 /* ใช้โทนสีเดียวกับป้ายสถานะบนการ์ด (JOB_STATUS_TONE) เพื่อให้กวาดตาหาสถานะ
@@ -3710,3 +3760,223 @@ span.estimate-crumb {
 }
 .applicant-info { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .applicant-info span { color: var(--ink-soft); font-size: 0.875rem; overflow-wrap: anywhere; }
+
+/* ================================================================ โมดูลงานใหม่
+   โบรชัวร์ธุรกิจเสริม / งานเสนอราคา / ระบบรับฟังเสียงของลูกค้า (PEA-VOC)
+   ทั้งสามใช้โครงหน้าเดียวกับหน้ารายการคำร้อง (.work-main / .request-card /
+   .status-chip) ส่วนที่เพิ่มตรงนี้คือชิ้นที่ไม่มีของเดิมให้ใช้จริง ๆ เท่านั้น */
+
+/* ปุ่มเข้าโมดูลย่อยบนการ์ดบริการ (งานธุรกิจเสริม) */
+.service-modules {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 12px;
+  margin: 20px 0 8px;
+}
+
+/* toggle ด้วย hidden -- ต้องมี override ตาม Gotcha ใน CLAUDE.md ไม่งั้น
+   display: flex ข้างบนจะชนะ [hidden] ของเบราว์เซอร์แล้วซ่อนไม่ลง */
+.service-modules[hidden] { display: none; }
+
+/* ---------------------------------------------------------------- โบรชัวร์ */
+.brochure-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 20px;
+  margin-top: 20px;
+}
+
+.brochure-card {
+  display: flex;
+  flex-direction: column;
+  background: var(--white);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  overflow: hidden;
+  box-shadow: var(--shadow-sm);
+}
+
+.brochure-thumb {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 200px;
+  background: var(--volt-50);
+}
+
+.brochure-thumb img {
+  width: 100%;
+  height: 220px;
+  object-fit: cover;
+  cursor: zoom-in;
+  display: block;
+}
+
+.brochure-thumb.is-empty {
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.brochure-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 16px;
+}
+
+.brochure-body h3 { margin: 0; font-size: 16px; }
+
+.brochure-desc {
+  margin: 0;
+  color: var(--muted);
+  font-size: 14px;
+  /* คำอธิบายยาวไม่ควรดันการ์ดให้สูงไม่เท่ากันทั้งแถว */
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.brochure-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: auto;
+}
+
+.brochure-edit-images {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin: 12px 0;
+}
+
+.brochure-edit-image {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: center;
+}
+
+.brochure-edit-image img {
+  width: 120px;
+  height: 120px;
+  object-fit: cover;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--volt-50);
+}
+
+.brochure-viewer-image {
+  display: block;
+  width: 100%;
+  max-height: 70vh;
+  object-fit: contain;
+  margin: 12px 0;
+  border-radius: 8px;
+  background: var(--volt-50);
+}
+
+/* รูปโบรชัวร์เต็มใบอ่านไม่ออกในกล่องกว้าง 420px ของ .modal-card เดิม */
+.modal-card-wide {
+  max-width: 720px;
+  width: min(720px, calc(100vw - 32px));
+  max-height: calc(100vh - 48px);
+  overflow-y: auto;
+}
+
+.modal-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 20px;
+}
+
+/* ------------------------------------------------------------ งานเสนอราคา */
+.field-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.field-section-head h3 { margin: 0; font-size: 16px; }
+
+.quo-lines {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* รายการ / จำนวน / หน่วย / ราคาต่อหน่วย / จำนวนเงิน / ลบ */
+.quo-line {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 80px 80px 110px 110px auto;
+  align-items: center;
+  gap: 8px;
+}
+
+.quo-line input {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font: inherit;
+  background: var(--white);
+}
+
+.quo-line-amount {
+  text-align: right;
+  font-family: var(--font-mono);
+  font-size: 14px;
+}
+
+.quo-line-remove { padding: 6px 10px; }
+
+.quo-totals {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: flex-end;
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+
+.quo-totals > div {
+  display: flex;
+  gap: 16px;
+  align-items: baseline;
+  font-size: 14px;
+}
+
+.quo-totals strong {
+  font-family: var(--font-mono);
+  min-width: 120px;
+  text-align: right;
+}
+
+.quo-total-grand {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--volt-700);
+}
+
+.form-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 24px;
+}
+
+/* จอแคบ: แถวรายการราคาซ้อนกันแทนที่จะบีบช่องจนกรอกไม่ได้ */
+@media (max-width: 860px) {
+  .quo-line {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .quo-line-desc { grid-column: 1 / -1; }
+  .quo-line-amount { text-align: left; }
+}

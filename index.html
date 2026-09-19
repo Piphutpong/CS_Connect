@@ -24,7 +24,7 @@
 <title>CS Connect</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=Sarabun:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=20260918f">
+<link rel="stylesheet" href="style.css?v=20260919a">
 </head>
 <body>
 
@@ -340,6 +340,14 @@
         <span class="service-title">งานธุรกิจเสริม</span>
         <span class="service-desc">PEA Engineering Service — บริการตรวจสอบและบำรุงรักษาระบบไฟฟ้า</span>
       </button>
+
+      <button class="service-card" data-service="voc">
+        <span class="service-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none"><path d="M20 12a8 8 0 1 0-3.2 6.4L21 20l-1.2-3.6A7.9 7.9 0 0 0 20 12Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M9 10h6M9 14h4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+        </span>
+        <span class="service-title">ระบบรับฟังเสียงของลูกค้า (PEA-VOC)</span>
+        <span class="service-desc">รับเรื่องร้องเรียน ข้อเสนอแนะ และคำชมจากลูกค้า พร้อมติดตามการแก้ไข</span>
+      </button>
     </div>
   </main>
 </section>
@@ -377,20 +385,29 @@
         <svg viewBox="0 0 24 24" fill="none"><path d="M4 20V10m0 10h16M4 20 12 4l8 16M9 20v-6h6v6" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"/></svg>
         ขอขยายเขตฯ
       </button>
-      <!-- แจ้งเตือนการรับชำระเงินกับคุมคำร้องส่งแผนกมิเตอร์ย้ายไปเป็นชิปในหน้า
-           งานขอใช้ไฟฟ้าแล้ว (ดู renderExtendChips ใน app.js) เพราะช่างตรวจสอบ
-           ทำงานจบที่นั่น ส่วนสองแท็บล่างนี้ยังอยู่ที่นี่ -- คำร้องทั่วไปกับ
-           ขอเงินประกันคืนเป็นงานธุรการที่จบในหน้ารับคำร้อง ไม่มีหน้างานแยก
-           Derived tab: กรองจาก requestsCache ด้วย jobStatus ไม่ใช่ข้อมูลชุดแยก
-           (ดู isGeneralDispatch / isRevenueDispatch ใน app.js) -->
+      <!-- สี่แท็บล่างนี้เป็น derived tab -- ไม่ใช่ประเภทคำร้องของตัวเอง แต่กรอง
+           คำร้องที่มีอยู่แล้วจาก requestsCache ด้วย jobStatus (ดู isPaymentNotice /
+           isMeterDispatch / isGeneralDispatch / isRevenueDispatch ใน app.js)
+           คำร้องจึงเข้า-ออกแท็บพวกนี้เองเมื่อเจ้าหน้าที่เปลี่ยนสถานะ ไม่มีขั้นตอน
+           "ย้าย" ที่ไหน -->
+      <button class="requests-nav-item" data-filter="payment">
+        <svg viewBox="0 0 24 24" fill="none"><path d="M12 3a5 5 0 0 0-5 5v3.2c0 .6-.2 1.2-.6 1.7L5 15h14l-1.4-2.1c-.4-.5-.6-1.1-.6-1.7V8a5 5 0 0 0-5-5Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M9.5 18a2.5 2.5 0 0 0 5 0" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+        แจ้งเตือนการรับชำระเงิน
+        <span class="nav-badge" data-badge-for="payment" hidden></span>
+      </button>
+      <button class="requests-nav-item" data-filter="meter">
+        <svg viewBox="0 0 24 24" fill="none"><path d="M4 18a8 8 0 1 1 16 0" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><path d="M12 18l4.5-5.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><circle cx="12" cy="18" r="1.3" fill="currentColor"/></svg>
+        คุมคำร้องมิเตอร์
+        <span class="nav-badge" data-badge-for="meter" hidden></span>
+      </button>
       <button class="requests-nav-item" data-filter="generalDispatch">
         <svg viewBox="0 0 24 24" fill="none"><path d="M3 12h13M11 6l6 6-6 6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M14 5h6v14h-6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
-        คุมคำร้องส่งแผนกสนับสนุน
+        คุมคำร้องทั่วไป
         <span class="nav-badge" data-badge-for="generalDispatch" hidden></span>
       </button>
       <button class="requests-nav-item" data-filter="revenueDispatch">
         <svg viewBox="0 0 24 24" fill="none"><path d="M3 12h13M11 6l6 6-6 6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M14 5h6v14h-6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
-        คุมคำร้องส่งแผนกบริหารรายได้ค่าไฟฟ้า
+        คุมคำร้องขอรับเงินประกันคืน
         <span class="nav-badge" data-badge-for="revenueDispatch" hidden></span>
       </button>
     </nav>
@@ -407,16 +424,25 @@
             <div class="requests-heading-actions">
               <button type="button" id="requestsAddBtn" class="btn btn-primary">+ เพิ่มคำร้อง</button>
               <button type="button" id="requestsAddBatchBtn" class="btn btn-primary">+ เพิ่มหลายคำร้อง</button>
+              <!-- กรองเหลือเฉพาะงานที่จ่ายให้คนที่ล็อกอินอยู่ -- โผล่เฉพาะแท็บที่มี
+                   การจ่ายงานจริง (ขอใช้ไฟฟ้า/ขอขยายเขตฯ ดู WORK_KIND_ASSIGNABLE)
+                   เพราะแท็บอื่นไม่มีใครถูกจ่ายงาน ปุ่มจะกรองเหลือศูนย์ตลอด -->
+              <button type="button" id="requestsMineBtn" class="btn btn-ghost" aria-pressed="false" hidden>งานของฉัน</button>
               <!-- เลือกด้วย checkbox บนการ์ด -> เปิดเอกสารแก้ไขได้ -> ยืนยัน ->
                    เปลี่ยนสถานะ+เก็บสมุด+พิมพ์ (ดู openGeneralDispatchPrint /
                    openRevenueDispatchPrint ใน app.js) โผล่เฉพาะแท็บของตัวเอง -->
+              <button type="button" id="meterPrintBtn" class="btn btn-primary" hidden disabled>พิมพ์สมุดคุมส่งแผนกมิเตอร์</button>
               <button type="button" id="generalPrintBtn" class="btn btn-primary" hidden disabled>พิมพ์สมุดคุมคำร้องทั่วไป</button>
               <button type="button" id="revenuePrintBtn" class="btn btn-primary" hidden disabled>พิมพ์สมุดคุมส่ง ผบร.</button>
             </div>
           </div>
 
-          <!-- สองแท็บคุมส่งแผนกเท่านั้นที่มีสองโหมด: งานที่ยังต้องส่ง กับสมุดที่
+          <!-- สามแท็บคุมคำร้องเท่านั้นที่มีสองโหมด: งานที่ยังต้องส่ง กับสมุดที่
                พิมพ์ไปแล้ว -- ซ่อนไว้กับทุกแท็บอื่น -->
+          <div class="requests-modes" id="meterModes" hidden>
+            <button type="button" class="requests-mode-btn active" data-meter-mode="pending">รอส่ง</button>
+            <button type="button" class="requests-mode-btn" data-meter-mode="history">ประวัติการส่ง</button>
+          </div>
           <div class="requests-modes" id="generalModes" hidden>
             <button type="button" class="requests-mode-btn active" data-general-mode="pending">รอส่ง</button>
             <button type="button" class="requests-mode-btn" data-general-mode="history">ประวัติการส่ง</button>
@@ -636,6 +662,8 @@
                 <option value="5(100)A 3P">5(100)A 3P</option>
                 <option value="5(45)A 3P TOU">5(45)A 3P TOU</option>
                 <option value="5(100)A 3P TOU">5(100)A 3P TOU</option>
+                <option value="มิเตอร์ประกอบ CT แรงต่ำ">มิเตอร์ประกอบ CT แรงต่ำ</option>
+                <option value="มิเตอร์ประกอบ CT แรงสูง">มิเตอร์ประกอบ CT แรงสูง</option>
               </select>
             </div>
             <div class="field">
@@ -647,6 +675,13 @@
           <label class="checkbox-field">
             <input type="checkbox" id="reqEvCircuit2">
             <span>EV วงจรที่ 2</span>
+          </label>
+          <!-- ผู้ใช้ไฟรายใหญ่ -- เก็บเป็นธงแยกต่างหาก ไม่ผูกกับขนาดมิเตอร์
+               เพราะรายใหญ่ตัดสินจากปริมาณการใช้/สัญญา ไม่ใช่จากขนาดมิเตอร์
+               อย่างเดียว (มิเตอร์ประกอบ CT ก็มีทั้งรายใหญ่และไม่ใช่) -->
+          <label class="checkbox-field">
+            <input type="checkbox" id="reqLargeCustomer">
+            <span>รายใหญ่</span>
           </label>
           <!-- ปุ่มสร้างคำร้องขยายเขตฯ อยู่ข้างสถานะงานโดยตั้งใจ เพราะมันโผล่มาตอน
                สถานะเป็น "รอขยายเขตฯ" พอดี -- คือจังหวะที่เจ้าหน้าที่เพิ่งกลับจาก
@@ -1170,17 +1205,7 @@
                ก่อน -- ปุ่มเดียวใช้ร่วมกันทั้งสองประเภทงาน เพราะเป็นโมดูลเดียวกัน
                สลับด้วย workKind (ดู extendWorkAddBtn ใน app.js) -->
           <button type="button" id="extendWorkAddBtn" class="btn btn-primary">+ เพิ่มคำร้อง</button>
-          <!-- ย้ายมาจากหน้างานรับคำร้อง -- โผล่เฉพาะตอนชิป "คุมคำร้องส่งแผนก
-               มิเตอร์" ถูกเลือก (ดู renderExtendDispatchTab ใน app.js) เลือกด้วย
-               checkbox บนการ์ด -> เปิดเอกสารแก้ไขได้ -> ยืนยัน -> เปลี่ยนสถานะ+
-               เก็บสมุด+พิมพ์ เหมือนเดิมทุกกลไก แค่ย้ายที่อยู่ -->
-          <button type="button" id="meterPrintBtn" class="btn btn-primary" hidden disabled>พิมพ์สมุดคุมส่งแผนกมิเตอร์</button>
         </div>
-      </div>
-
-      <div class="requests-modes" id="meterModes" hidden>
-        <button type="button" class="requests-mode-btn active" data-meter-mode="pending">รอส่ง</button>
-        <button type="button" class="requests-mode-btn" data-meter-mode="history">ประวัติการส่ง</button>
       </div>
 
       <div class="requests-search">
@@ -1633,7 +1658,370 @@
            รูปตั้ง src ด้วย JS ตอนคลิกการ์ดเท่านั้น ไม่ใส่ไว้ใน markup ตรง ๆ เพื่อไม่ให้
            เบราว์เซอร์โหลดรูปทั้งหมดไว้ล่วงหน้าตั้งแต่เปิดหน้าแรกทั้งที่อาจไม่มีใครกดดู -->
       <div id="serviceGallery" class="service-gallery" hidden></div>
+      <!-- ทางเข้าโมดูลย่อยของการ์ดงานธุรกิจเสริม -- ซ่อนกับการ์ดอื่นทั้งหมด
+           (ดู SERVICE_MODULES ใน app.js) วางไว้เหนือปุ่มกลับหน้าหลักเพราะเป็น
+           สิ่งที่คนเปิดการ์ดนี้มาเพื่อจะกด ไม่ใช่ทางออก -->
+      <div id="serviceModules" class="service-modules" hidden>
+        <button type="button" class="btn btn-primary" data-service-module="brochure">โบรชัวร์</button>
+        <button type="button" class="btn btn-primary" data-service-module="quotation">งานเสนอราคา</button>
+      </div>
       <button class="btn btn-ghost" id="backToHomeBtn">กลับสู่หน้าหลัก</button>
+    </div>
+  </main>
+</section>
+
+<!-- ===== โบรชัวร์ธุรกิจเสริม ===== -->
+<!-- แกลเลอรีโบรชัวร์ที่เจ้าหน้าที่เพิ่ม/แก้เองได้ -- ต่างจาก SERVICES.sideBusiness.images
+     ที่เป็นรูปตายตัวใน assets/ ซึ่งแก้ได้ด้วยการแก้โค้ดเท่านั้น รูปในหน้านี้อยู่บน
+     Storage และข้อมูลอยู่ในตาราง work_items (kind = 'brochure') -->
+<section id="brochureView" class="app-view" hidden>
+  <header class="topbar">
+    <div class="topbar-brand">
+      <button id="brochureBackBtn" class="btn btn-ghost btn-icon" aria-label="ย้อนกลับ">
+        <svg viewBox="0 0 24 24" fill="none"><path d="M15 18l-6-6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+      <span class="topbar-title">โบรชัวร์ธุรกิจเสริม</span>
+    </div>
+    <div class="topbar-user">
+      <span id="userGreeting5" class="user-greeting"></span>
+      <button id="logoutBtn5" class="btn btn-ghost">ออกจากระบบ</button>
+    </div>
+  </header>
+
+  <main class="work-main">
+    <div class="requests-content-heading">
+      <div class="requests-content-heading-row">
+        <div>
+          <h2>โบรชัวร์</h2>
+          <p id="brochureCount" class="requests-count"></p>
+        </div>
+        <div class="requests-heading-actions">
+          <button type="button" id="brochureAddBtn" class="btn btn-primary">+ เพิ่มโบรชัวร์</button>
+        </div>
+      </div>
+      <p class="field-hint">กดที่รูปเพื่อดูขนาดเต็ม ดาวน์โหลด หรือคัดลอกรูปไปวางในไลน์เพื่อส่งให้ลูกค้า</p>
+    </div>
+    <p id="brochureError" class="form-error" hidden></p>
+    <div id="brochureList" class="brochure-grid"></div>
+  </main>
+</section>
+
+<!-- ฟอร์มเพิ่ม/แก้โบรชัวร์ (โมดอลเต็มจอ ไม่ใช่ view แยก เพราะเป็นงานสั้น ๆ
+     ที่ทำเสร็จแล้วกลับมาที่แกลเลอรีเดิมเสมอ) -->
+<div id="brochureEditModal" class="modal-overlay" hidden>
+  <div class="modal-card modal-card-wide">
+    <h3 id="brochureEditTitle">เพิ่มโบรชัวร์</h3>
+    <div class="field">
+      <label for="brochureTitleInput">ชื่อโบรชัวร์</label>
+      <input type="text" id="brochureTitleInput" autocomplete="off" placeholder="เช่น บริการบำรุงรักษาหม้อแปลงไฟฟ้า">
+    </div>
+    <div class="field">
+      <label for="brochureDescInput">คำอธิบาย</label>
+      <textarea id="brochureDescInput" rows="3" placeholder="รายละเอียดสั้น ๆ ที่จะแสดงใต้ชื่อ"></textarea>
+    </div>
+    <div class="field">
+      <label for="brochureImageInput">รูปโบรชัวร์</label>
+      <input type="file" id="brochureImageInput" accept="image/*">
+      <p class="field-hint">เลือกได้หลายรูป ระบบย่อรูปให้อัตโนมัติก่อนอัปโหลด</p>
+    </div>
+    <div id="brochureEditImages" class="brochure-edit-images"></div>
+    <p id="brochureEditError" class="form-error" hidden></p>
+    <div class="modal-actions">
+      <button type="button" id="brochureDeleteBtn" class="btn btn-ghost" hidden>ลบโบรชัวร์นี้</button>
+      <button type="button" id="brochureCancelBtn" class="btn btn-ghost">ยกเลิก</button>
+      <button type="button" id="brochureSaveBtn" class="btn btn-primary">บันทึก</button>
+    </div>
+  </div>
+</div>
+
+<!-- ดูรูปเต็ม + ดาวน์โหลด/คัดลอก -->
+<div id="brochureViewerModal" class="modal-overlay" hidden>
+  <div class="modal-card modal-card-wide">
+    <h3 id="brochureViewerTitle"></h3>
+    <!-- crossorigin ต้องมี ไม่งั้นการวาดรูปข้ามโดเมน (Storage อยู่คนละโฮสต์กับ
+         หน้าเว็บ) ลง <canvas> จะทำให้ canvas ถูก "taint" แล้ว toBlob() โยน
+         SecurityError -- ปุ่ม "คัดลอกรูป" จะพังทุกครั้งโดยไม่มีอะไรบอกสาเหตุ -->
+    <img id="brochureViewerImage" alt="" class="brochure-viewer-image" crossorigin="anonymous">
+    <p id="brochureViewerNote" class="form-success" hidden></p>
+    <div class="modal-actions">
+      <a id="brochureDownloadBtn" class="btn btn-ghost" download>ดาวน์โหลดรูป</a>
+      <button type="button" id="brochureCopyBtn" class="btn btn-primary">คัดลอกรูป (ส่งไลน์)</button>
+      <button type="button" id="brochureViewerCloseBtn" class="btn btn-ghost">ปิด</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== งานเสนอราคา ===== -->
+<section id="quotationView" class="app-view" hidden>
+  <header class="topbar">
+    <div class="topbar-brand">
+      <button id="quotationBackBtn" class="btn btn-ghost btn-icon" aria-label="ย้อนกลับ">
+        <svg viewBox="0 0 24 24" fill="none"><path d="M15 18l-6-6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+      <span class="topbar-title">งานเสนอราคา</span>
+    </div>
+    <div class="topbar-user">
+      <span id="userGreeting6" class="user-greeting"></span>
+      <button id="logoutBtn6" class="btn btn-ghost">ออกจากระบบ</button>
+    </div>
+  </header>
+
+  <main class="work-main">
+    <!-- โหมดรายการ -->
+    <div id="quotationListMode">
+      <div class="requests-content-heading">
+        <div class="requests-content-heading-row">
+          <div>
+            <h2>ใบเสนอราคา</h2>
+            <p id="quotationCount" class="requests-count"></p>
+          </div>
+          <div class="requests-heading-actions">
+            <button type="button" id="quotationAddBtn" class="btn btn-primary">+ สร้างใบเสนอราคา</button>
+          </div>
+        </div>
+        <div class="requests-search">
+          <input type="search" id="quotationSearch" placeholder="ค้นหาด้วยเลขที่ใบเสนอราคา, ชื่อลูกค้า, งาน...">
+        </div>
+      </div>
+      <p id="quotationError" class="form-error" hidden></p>
+      <div id="quotationList" class="request-list"></div>
+    </div>
+
+    <!-- โหมดฟอร์ม -->
+    <div id="quotationFormMode" hidden>
+      <div class="requests-content-heading">
+        <h2 id="quotationFormTitle">สร้างใบเสนอราคา</h2>
+        <p id="quotationFormSubtitle" class="requests-count"></p>
+      </div>
+      <form id="quotationForm" class="auth-form request-form" novalidate>
+        <div class="field-row">
+          <div class="field">
+            <label for="quoNumber">เลขที่ใบเสนอราคา</label>
+            <input type="text" id="quoNumber" autocomplete="off" placeholder="เช่น QT-69-0001">
+          </div>
+          <div class="field">
+            <label for="quoDate">วันที่เสนอราคา</label>
+            <input type="date" id="quoDate">
+          </div>
+        </div>
+        <div class="field">
+          <label for="quoCustomer">ชื่อลูกค้า / หน่วยงาน</label>
+          <input type="text" id="quoCustomer" autocomplete="off" required>
+        </div>
+        <div class="field-row">
+          <div class="field">
+            <label for="quoPhone">เบอร์โทรศัพท์</label>
+            <input type="tel" id="quoPhone" autocomplete="off" inputmode="tel">
+          </div>
+          <div class="field">
+            <label for="quoStatus">สถานะ</label>
+            <select id="quoStatus">
+              <option value="ร่าง">ร่าง</option>
+              <option value="เสนอราคาแล้ว">เสนอราคาแล้ว</option>
+              <option value="ลูกค้าตอบรับ">ลูกค้าตอบรับ</option>
+              <option value="ทำสัญญา/เริ่มงาน">ทำสัญญา/เริ่มงาน</option>
+              <option value="ส่งมอบงานแล้ว">ส่งมอบงานแล้ว</option>
+              <option value="ยกเลิก">ยกเลิก</option>
+            </select>
+          </div>
+        </div>
+        <div class="field">
+          <label for="quoSubject">งานที่เสนอราคา</label>
+          <input type="text" id="quoSubject" autocomplete="off" placeholder="เช่น บำรุงรักษาหม้อแปลง 250 kVA จำนวน 2 เครื่อง">
+        </div>
+
+        <!-- รายการราคา -- โครงร่างคร่าว ๆ ตามที่สั่ง: รายการ/จำนวน/หน่วย/ราคาต่อหน่วย
+             แล้วคิดรวม + VAT ให้เอง ยังไม่ผูกกับแคตตาล็อกพัสดุของงานประมาณการ -->
+        <div class="field-section">
+          <div class="field-section-head">
+            <h3>รายการ</h3>
+            <button type="button" id="quoAddLineBtn" class="btn btn-ghost">+ เพิ่มรายการ</button>
+          </div>
+          <div id="quoLines" class="quo-lines"></div>
+          <div class="quo-totals">
+            <div><span>รวมเป็นเงิน</span><strong id="quoSubtotal">0.00</strong></div>
+            <label class="checkbox-field">
+              <input type="checkbox" id="quoVatEnabled" checked>
+              <span>คิดภาษีมูลค่าเพิ่ม 7%</span>
+            </label>
+            <div><span>ภาษีมูลค่าเพิ่ม</span><strong id="quoVat">0.00</strong></div>
+            <div class="quo-total-grand"><span>รวมทั้งสิ้น</span><strong id="quoGrand">0.00</strong></div>
+          </div>
+        </div>
+
+        <div class="field">
+          <label for="quoNote">หมายเหตุ / เงื่อนไข</label>
+          <textarea id="quoNote" rows="3" placeholder="เช่น ยืนราคา 30 วัน, ราคานี้รวมค่าแรงและค่าเดินทางแล้ว"></textarea>
+        </div>
+
+        <p id="quotationFormError" class="form-error" hidden></p>
+        <div class="form-actions">
+          <button type="button" id="quotationBackToListBtn" class="btn btn-ghost">ย้อนกลับ</button>
+          <button type="button" id="quotationPrintBtn" class="btn btn-ghost">พิมพ์ใบเสนอราคา</button>
+          <button type="button" id="quotationDeleteBtn" class="btn btn-ghost" hidden>ลบ</button>
+          <button type="submit" class="btn btn-primary">บันทึก</button>
+        </div>
+      </form>
+    </div>
+  </main>
+</section>
+
+<!-- ===== ระบบรับฟังเสียงของลูกค้า (PEA-VOC) ===== -->
+<section id="vocView" class="app-view" hidden>
+  <header class="topbar">
+    <div class="topbar-brand">
+      <button id="vocBackBtn" class="btn btn-ghost btn-icon" aria-label="ย้อนกลับ">
+        <svg viewBox="0 0 24 24" fill="none"><path d="M15 18l-6-6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+      <span class="topbar-title">ระบบรับฟังเสียงของลูกค้า (PEA-VOC)</span>
+    </div>
+    <div class="topbar-user">
+      <span id="userGreeting7" class="user-greeting"></span>
+      <button id="logoutBtn7" class="btn btn-ghost">ออกจากระบบ</button>
+    </div>
+  </header>
+
+  <main class="work-main">
+    <div id="vocListMode">
+      <div class="requests-content-heading">
+        <div class="requests-content-heading-row">
+          <div>
+            <h2>เรื่องจากลูกค้า</h2>
+            <p id="vocCount" class="requests-count"></p>
+          </div>
+          <div class="requests-heading-actions">
+            <button type="button" id="vocAddBtn" class="btn btn-primary">+ รับเรื่องใหม่</button>
+          </div>
+        </div>
+        <div class="requests-search">
+          <input type="search" id="vocSearch" placeholder="ค้นหาด้วยชื่อผู้แจ้ง, เบอร์โทร, เรื่อง...">
+        </div>
+        <div id="vocChips" class="status-chips"></div>
+      </div>
+      <p id="vocError" class="form-error" hidden></p>
+      <div id="vocList" class="request-list"></div>
+    </div>
+
+    <div id="vocFormMode" hidden>
+      <div class="requests-content-heading">
+        <h2 id="vocFormTitle">รับเรื่องใหม่</h2>
+        <p id="vocFormSubtitle" class="requests-count"></p>
+      </div>
+      <form id="vocForm" class="auth-form request-form" novalidate>
+        <div class="field-row">
+          <div class="field">
+            <label for="vocDate">วันที่รับเรื่อง</label>
+            <input type="date" id="vocDate">
+          </div>
+          <div class="field">
+            <label for="vocChannel">ช่องทางที่รับเรื่อง</label>
+            <select id="vocChannel">
+              <option value="เคาน์เตอร์บริการ">เคาน์เตอร์บริการ</option>
+              <option value="โทรศัพท์">โทรศัพท์</option>
+              <option value="1129 PEA Contact Center">1129 PEA Contact Center</option>
+              <option value="Line / Facebook">Line / Facebook</option>
+              <option value="หนังสือร้องเรียน">หนังสือร้องเรียน</option>
+              <option value="หน่วยงานภายนอก">หน่วยงานภายนอก</option>
+              <option value="อื่นๆ">อื่นๆ</option>
+            </select>
+          </div>
+        </div>
+        <div class="field-row">
+          <div class="field">
+            <label for="vocType">ประเภทเรื่อง</label>
+            <select id="vocType">
+              <option value="ข้อร้องเรียน">ข้อร้องเรียน</option>
+              <option value="ข้อเสนอแนะ">ข้อเสนอแนะ</option>
+              <option value="คำชมเชย">คำชมเชย</option>
+              <option value="สอบถามข้อมูล">สอบถามข้อมูล</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="vocCategory">หมวดหมู่</label>
+            <select id="vocCategory">
+              <option value="กระแสไฟฟ้าขัดข้อง">กระแสไฟฟ้าขัดข้อง</option>
+              <option value="คุณภาพไฟฟ้า (ไฟตก/ไฟกระพริบ)">คุณภาพไฟฟ้า (ไฟตก/ไฟกระพริบ)</option>
+              <option value="ค่าไฟฟ้า / การเรียกเก็บเงิน">ค่าไฟฟ้า / การเรียกเก็บเงิน</option>
+              <option value="การให้บริการของพนักงาน">การให้บริการของพนักงาน</option>
+              <option value="ระยะเวลาดำเนินการ">ระยะเวลาดำเนินการ</option>
+              <option value="ไฟฟ้าสาธารณะ">ไฟฟ้าสาธารณะ</option>
+              <option value="อื่นๆ">อื่นๆ</option>
+            </select>
+          </div>
+        </div>
+        <div class="field-row">
+          <div class="field">
+            <label for="vocName">ชื่อผู้แจ้ง</label>
+            <input type="text" id="vocName" autocomplete="off" required>
+          </div>
+          <div class="field">
+            <label for="vocPhone">เบอร์โทรศัพท์</label>
+            <input type="tel" id="vocPhone" autocomplete="off" inputmode="tel">
+          </div>
+        </div>
+        <div class="field-row">
+          <div class="field">
+            <label for="vocCa">CA (ถ้ามี)</label>
+            <input type="text" id="vocCa" autocomplete="off" inputmode="numeric">
+          </div>
+          <div class="field">
+            <label for="vocLocation">สถานที่</label>
+            <input type="text" id="vocLocation" autocomplete="off">
+          </div>
+        </div>
+        <div class="field">
+          <label for="vocSubject">เรื่อง</label>
+          <input type="text" id="vocSubject" autocomplete="off" required>
+        </div>
+        <div class="field">
+          <label for="vocDetail">รายละเอียด</label>
+          <textarea id="vocDetail" rows="4"></textarea>
+        </div>
+
+        <!-- ส่วนการแก้ไข -- แยกกล่องออกมาเพราะเป็นคนละช่วงเวลากับการรับเรื่อง
+             (รับวันนี้ แก้ไขอีกหลายวัน) และเป็นสิ่งที่ผู้ตรวจย้อนดูเป็นอันดับแรก -->
+        <div class="field-section">
+          <div class="field-section-head"><h3>การดำเนินการ</h3></div>
+          <div class="field-row">
+            <div class="field">
+              <label for="vocStatus">สถานะ</label>
+              <select id="vocStatus">
+                <option value="รับเรื่อง">รับเรื่อง</option>
+                <option value="กำลังดำเนินการ">กำลังดำเนินการ</option>
+                <option value="ส่งต่อหน่วยงานอื่น">ส่งต่อหน่วยงานอื่น</option>
+                <option value="แก้ไขแล้ว">แก้ไขแล้ว</option>
+                <option value="แจ้งผลลูกค้าแล้ว">แจ้งผลลูกค้าแล้ว</option>
+                <option value="ยุติเรื่อง">ยุติเรื่อง</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="vocOwner">ผู้รับผิดชอบ / แผนก</label>
+              <input type="text" id="vocOwner" autocomplete="off">
+            </div>
+          </div>
+          <div class="field-row">
+            <div class="field">
+              <label for="vocDueDate">กำหนดแล้วเสร็จ</label>
+              <input type="date" id="vocDueDate">
+            </div>
+            <div class="field">
+              <label for="vocClosedDate">วันที่แจ้งผลลูกค้า</label>
+              <input type="date" id="vocClosedDate">
+            </div>
+          </div>
+          <div class="field">
+            <label for="vocAction">ผลการดำเนินการ</label>
+            <textarea id="vocAction" rows="3"></textarea>
+          </div>
+        </div>
+
+        <p id="vocFormError" class="form-error" hidden></p>
+        <div class="form-actions">
+          <button type="button" id="vocBackToListBtn" class="btn btn-ghost">ย้อนกลับ</button>
+          <button type="button" id="vocDeleteBtn" class="btn btn-ghost" hidden>ลบ</button>
+          <button type="submit" class="btn btn-primary">บันทึก</button>
+        </div>
+      </form>
     </div>
   </main>
 </section>
@@ -1646,6 +2034,6 @@
      **ต้องเปลี่ยนเลขนี้ทุกครั้งที่แก้ app.js / style.css / track.js / qr.js**
      ไม่งั้นผู้ใช้บางคนจะยังได้ไฟล์เก่าไปอีกพักใหญ่ -->
 <script src="vendor/supabase.js?v=2.116.0"></script>
-<script src="app.js?v=20260918f"></script>
+<script src="app.js?v=20260919a"></script>
 </body>
 </html>

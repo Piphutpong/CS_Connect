@@ -14,14 +14,13 @@
     deposit: "ขอเงินประกันคืน",
     general: "คำร้องทั่วไป",
     extend: "ขอขยายเขตระบบจำหน่ายไฟฟ้า",
-    // payment/meter เป็น derived tab ของ workKind power, generalDispatch ของ
-    // general, revenueDispatch ของ deposit -- ทั้งสี่แสดงเป็นชิปในโมดูลงาน
-    // (extendWorkView) ของประเภทงานนั้น ไม่ใช่แท็บแยกในหน้างานรับคำร้องแล้ว
-    // (ดู WORK_KIND_DISPATCH_TABS/renderExtendDispatchTab)
+    // สี่ตัวนี้เป็น derived tab -- ไม่ใช่ประเภทคำร้องของตัวเอง แต่เป็นมุมมองที่
+    // กรองคำร้องที่มีอยู่แล้วด้วย jobStatus (ดู DERIVED_TAB_FILTERS) ทั้งหมดอยู่
+    // เป็นแท็บในแถบซ้ายของหน้างานรับคำร้อง
     payment: "แจ้งเตือนการรับชำระเงิน",
-    meter: "คุมคำร้องส่งแผนกมิเตอร์",
-    generalDispatch: "คุมคำร้องส่งแผนกสนับสนุน",
-    revenueDispatch: "คุมคำร้องส่งแผนกบริหารรายได้ค่าไฟฟ้า"
+    meter: "คุมคำร้องมิเตอร์",
+    generalDispatch: "คุมคำร้องทั่วไป",
+    revenueDispatch: "คุมคำร้องขอรับเงินประกันคืน"
   };
 
   // Maps each ขอใช้ไฟฟ้า job status to a highlight tone so the card badge
@@ -374,6 +373,22 @@
 
     async deleteEstimateKit() {
       throw new Error("โหมดออฟไลน์ไม่รองรับชุดเซ็ตพัสดุ");
+    },
+
+    async loadWorkItems() {
+      return [];
+    },
+
+    async saveWorkItem() {
+      throw new Error("โหมดออฟไลน์ไม่รองรับโมดูลงานใหม่");
+    },
+
+    async deleteWorkItem() {
+      throw new Error("โหมดออฟไลน์ไม่รองรับโมดูลงานใหม่");
+    },
+
+    async uploadBrochureImage() {
+      throw new Error("โหมดออฟไลน์ไม่รองรับการอัปโหลดรูป");
     }
 
     // track()/uploadSlip() live in track.js now -- the public tracking page
@@ -823,6 +838,54 @@
       },
 
       /**
+       * โมดูลงานใหม่สามตัว (โบรชัวร์ / ใบเสนอราคา / PEA-VOC) -- ตารางเดียว
+       * แยกด้วย kind ดู supabase/migrations/20260919000001_work_items.sql
+       *
+       * ไม่มีชั้นแคชแบบ requestsCache เพราะทั้งสามเปิดจากหน้าของตัวเองเท่านั้น
+       * ไม่มีหน้าไหนอื่นต้องอ่านค่าแบบ synchronous ระหว่างวาดรายการคำร้อง
+       */
+      async loadWorkItems(kind) {
+        const data = await callAsUser(() => rpc("load_work_items", { p_kind: kind }));
+        return data.items || [];
+      },
+
+      async saveWorkItem(kind, item) {
+        const data = await callAsUser(() => rpc("save_work_item", { p_kind: kind, p_item: item }));
+        return data.item;
+      },
+
+      async deleteWorkItem(id) {
+        return callAsUser(() => rpc("delete_work_item", { p_id: id }));
+      },
+
+      /**
+       * อัปรูปโบรชัวร์ขึ้น Storage แล้วคืน path ที่เก็บลง work_items.data.images
+       *
+       * ไม่มี RPC ผูกไฟล์เข้ารายการแบบ attach_request_file -- ไฟล์โบรชัวร์ไม่ได้
+       * เป็นเอกสารแนบของงานที่ต้องตรวจว่ามีอยู่จริงก่อนเดินสถานะ ถ้า path เสีย
+       * ก็แค่รูปไม่ขึ้น ไม่มีสถานะไหนเดินผิดตามไปด้วย
+       *
+       * shrinkImage() ย่อเป็น JPEG 1600px เหมือนทุกรูปในระบบ -- โบรชัวร์ที่ส่ง
+       * ให้ลูกค้าทางไลน์ไม่ต้องใหญ่กว่านี้ และพื้นที่ฟรี 1 GB เป็นของทั้งโปรเจกต์
+       */
+      async uploadBrochureImage(file) {
+        return callAsUser(async () => {
+          const blob = await shrinkImage(dataUrlToBlob(file));
+          const path = `brochures/${Date.now()}-${randomSuffix()}.${extensionFor(blob.type)}`;
+          const upload = await client.storage.from("request-files").upload(path, blob, {
+            contentType: blob.type, upsert: false
+          });
+          if (upload.error) {
+            const message = String(upload.error.message || "");
+            if (/size|large/i.test(message)) throw new Error("ไฟล์ใหญ่เกินไป");
+            if (/mime|type/i.test(message)) throw new Error("รองรับเฉพาะรูปภาพ (JPG, PNG, WEBP, HEIC) เท่านั้น");
+            throw normalizeError(upload.error);
+          }
+          return path;
+        });
+      },
+
+      /**
        * แนบไฟล์ของงานขอขยายเขตฯ -- อัปขึ้น Storage ก่อน แล้วค่อยให้ RPC ผูกเข้าคำร้อง
        * (RPC ตรวจว่าไฟล์อยู่บน Storage จริง และเดินสถานะให้เฉพาะกรณีแผนผัง)
        *
@@ -1080,7 +1143,12 @@
     service: document.getElementById("serviceView"),
     requests: document.getElementById("requestsView"),
     extendWork: document.getElementById("extendWorkView"),
-    estimate: document.getElementById("estimateView")
+    estimate: document.getElementById("estimateView"),
+    // โมดูลงานใหม่ -- โบรชัวร์/ใบเสนอราคาเปิดจากการ์ดงานธุรกิจเสริม
+    // ส่วน PEA-VOC เป็นการ์ดของตัวเองบนหน้าแรก
+    brochure: document.getElementById("brochureView"),
+    quotation: document.getElementById("quotationView"),
+    voc: document.getElementById("vocView")
   };
 
   function showView(name) {
@@ -1440,6 +1508,18 @@
   // ว่างเยอะปรับตัวเลขนี้ขึ้นได้
   const DISPATCH_ROWS_PER_PAGE = 16;
 
+  /**
+   * ความกว้างคอลัมน์ตั้งต้นเป็น % -- ลำดับที่แคบตายตัว หมายเหตุกว้างสุด (เป็นช่อง
+   * ที่คนเขียนมือลงไปจริงบนกระดาษ) ที่เหลือหารเท่ากันตามจำนวนคอลัมน์ของสมุดเล่มนั้น
+   */
+  function defaultColumnWidths(columnCount) {
+    const indexW = 8;
+    const noteW = 30;
+    const rest = 100 - indexW - noteW;
+    const each = columnCount > 0 ? Math.round((rest / columnCount) * 10) / 10 : rest;
+    return [indexW].concat(Array.from({ length: columnCount }, () => each)).concat([noteW]);
+  }
+
   function writeDispatchDocument(printWindow, { title, columns, rows, printedAt, sender, senderOptions, receiver, editable, actionLabel, actionNote }) {
     const editAttr = editable ? ' contenteditable="true"' : "";
 
@@ -1458,6 +1538,7 @@
 
       return `
         <table>
+          <colgroup>${setup.widths.map(w => `<col style="width:${w}%">`).join("")}</colgroup>
           <thead>
             <tr>
               <th class="col-index">ลำดับที่</th>
@@ -1510,13 +1591,51 @@
       `;
     }
 
-    const pageCount = Math.max(1, Math.ceil(rows.length / DISPATCH_ROWS_PER_PAGE));
-    const pages = [];
-    for (let p = 0; p < pageCount; p++) {
-      const start = p * DISPATCH_ROWS_PER_PAGE;
-      const chunk = rows.slice(start, start + DISPATCH_ROWS_PER_PAGE);
-      const isFirst = p === 0;
-      pages.push(`
+    /**
+     * ตั้งค่าหน้ากระดาษที่ปรับได้ก่อนพิมพ์ -- อยู่ในหน่วยความจำของหน้าต่างที่พิมพ์
+     * เท่านั้น ไม่ได้บันทึกลงสมุดที่เก็บไว้ เพราะเป็นเรื่องของ "กระดาษแผ่นนี้"
+     * (เครื่องพิมพ์/สายตาคนเซ็น) ไม่ใช่เนื้อหาของเอกสาร -- สมุดที่เก็บไว้ต้อง
+     * เป็นสแนปช็อตของ "ข้อความที่อยู่บนกระดาษ" ไม่ใช่ของการจัดหน้า
+     *
+     * fontSize  ดีฟอลต์ 14px = ขนาดเดียวกับบล็อกลงชื่อ (.sig-block) ตามที่ขอ
+     *           ให้ตัวหนังสือในตารางเท่ากับของผู้ส่ง
+     * rowsPerPage / breaks  แบ่งแผ่นเอง ไม่ปล่อยให้เบราว์เซอร์ตัด -- breaks
+     *           (ลำดับที่ที่ให้ขึ้นแผ่นใหม่ คั่นด้วยจุลภาค) ทับ rowsPerPage เมื่อ
+     *           กรอกไว้ เพราะการระบุจุดตัดเองเป็นคำสั่งที่เจาะจงกว่าเสมอ
+     * widths    ความกว้างคอลัมน์เป็น % (ลำดับที่ / คอลัมน์ของสมุดเล่มนั้น / หมายเหตุ)
+     */
+    const setup = {
+      fontSize: 14,
+      rowsPerPage: DISPATCH_ROWS_PER_PAGE,
+      breaks: "",
+      widths: defaultColumnWidths(columns.length)
+    };
+
+    /** จุดเริ่มของแต่ละแผ่น (index ฐาน 0 ของแถวแรกในแผ่นนั้น) */
+    function pageStarts() {
+      const manual = String(setup.breaks || "")
+        .split(/[,\s]+/)
+        .map(v => parseInt(v, 10))
+        .filter(n => Number.isFinite(n) && n > 1 && n <= rows.length)
+        .map(n => n - 1);
+
+      if (manual.length) {
+        return Array.from(new Set([0].concat(manual))).sort((x, y) => x - y);
+      }
+
+      const per = Math.max(1, Number(setup.rowsPerPage) || DISPATCH_ROWS_PER_PAGE);
+      const starts = [];
+      for (let i = 0; i < Math.max(1, rows.length); i += per) starts.push(i);
+      return starts.length ? starts : [0];
+    }
+
+    function buildPages() {
+      const starts = pageStarts();
+      return starts.map((start, p) => {
+        const end = p + 1 < starts.length ? starts[p + 1] : rows.length;
+        const chunk = rows.slice(start, end);
+        const isFirst = p === 0;
+        return `
         <section class="print-page">
           ${isFirst ? `
             <h1>${escapeForPrint(title)}</h1>
@@ -1528,10 +1647,11 @@
               ${signatureBlock("ผู้ส่ง", "sender", sender, senderOptions, isFirst)}
               ${signatureBlock("ผู้รับ", "receiver", receiver, null, isFirst)}
             </div>
-            ${pageCount > 1 ? `<p class="page-number">แผ่นที่ ${p + 1}/${pageCount}</p>` : ""}
+            ${starts.length > 1 ? `<p class="page-number">แผ่นที่ ${p + 1}/${starts.length}</p>` : ""}
           </div>
         </section>
-      `);
+      `;
+      }).join("");
     }
 
     printWindow.document.write(`
@@ -1551,10 +1671,12 @@
                10pt โดยเฉพาะ เล็กกว่าฟอนต์ที่เหลือของเอกสาร (Sarabun ทั่วไป) ตาม
                ที่ขอ -- ถ้าเครื่องที่พิมพ์ไม่มีฟอนต์นี้ติดตั้งไว้ จะ fallback ไปที่
                Sarabun ที่โหลดจาก Google Fonts อยู่แล้วโดยอัตโนมัติ */
-            th, td { border: 1px solid #cdb9ea; padding: 8px 10px; font-family: "TH Sarabun New", Sarabun, sans-serif; font-size: 10pt; text-align: left; vertical-align: top; }
+            th, td { border: 1px solid #cdb9ea; padding: 8px 10px; font-family: "TH Sarabun New", Sarabun, sans-serif; font-size: var(--table-font, 14px); text-align: left; vertical-align: top; word-break: break-word; }
+            /* ตาราง fixed เพื่อให้ความกว้างที่ตั้งใน <colgroup> มีผลจริง -- ถ้า
+               เป็น auto เบราว์เซอร์จะคำนวณใหม่ตามเนื้อหาแล้วค่าที่ตั้งไว้ถูกเมิน */
+            table { table-layout: fixed; }
             th { background: #ece0f8; }
-            .col-index { width: 60px; text-align: center; }
-            .col-number { width: 120px; }
+            .col-index { text-align: center; }
             /* เอกสารยาวเกินหนึ่งแผ่นถูกแบ่งเป็นชิ้นตายตัวตอนสร้าง HTML เอง (ดู
                DISPATCH_ROWS_PER_PAGE) ไม่ได้ปล่อยให้เบราว์เซอร์ตัดหน้าเอง -- แต่ละ
                .print-page คือหนึ่งแผ่นจริง จึงบังคับขึ้นแผ่นใหม่ทุกก้อนยกเว้นก้อน
@@ -1617,10 +1739,29 @@
               border-radius: 10px; border: none; background: #57298c; color: #fff; cursor: pointer;
             }
             .actions p { color: #6b5c82; font-size: 13px; margin-top: 12px; }
+            /* แถบตั้งค่า -- เครื่องมือบนจอ ไม่ใช่ส่วนของกระดาษ */
+            .print-setup {
+              display: flex; flex-wrap: wrap; align-items: center; gap: 10px 18px;
+              margin: 0 0 24px; padding: 12px 16px; border: 1px solid #cdb9ea;
+              border-radius: 10px; background: #f7f2fd; font-size: 13px;
+            }
+            .print-setup label { display: inline-flex; align-items: center; gap: 6px; }
+            .print-setup input {
+              font: inherit; padding: 4px 6px; border: 1px solid #cdb9ea;
+              border-radius: 6px; background: #fff; width: 76px;
+            }
+            .print-setup input[type="text"] { width: 110px; }
+            .print-setup-widths { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+            .print-setup .setup-width { width: 58px; }
+            .print-setup button {
+              font: inherit; padding: 5px 12px; border-radius: 6px; cursor: pointer;
+              border: 1px solid #cdb9ea; background: #fff; color: #57298c;
+            }
             @media print {
               [contenteditable="true"] { outline: none; }
               .sig-picker { display: none; }
               .actions { display: none; }
+              .print-setup { display: none; }
               /* The on-screen padding would stack on top of the @page margins
                  and make the printed edges measure wider than specified. */
               body { padding: 0; }
@@ -1628,7 +1769,19 @@
           </style>
         </head>
         <body>
-          ${pages.join("")}
+          <!-- แถบตั้งค่าก่อนพิมพ์ -- เห็นบนจอเท่านั้น (@media print ซ่อนทิ้ง)
+               ปรับแล้ววาดหน้าใหม่ทันที โดยเก็บข้อความที่พิมพ์ไว้แล้วกลับมาให้ครบ -->
+          <div class="print-setup">
+            <strong>ตั้งค่าก่อนพิมพ์</strong>
+            <label>ขนาดตัวอักษรในตาราง <input type="number" id="setupFont" min="8" max="24" step="0.5" value="${setup.fontSize}"> px</label>
+            <label>รายการต่อแผ่น <input type="number" id="setupRows" min="1" max="60" step="1" value="${setup.rowsPerPage}"></label>
+            <label title="ใส่ลำดับที่ของรายการที่ต้องการให้เริ่มแผ่นใหม่ คั่นด้วยจุลภาค เช่น 5,12 -- ใส่ไว้แล้วจะทับค่ารายการต่อแผ่น">ขึ้นแผ่นใหม่ที่ลำดับที่ <input type="text" id="setupBreaks" placeholder="เช่น 5,12" value=""></label>
+            <span class="print-setup-widths">ความกว้างคอลัมน์ (%):
+              ${setup.widths.map((w, i) => `<input type="number" class="setup-width" data-col="${i}" min="3" max="80" step="1" value="${w}" title="${escapeForPrint(i === 0 ? "ลำดับที่" : (i <= columns.length ? columns[i - 1].label : "หมายเหตุ"))}">`).join("")}
+            </span>
+            <button type="button" id="setupResetBtn">คืนค่าเริ่มต้น</button>
+          </div>
+          <div id="printPages">${buildPages()}</div>
           <div class="actions">
             <button type="button" id="confirmBtn">${escapeForPrint(actionLabel)}</button>
             <p>${escapeForPrint(actionNote)}</p>
@@ -1637,6 +1790,87 @@
       </html>
     `);
     printWindow.document.close();
+
+    const doc = printWindow.document;
+    const pagesEl = doc.getElementById("printPages");
+
+    /**
+     * วาดหน้ากระดาษใหม่ตามค่าที่ตั้งไว้
+     *
+     * ต้องเก็บสิ่งที่คนพิมพ์ไปแล้วกลับมาให้ครบก่อน -- ช่องหมายเหตุกับช่องลงชื่อ
+     * เป็น contenteditable ถ้าวาดทับดื้อ ๆ ข้อความที่พิมพ์ไว้จะหายไปทั้งหมดเพียง
+     * เพราะขยับการจัดหน้า ซึ่งเป็นการเสียงานจริง ไม่ใช่แค่เรื่องหน้าตา
+     */
+    function rerenderPages() {
+      const edited = readDispatchDocument(printWindow);
+      edited.notes.forEach((note, i) => { if (rows[i]) rows[i].note = note; });
+      if (edited.sender.name || edited.sender.position) {
+        sender = { ...sender, name: edited.sender.name, position: edited.sender.position };
+      }
+      if (edited.receiver.name || edited.receiver.position) {
+        receiver = { ...receiver, name: edited.receiver.name, position: edited.receiver.position };
+      }
+
+      pagesEl.innerHTML = buildPages();
+      doc.documentElement.style.setProperty("--table-font", `${setup.fontSize}px`);
+      wireSenderPicker(printWindow, senderOptions || []);
+      wireSignatureMirroring(printWindow);
+    }
+
+    doc.documentElement.style.setProperty("--table-font", `${setup.fontSize}px`);
+
+    const fontEl = doc.getElementById("setupFont");
+    const rowsEl = doc.getElementById("setupRows");
+    const breaksEl = doc.getElementById("setupBreaks");
+
+    fontEl.addEventListener("input", () => {
+      const value = Number(fontEl.value);
+      if (!Number.isFinite(value) || value <= 0) return;
+      setup.fontSize = value;
+      // ขนาดตัวอักษรไม่เปลี่ยนการแบ่งแผ่น (แบ่งตามจำนวนรายการ ไม่ใช่ความสูงจริง)
+      // จึงแค่ขยับตัวแปร CSS พอ ไม่ต้องวาดใหม่ -- ไม่ต้องเสี่ยงกับข้อความที่พิมพ์ค้างไว้
+      doc.documentElement.style.setProperty("--table-font", `${value}px`);
+    });
+
+    rowsEl.addEventListener("change", () => {
+      setup.rowsPerPage = Math.max(1, Number(rowsEl.value) || DISPATCH_ROWS_PER_PAGE);
+      rerenderPages();
+    });
+
+    breaksEl.addEventListener("change", () => {
+      setup.breaks = breaksEl.value;
+      rerenderPages();
+    });
+
+    // ความกว้างคอลัมน์เขียนลง <colgroup> ของทุกแผ่นตรง ๆ ไม่ต้องวาดหน้าใหม่ --
+    // เปลี่ยนความกว้างไม่ทำให้จำนวนแผ่นเปลี่ยน และรักษาข้อความที่พิมพ์ไว้ได้ฟรี
+    doc.querySelectorAll(".setup-width").forEach(input => {
+      input.addEventListener("input", () => {
+        const col = Number(input.dataset.col);
+        const value = Number(input.value);
+        if (!Number.isFinite(value) || value <= 0) return;
+        setup.widths[col] = value;
+        doc.querySelectorAll("colgroup").forEach(group => {
+          const target = group.children[col];
+          if (target) target.style.width = `${value}%`;
+        });
+      });
+    });
+
+    doc.getElementById("setupResetBtn").addEventListener("click", () => {
+      setup.fontSize = 14;
+      setup.rowsPerPage = DISPATCH_ROWS_PER_PAGE;
+      setup.breaks = "";
+      setup.widths = defaultColumnWidths(columns.length);
+      fontEl.value = String(setup.fontSize);
+      rowsEl.value = String(setup.rowsPerPage);
+      breaksEl.value = "";
+      doc.querySelectorAll(".setup-width").forEach((input, i) => { input.value = String(setup.widths[i]); });
+      rerenderPages();
+    });
+
+    wireSenderPicker(printWindow, senderOptions || []);
+    wireSignatureMirroring(printWindow);
   }
 
   /** Reads back whatever staff actually typed into the document before printing. */
@@ -1782,9 +2016,6 @@
       actionNote: 'แก้ไขข้อความในตารางหรือช่องเซ็นชื่อได้ก่อนกดปุ่มนี้ -- กดแล้วจะเปลี่ยนสถานะคำร้องทั้งหมดด้านบนเป็น "ส่งแผนกมิเตอร์แล้ว" บันทึกสมุดเล่มนี้ไว้ให้ย้อนดูภายหลัง และเปิดหน้าต่างพิมพ์ทันที'
     });
 
-    wireSenderPicker(printWindow, senderOptions);
-    wireSignatureMirroring(printWindow);
-
     const confirmBtn = printWindow.document.getElementById("confirmBtn");
     const confirmNote = printWindow.document.querySelector(".actions p");
     confirmBtn.addEventListener("click", async () => {
@@ -1893,9 +2124,6 @@
       actionNote: 'แก้ไขข้อความในตารางหรือช่องเซ็นชื่อได้ก่อนกดปุ่มนี้ -- กดแล้วจะเปลี่ยนสถานะคำร้องทั้งหมดด้านบนเป็น "ส่ง ผสน. แล้ว" พร้อมบันทึกวันที่ส่ง เก็บสมุดเล่มนี้ไว้ให้ย้อนดูภายหลัง และเปิดหน้าต่างพิมพ์ทันที'
     });
 
-    wireSenderPicker(printWindow, senderOptions);
-    wireSignatureMirroring(printWindow);
-
     const confirmBtn = printWindow.document.getElementById("confirmBtn");
     const confirmNote = printWindow.document.querySelector(".actions p");
     confirmBtn.addEventListener("click", async () => {
@@ -1961,9 +2189,6 @@
       actionLabel: "พิมพ์และยืนยันส่ง ผบร.",
       actionNote: 'แก้ไขข้อความในตารางหรือช่องเซ็นชื่อได้ก่อนกดปุ่มนี้ -- กดแล้วจะเปลี่ยนสถานะคำร้องทั้งหมดด้านบนเป็น "ส่ง ผบร." เก็บสมุดเล่มนี้ไว้ให้ย้อนดูภายหลัง และเปิดหน้าต่างพิมพ์ทันที'
     });
-
-    wireSenderPicker(printWindow, senderOptions);
-    wireSignatureMirroring(printWindow);
 
     const confirmBtn = printWindow.document.getElementById("confirmBtn");
     const confirmNote = printWindow.document.querySelector(".actions p");
@@ -2474,10 +2699,10 @@
     document.getElementById("revokeAllBtn").hidden = !session?.isAdmin;
 
     const greeting = session?.name ? `สวัสดี, ${session.name}` : "";
-    document.getElementById("userGreeting").textContent = greeting;
-    document.getElementById("userGreeting2").textContent = greeting;
-    document.getElementById("userGreeting3").textContent = greeting;
-    document.getElementById("userGreeting4").textContent = greeting;
+    // ทุกหน้ามีแถบบนของตัวเอง -- เขียนทีเดียวด้วยคลาสร่วม ไม่ไล่ id ทีละตัว
+    // (เคยเป็น userGreeting1..4 แล้วพอเพิ่มหน้าใหม่ก็ลืมเติม ชื่อผู้ใช้คนก่อน
+    // จึงค้างอยู่บนหน้าใหม่ -- ความผิดพลาดแบบที่หน้าจอโกหกว่าล็อกอินเป็นใคร)
+    document.querySelectorAll(".user-greeting").forEach(el => { el.textContent = greeting; });
     showView("home");
   }
 
@@ -2502,6 +2727,10 @@
     const card = document.querySelector(`.service-card[data-service="${nav.card}"]`);
     if (!card) return;
     card.click();
+
+    // การ์ดงานธุรกิจเสริมมีสองโมดูลย่อย -- จำว่าอยู่หน้าไหนตอนรีเฟรช
+    if (nav.module === "brochure") { openBrochureView(); return; }
+    if (nav.module === "quotation") { openQuotationView(); return; }
 
     if (nav.card === "requests" && nav.filter) {
       const tab = Array.from(requestsNavItems).find(item => item.dataset.filter === nav.filter);
@@ -2537,10 +2766,7 @@
     resetApplicantsPanel();
 
     document.getElementById("revokeAllBtn").hidden = true;
-    document.getElementById("userGreeting").textContent = "";
-    document.getElementById("userGreeting2").textContent = "";
-    document.getElementById("userGreeting3").textContent = "";
-    document.getElementById("userGreeting4").textContent = "";
+    document.querySelectorAll(".user-greeting").forEach(el => { el.textContent = ""; });
 
     // ตำแหน่งหน้าจอที่จำไว้เป็นของบัญชีที่เพิ่งออกจากระบบไป -- ถ้าไม่ล้าง คนถัดไป
     // ที่ล็อกอินบนเครื่องเดียวกัน (หรือบัญชีเดิมล็อกอินใหม่หลัง session หมดอายุ)
@@ -2548,6 +2774,7 @@
     clearNavState();
 
     clearWorkspaceScreens();
+    clearModuleScreens();
   }
 
   /**
@@ -3243,10 +3470,11 @@
   }
 
   document.getElementById("revokeAllBtn").addEventListener("click", revokeAllSessions);
-  document.getElementById("logoutBtn").addEventListener("click", logout);
-  document.getElementById("logoutBtn2").addEventListener("click", logout);
-  document.getElementById("logoutBtn3").addEventListener("click", logout);
-  document.getElementById("logoutBtn4").addEventListener("click", logout);
+  // ปุ่มออกจากระบบมีอยู่บนแถบบนของทุกหน้า -- ผูกด้วย selector เดียวกัน เหตุผล
+  // เดียวกับ .user-greeting ข้างบน (หน้าใหม่ที่ลืมผูกคือปุ่มที่กดแล้วไม่เกิดอะไร)
+  document.querySelectorAll('[id^="logoutBtn"]').forEach(btn => {
+    btn.addEventListener("click", logout);
+  });
 
   // ---------- service cards ----------
   document.querySelectorAll(".service-card").forEach(card => {
@@ -3261,9 +3489,22 @@
         return;
       }
 
-      // สองการ์ดนี้ใช้หน้าคิวงานชุดเดียวกัน ต่างกันแค่ประเภทคำร้อง (workKind)
+      // ระบบรับฟังเสียงของลูกค้า -- หน้าของตัวเองเต็มหน้า ไม่ใช่การ์ดว่างของ SERVICES
+      if (key === "voc") {
+        openVocView();
+        return;
+      }
+
+      // งานขอใช้ไฟฟ้า/งานขยายเขตฯ ใช้ "หน้ารายการเดียวกัน" กับแท็บขอใช้ไฟฟ้า/
+      // ขอขยายเขตฯ ในงานรับคำร้อง ไม่ใช่หน้ารายการของตัวเองอีกชุด -- สองหน้าที่
+      // แสดงข้อมูลชุดเดียวกันคนละหน้าตาคือสองหน้าที่ต้องแก้ให้ตรงกันตลอดไป และ
+      // เจ้าหน้าที่ก็ต้องจำว่าอันไหนอยู่ตรงไหน ปุ่ม "งานของฉัน" กับบรรทัดคิว
+      // รอสำรวจบนการ์ดคือสิ่งที่หน้าคิวเดิมมีแล้วหน้านี้ไม่มี จึงยกมาไว้ที่นี่แทน
+      // (หน้ารายละเอียดของโมดูลงาน -- แท็บแผนผัง/ภาพหน้างาน/ประมาณการ -- ยังอยู่
+      // เหมือนเดิม เปิดได้จากการกดการ์ดคำร้องขยายเขตฯ ใบใดก็ได้)
       if (WORK_KIND_TITLES[key]) {
-        openExtendWorkView({ kind: key });
+        saveNavState({ card: "requests", filter: key });
+        openRequestsView(key);
         return;
       }
 
@@ -3280,6 +3521,9 @@
       // พวกนี้ -- เช็คด้วยว่ามี service.links จริงไหม ไม่ใช่แค่ตรวจว่ามี key
       // เพราะการ์ดอย่าง Solar ยังไม่มีอะไรจริงให้เปิดเลย เป็น array ไว้ตั้งแต่แรก
       // เพราะบางการ์ดจะมีมากกว่าหนึ่งลิงก์ในอนาคต
+      // ปุ่มเข้าโมดูลย่อย (โบรชัวร์/งานเสนอราคา) -- เฉพาะการ์ดที่มีจริง
+      document.getElementById("serviceModules").hidden = !SERVICE_MODULES[key];
+
       const linksEl = document.getElementById("serviceLinks");
       const noteEl = document.getElementById("serviceNote");
       linksEl.innerHTML = "";
@@ -3404,6 +3648,11 @@
   const requestsDateTo = document.getElementById("requestsDateTo");
   const requestsDateClearBtn = document.getElementById("requestsDateClearBtn");
   const requestsSummary = document.getElementById("requestsSummary");
+  const requestsMineBtn = document.getElementById("requestsMineBtn");
+  // กรองเหลือเฉพาะงานที่จ่ายให้คนที่ล็อกอินอยู่ -- ค้างไว้ระหว่างสลับแท็บไม่ได้
+  // เพราะแต่ละแท็บมีชุดงานคนละชุด กดดูของตัวเองในแท็บหนึ่งแล้วไปโผล่อีกแท็บ
+  // จะเห็นหน้าว่างที่ดูเหมือนไม่มีงาน (เหตุผลเดียวกับที่ setWorkKind ล้างชิป)
+  let requestsMineOnly = false;
   const requestsSortBtn = document.getElementById("requestsSortBtn");
   const requestsSortLabel = document.getElementById("requestsSortLabel");
   const extendWorkSortBtn = document.getElementById("extendWorkSortBtn");
@@ -3467,18 +3716,6 @@
     meter: isMeterDispatch,
     generalDispatch: isGeneralDispatch,
     revenueDispatch: isRevenueDispatch
-  };
-
-  // แท็บ dispatch ที่โผล่เป็นชิปเพิ่มในโมดูลงาน (extendWorkView) ของแต่ละ
-  // workKind -- เฉพาะของงานขอใช้ไฟฟ้าเท่านั้นที่ย้ายมาอยู่ที่นี่ เพราะช่างตรวจสอบ
-  // ทำงานจบในหน้านั้น ส่วนคุมส่ง ผสน./ผบร. ยังเป็นแท็บในหน้างานรับคำร้องเหมือนเดิม
-  // (คำร้องทั่วไป/ขอเงินประกันคืนเป็นงานธุรการที่จบในหน้ารับคำร้อง ไม่มีหน้างานแยก)
-  const WORK_KIND_DISPATCH_TABS = {
-    power: [
-      { key: "payment", label: "แจ้งเตือนการรับชำระเงิน" },
-      { key: "meter", label: "คุมคำร้องส่งแผนกมิเตอร์" }
-    ],
-    extend: []
   };
 
   const navBadges = document.querySelectorAll(".nav-badge");
@@ -4456,13 +4693,20 @@
     const counts = document.createElement("div");
     counts.className = "requests-summary-counts";
     shown.forEach(status => {
-      const item = document.createElement("span");
+      const count = statusCountSource.filter(r => r.jobStatus === status).length;
+      // เป็นปุ่มจริง ไม่ใช่ป้ายเฉย ๆ -- กดแล้วกระโดดไปกลุ่มสถานะนั้นในรายการ
+      // ข้างล่าง (คลี่กลุ่มให้ด้วยถ้าย่อไว้) เพราะกล่องสรุปคือที่ที่คนมองหา
+      // "สถานะนี้มีกี่ใบ" ก่อน แล้วอยากเห็นทั้งกองทันที ไม่ใช่ต้องไถหาเอง
+      const item = document.createElement("button");
+      item.type = "button";
       item.className = `requests-summary-item tone-${JOB_STATUS_TONE[status] || "info"}`;
+      if (!count) item.classList.add("is-empty");
       const label = document.createElement("span");
       label.textContent = status;
       const value = document.createElement("strong");
-      value.textContent = String(statusCountSource.filter(r => r.jobStatus === status).length);
+      value.textContent = String(count);
       item.append(label, value);
+      item.addEventListener("click", () => jumpToStatusGroup(status));
       counts.appendChild(item);
     });
     requestsSummary.appendChild(counts);
@@ -4509,6 +4753,40 @@
   }
 
   /**
+   * กระโดดไปกลุ่มสถานะหนึ่งในรายการคำร้อง -- เรียกจากปุ่มในกล่องสรุป
+   *
+   * กลุ่มที่ย่อไว้ต้องคลี่ก่อน ไม่งั้นกดแล้วเลื่อนไปเจอหัวข้อเปล่า ๆ ซึ่งดูเหมือน
+   * ปุ่มเสีย และกลุ่มที่ไม่มีคำร้องเลยจะไม่ถูกวาด (ดู renderRequestCardsInto)
+   * จึงต้องเผื่อกรณีหาไม่เจอไว้ด้วย -- กะพริบกล่องสรุปเฉย ๆ ดีกว่าเงียบ
+   */
+  function jumpToStatusGroup(status) {
+    const section = requestsList.querySelector(`[data-status-group="${cssEscape(status)}"]`);
+    if (!section) return;
+
+    const collapseKey = `${currentRequestFilter}|${status}`;
+    if (requestsCollapsed.has(collapseKey)) {
+      requestsCollapsed.delete(collapseKey);
+      section.classList.remove("is-collapsed");
+      const body = section.querySelector(".status-group-body");
+      if (body) body.hidden = false;
+    }
+
+    section.scrollIntoView({ behavior: "smooth", block: "start" });
+    section.classList.add("is-jumped");
+    setTimeout(() => section.classList.remove("is-jumped"), 1600);
+  }
+
+  /**
+   * หนีอักขระให้ใช้ใน querySelector ได้ -- ชื่อสถานะเป็นภาษาไทยล้วนก็จริง แต่มี
+   * วงเล็บ/จุด ("จัดเก็บเอกสาร (ผบส.)", "ผมต. ตีกลับ") ซึ่งเป็นอักขระพิเศษของ
+   * ตัวเลือก CSS ถ้าไม่หนีจะโยน SyntaxError ทั้งฟังก์ชัน
+   */
+  function cssEscape(value) {
+    if (window.CSS && typeof CSS.escape === "function") return CSS.escape(value);
+    return String(value).replace(/["\\\]\[().#:>+~*^$|]/g, "\\$&");
+  }
+
+  /**
    * ใบนี้ถูกเปลี่ยนสถานะไปเป็นสถานะอื่น (ที่ไม่ใช่สถานะตั้งต้น) ในช่วงที่เลือกไหม
    *
    * statusHistory เก็บ at เป็น epoch ms ส่วนช่องกรองเป็นวันที่ YYYY-MM-DD จึงต้อง
@@ -4531,6 +4809,48 @@
     });
   }
 
+  /** ผ่านทุกใบเมื่อไม่ได้เปิด "งานของฉัน" ไว้ -- ตัวกรองนี้เป็นตัวเลือก ไม่ใช่มุมมอง */
+  function assignedToMeMatches(record) {
+    if (!requestsMineOnly) return true;
+    const email = String(getSession()?.email || "").toLowerCase();
+    return Boolean(email) && String(record.assigneeEmail || "").toLowerCase() === email;
+  }
+
+  requestsMineBtn.addEventListener("click", () => {
+    requestsMineOnly = !requestsMineOnly;
+    renderRequestsList();
+  });
+
+  /**
+   * คิวรอสำรวจของใบนี้ -- "ลำดับที่เท่าไรในกองของผู้รับผิดชอบคนนั้น"
+   *
+   * นับเฉพาะงานที่ยังอยู่สถานะ "รอสำรวจ" ของคนเดียวกัน เรียงจากวันที่รับคำร้อง
+   * เก่าไปใหม่ (มาก่อนได้ก่อน) -- นิยามเดียวกับหน้าคิวรอสำรวจในโมดูลงาน ไม่ใช่
+   * คนละเกณฑ์ ไม่งั้นการ์ดกับหน้าคิวจะบอกลำดับไม่ตรงกันซึ่งแย่กว่าไม่บอกเลย
+   * คืน null เมื่อใบนี้ไม่ได้อยู่ในคิว (สถานะอื่น) เพื่อให้ผู้เรียกข้ามไปได้
+   */
+  function surveyQueuePosition(record) {
+    if (!record || record.jobStatus !== "รอสำรวจ") return null;
+    const owner = String(record.assigneeEmail || "").toLowerCase();
+    const queue = getRequests()
+      .filter(r => r.type === record.type
+        && r.jobStatus === "รอสำรวจ"
+        && String(r.assigneeEmail || "").toLowerCase() === owner)
+      .sort((a, b) => String(a.receivedDate || "").localeCompare(String(b.receivedDate || "")));
+    const index = queue.findIndex(r => r.id === record.id);
+    if (index === -1) return null;
+    return { position: index + 1, total: queue.length, assigned: Boolean(owner) };
+  }
+
+  /** ข้อความคิวสั้น ๆ ที่ใช้ได้ทั้งบนการ์ดและในการ์ดสรุป */
+  function surveyQueueText(record) {
+    const queue = surveyQueuePosition(record);
+    if (!queue) return "";
+    return queue.assigned
+      ? `คิวรอสำรวจ: ลำดับที่ ${queue.position} จาก ${queue.total} งานของ ${record.assignee || "ผู้รับผิดชอบ"}`
+      : `คิวรอสำรวจ: ลำดับที่ ${queue.position} จาก ${queue.total} (ยังไม่ได้จ่ายงาน)`;
+  }
+
   function renderRequestsList() {
     requestsFormMode.hidden = true;
     requestsListMode.hidden = false;
@@ -4548,9 +4868,18 @@
     // ยังอยู่ในแท็บนี้ไหม แยกจาก filtered ด้านล่างซึ่งกรองด้วยคำค้นด้วย เพื่อไม่ให้
     // ค้นหาคำอื่นแล้วเลือกที่หน้าจอไม่เห็นชั่วคราวถูกตัดออกจากตะกร้าไปเงียบ ๆ
     const eligibleForTab = getRequests().filter(derivedFilter || (r => r.type === currentRequestFilter));
+    // ปุ่ม "งานของฉัน" มีเฉพาะประเภทที่จ่ายงานได้จริง -- สลับแท็บแล้วต้องปิดเอง
+    // ไม่งั้นแท็บที่ไม่มีการจ่ายงานจะถูกกรองเหลือศูนย์โดยไม่มีปุ่มให้กดปลด
+    const mineAvailable = Boolean(WORK_KIND_ASSIGNABLE[currentRequestFilter]);
+    if (!mineAvailable && requestsMineOnly) requestsMineOnly = false;
+    requestsMineBtn.hidden = !mineAvailable;
+    requestsMineBtn.classList.toggle("active", requestsMineOnly);
+    requestsMineBtn.setAttribute("aria-pressed", String(requestsMineOnly));
+
     const filtered = sortRequestsForDisplay(
       eligibleForTab
         .filter(requestsDateFilterMatches)
+        .filter(assignedToMeMatches)
         .filter(r => matchesSearch(r, currentSearchQuery))
     );
 
@@ -4559,6 +4888,25 @@
     requestsAddBtn.hidden = Boolean(derivedFilter);
     // เพิ่มหลายคำร้องมีเฉพาะขอใช้ไฟฟ้า
     requestsAddBatchBtn.hidden = Boolean(derivedFilter) || currentRequestFilter !== "power";
+
+    const isMeterTab = currentRequestFilter === "meter";
+    meterModes.hidden = !isMeterTab;
+
+    if (isMeterTab && meterMode === "history") {
+      renderDispatchHistory();
+      return;
+    }
+
+    meterPrintBtn.hidden = !isMeterTab;
+    if (isMeterTab) {
+      // คำร้องหลุดจากแท็บนี้ได้ทางเดียวคือมีคนเปลี่ยนสถานะที่อื่น -- ตัดเฉพาะ id
+      // ที่ไม่เข้าเงื่อนไขแท็บแล้วจริง ๆ (ไม่เกี่ยวกับช่องค้นหา) เหมือนตะกร้าสินค้า
+      // ที่ของไม่หายเวลาพิมพ์ค้นหาคำอื่น
+      const eligibleIds = new Set(eligibleForTab.map(r => r.id));
+      meterSelection.forEach(id => { if (!eligibleIds.has(id)) meterSelection.delete(id); });
+      meterPrintBtn.disabled = meterSelection.size === 0;
+      updateSelectionButtonLabel(meterPrintBtn, meterSelection.size);
+    }
 
     const isGeneralTab = currentRequestFilter === "generalDispatch";
     generalModes.hidden = !isGeneralTab;
@@ -4608,18 +4956,16 @@
     }
 
     renderRequestCardsInto(requestsList, filtered, {
-      isGeneralTab, isRevenueTab, groupByStatus,
+      isMeterTab, isGeneralTab, isRevenueTab, groupByStatus,
       searchQuery: currentSearchQuery,
       onArchiveMerged: renderRequestsList
     });
   }
 
   /**
-   * วาดการ์ดคำร้องหนึ่งชุดลงในคอนเทนเนอร์ที่ระบุ ใช้ร่วมกันทั้งหน้างานรับคำร้อง
-   * (แท็บประเภทคำร้องธรรมดา) และแท็บคุมคำร้องส่งแผนกต่าง ๆ ในโมดูลงาน (มิเตอร์/
-   * คำร้องทั่วไป/ผบร. -- ย้ายมาจากหน้างานรับคำร้องเดิม ดู renderExtendDispatchTab)
-   * ต่างกันแค่คอนเทนเนอร์ปลายทางกับ checkbox เลือกหลายใบ (ใส่เฉพาะ 3 แท็บ
-   * dispatch เท่านั้น ไม่มีในแท็บประเภทคำร้องธรรมดา)
+   * วาดการ์ดคำร้องหนึ่งชุดลงในคอนเทนเนอร์ที่ระบุ -- แท็บประเภทคำร้องจัดกลุ่มตาม
+   * สถานะ (groupByStatus) ส่วนแท็บคุมคำร้องทั้งสามเป็นรายการเรียบที่มี checkbox
+   * เลือกหลายใบเพื่อพิมพ์สมุดคุม
    */
   function renderRequestCardsInto(listEl, filtered, {
     isMeterTab = false, isGeneralTab = false, isRevenueTab = false,
@@ -4665,6 +5011,7 @@
 
         const section = document.createElement("section");
         section.className = "status-group";
+        section.dataset.statusGroup = status;
 
         const head = document.createElement("button");
         head.type = "button";
@@ -4759,7 +5106,7 @@
       if (r.linkedRequestId) {
         const linkEl = document.createElement("span");
         linkEl.className = "request-badge tone-info";
-        linkEl.textContent = r.type === "extend" ? "มาจากคำร้องขอใช้ไฟฟ้า" : "มีคำร้องขยายเขตฯ";
+        linkEl.textContent = r.type === "extend" ? "มีงานขอใช้ไฟฟ้า" : "มีงานขยายเขตฯ";
         card.querySelector(".request-badges").appendChild(linkEl);
       }
 
@@ -4789,6 +5136,16 @@
         locationEl.textContent = `สถานที่: ${locationText}`;
       } else {
         locationEl.remove();
+      }
+
+      // คิวรอสำรวจบนการ์ด -- คนที่ถือใบนี้อยู่ต้องตอบลูกค้าได้ว่า "อีกกี่คิว"
+      // โดยไม่ต้องเปิดหน้าคิวแยก ขึ้นเฉพาะใบที่อยู่สถานะรอสำรวจจริง
+      const queueText = surveyQueueText(r);
+      if (queueText) {
+        const queueEl = document.createElement("div");
+        queueEl.className = "request-meta request-meta-queue";
+        queueEl.textContent = queueText;
+        card.querySelector(".request-meta-note").before(queueEl);
       }
 
       const noteEl = card.querySelector(".request-meta-note");
@@ -5165,9 +5522,8 @@
    * รายการสมุดคุมที่พิมพ์ไปแล้ว ("ประวัติการส่ง") ใช้ร่วมกันทั้ง 3 ชุด (มิเตอร์/
    * คำร้องทั่วไป/ผบร.) ต่างกันแค่แหล่งข้อมูล ปุ่มพิมพ์ที่ต้องซ่อนระหว่างดูประวัติ
    * และปลายทางตอนคลิก/พิมพ์ซ้ำ เดิมมี 3 ชุดโค้ดที่เกือบเหมือนกันทุกตัวอักษร รวม
-   * เป็นฟังก์ชันเดียวตอนย้ายมาแสดงในโมดูลงาน (extendWorkList) แทนหน้างานรับ
-   * คำร้องเดิม -- ค้นหาด้วย extendSearchQuery ของโมดูลงาน ไม่ใช่ currentSearchQuery
-   * ของหน้างานรับคำร้องอีกต่อไป เพราะสามชุดนี้ไม่มีอยู่ในหน้านั้นแล้ว
+   * เป็นฟังก์ชันเดียว -- รับปลายทาง (คอนเทนเนอร์/หัวข้อ/ช่องค้นหา) เป็นพารามิเตอร์
+   * ไว้ เผื่อวันหนึ่งมีสมุดคุมเล่มไหนย้ายไปอยู่หน้าอื่น
    */
   function renderDispatchHistoryList({
     title, dispatches, printBtn, onOpen,
@@ -5247,25 +5603,22 @@
     });
   }
 
-  /**
-   * สมุดคุมส่งแผนกมิเตอร์อยู่ในหน้างานขอใช้ไฟฟ้า จึงวาดลง extendWorkList
-   * ส่วนอีกสองเล่มอยู่ในหน้างานรับคำร้อง จึงวาดลง requestsList (ดูสองฟังก์ชันล่าง)
-   */
+  /** ประวัติสมุดคุมทั้งสามเล่มอยู่ในหน้างานรับคำร้อง จึงวาดลง requestsList เหมือนกันหมด */
   function renderDispatchHistory() {
     renderDispatchHistoryList({
       title: REQUEST_TYPES.meter,
       dispatches: getDispatches(),
       printBtn: meterPrintBtn,
       onOpen: openDispatchReprint,
-      listEl: extendWorkList,
-      titleEl: extendWorkTitle,
-      countEl: extendWorkCount,
-      addBtn: extendWorkAddBtn,
-      searchQuery: extendSearchQuery
+      listEl: requestsList,
+      titleEl: requestsListTitle,
+      countEl: requestsListCount,
+      addBtn: requestsAddBtn,
+      searchQuery: currentSearchQuery
     });
   }
 
-  /** เหมือน renderDispatchHistory ด้านบน แต่ของสมุดคุมส่ง ผบร. ในหน้างานรับคำร้อง */
+  /** เหมือน renderDispatchHistory ด้านบน แต่ของสมุดคุมส่ง ผบร. */
   function renderRevenueDispatchHistory() {
     renderDispatchHistoryList({
       title: REQUEST_TYPES.revenueDispatch,
@@ -5540,6 +5893,7 @@
     document.getElementById("reqMeterSize").value = r.meterSize || "";
     document.getElementById("reqFee").value = formatFeeValue(r.fee);
     document.getElementById("reqEvCircuit2").checked = Boolean(r.evCircuit2);
+    document.getElementById("reqLargeCustomer").checked = Boolean(r.largeCustomer);
     // ต้องตั้งค่าวันที่ชำระไว้ "ก่อน" เปลี่ยนสถานะแล้วยิง change -- syncPaidDateField
     // เติมวันนี้ให้เฉพาะตอนช่องยังว่าง ถ้าตั้งค่าทีหลัง วันที่เดิมของคำร้องจะโดนข้าม
     // ไปแล้วช่องจะยังว่างตอนที่ change ทำงาน กลายเป็นเขียนวันนี้ทับของเดิม
@@ -5697,6 +6051,13 @@
       },
       { label: "สถานะงาน", value: record.jobStatus || "-", status: true }
     ];
+
+    // ใต้สถานะงานพอดี -- คนที่แคปการ์ดนี้ส่งต่อมักถูกถามต่อทันทีว่า "อีกกี่คิว"
+    // ขึ้นเฉพาะใบที่อยู่คิวรอสำรวจจริง ใบสถานะอื่นไม่มีบรรทัดนี้ให้รก
+    const queueText = surveyQueueText(record);
+    if (queueText) {
+      lines.push({ label: "คิวรอสำรวจ", value: queueText.replace(/^คิวรอสำรวจ: /, "") });
+    }
 
     // มีเฉพาะคำร้องที่กรอกพิกัดไว้ -- ไม่ขึ้นขีดว่างให้รกในใบที่ไม่มี
     // ลิงก์ไปหน้านำทางของ Google Maps ชุดเดียวกับปุ่ม "นำทาง" ในฟอร์ม (ไม่ต้องใช้ API key)
@@ -6534,6 +6895,7 @@
       const meterSize = document.getElementById("reqMeterSize").value;
       const fee = document.getElementById("reqFee").value.trim();
       const evCircuit2 = document.getElementById("reqEvCircuit2").checked;
+      const largeCustomer = document.getElementById("reqLargeCustomer").checked;
       const jobStatus = document.getElementById("reqJobStatus").value;
       // ว่างได้เสมอแม้สถานะเป็น "ชำระเงินแล้ว" -- ช่องนี้เป็นความสะดวก ไม่ใช่กฎบังคับ
       // แบบเดียวกับ approvalDate ของขอขยายเขตฯ (ไม่มีการตรวจฝั่งเซิร์ฟเวอร์ผูกไว้)
@@ -6638,6 +7000,7 @@
         meterSize,
         fee,
         evCircuit2,
+        largeCustomer,
         jobStatus,
         paidDate,
         note,
@@ -9466,10 +9829,6 @@ ${sheetHtml}
       extendWorkDateTo.value = "";
       extendPersonEmail = "";
       extendSelection.clear();
-      // เปลี่ยนประเภทงานแล้ว ตะกร้า/โหมดของแท็บคุมส่งแผนกมิเตอร์ (เป็นของ
-      // ขอใช้ไฟฟ้า) ไม่มีความหมายกับอีกประเภท ล้างทิ้งเหมือนตอนกดชิป
-      meterSelection.clear();
-      setMeterMode("pending");
     }
 
     document.getElementById("extendWorkTopTitle").textContent = WORK_KIND_TITLES[workKind];
@@ -9805,13 +10164,6 @@ ${sheetHtml}
       key: status,
       label: status,
       count: jobs.filter(r => r.jobStatus === status).length
-    })
-    // แท็บ dispatch ของประเภทงานนี้ (ถ้ามี) -- ย้ายมาจากหน้างานรับคำร้องเดิม
-    // ต่อท้ายสุด เพราะเป็น "มุมมองพิเศษ" แยกจากสถานะปกติของงาน
-    )).concat((WORK_KIND_DISPATCH_TABS[workKind] || []).map(tab => ({
-      key: tab.key,
-      label: tab.label,
-      count: jobs.filter(DERIVED_TAB_FILTERS[tab.key]).length
     })));
 
     extendWorkChips.innerHTML = "";
@@ -9838,11 +10190,6 @@ ${sheetHtml}
         // เลือกไว้ในมุมมองก่อนหน้าแล้วเปลี่ยนมุมมอง = ไม่รู้แล้วว่ากำลังจะจ่าย
         // งานใบไหนบ้าง ล้างทิ้งดีกว่าปล่อยให้เลือกค้างข้ามหน้าจอ
         extendSelection.clear();
-        // เหมือนกับตอนสลับแท็บในหน้างานรับคำร้อง (switchRequestsTab) -- ล้าง
-        // ตะกร้า+กลับโหมด "รอส่ง" ทุกครั้งที่กดชิปไหนก็ตาม ไม่ใช่แค่ตอนออกจาก
-        // แท็บคุมส่งเอง กันไม่ให้กลับมาเจอโหมดประวัติการส่งค้างอยู่โดยไม่รู้ตัว
-        meterSelection.clear();
-        setMeterMode("pending");
         renderExtendWork();
       });
 
@@ -10152,68 +10499,11 @@ ${sheetHtml}
     return true;
   }
 
-  /**
-   * ชิปแจ้งเตือนการรับชำระเงิน/คุมคำร้องส่งแผนกมิเตอร์ของงานขอใช้ไฟฟ้า ย้ายมา
-   * จากแท็บในหน้างานรับคำร้องเดิม (ตรรกะกรอง/checkbox/โหมด/ประวัติ ไม่เปลี่ยน
-   * เลย แค่ย้ายมาวาดใน extendWorkList แทน requestsList เพราะช่างตรวจสอบทำงาน
-   * จบในหน้านี้) ใช้ renderRequestCardsInto ตัวเดียวกับหน้างานรับคำร้อง เพราะ
-   * สองมุมมองนี้เป็นการ์ดหน้าตาแบบ "request card" ธรรมดา ไม่ใช่การ์ดงานแบบที่ใช้
-   * ในมุมมองอื่นของโมดูลนี้ (renderExtendCard/renderJobsByStatus)
-   */
-  function renderExtendDispatchTab(filterKey, jobs) {
-    const derivedFilter = DERIVED_TAB_FILTERS[filterKey];
-    // ทั้งประเภทงาน ไม่กรองด้วยคำค้น/ช่วงวันที่ -- ใช้ตัดสินว่า id ที่เลือกไว้
-    // (ตะกร้าเช็คบ็อก) ยังอยู่ในแท็บนี้ไหม เหมือน eligibleForTab ตอนอยู่หน้า
-    // งานรับคำร้องเดิมทุกประการ
-    const eligibleForTab = jobs.filter(derivedFilter);
-    const filtered = sortRequestsForDisplay(
-      eligibleForTab
-        .filter(extendDateFilterMatches)
-        .filter(r => matchesSearch(r, extendSearchQuery))
-    );
-
-    extendWorkTitle.textContent = REQUEST_TYPES[filterKey];
-    extendWorkCount.textContent = `ทั้งหมด ${filtered.length} รายการ`;
-    // แท็บ dispatch เป็นมุมมองกรองข้อมูลที่มีอยู่แล้ว ไม่มีอะไรให้เพิ่มใหม่ตรงนี้
-    extendWorkAddBtn.hidden = true;
-
-    const isMeterTab = filterKey === "meter";
-    meterModes.hidden = !isMeterTab;
-    if (isMeterTab && meterMode === "history") { renderDispatchHistory(); return; }
-    meterPrintBtn.hidden = !isMeterTab;
-    if (isMeterTab) {
-      const eligibleIds = new Set(eligibleForTab.map(r => r.id));
-      meterSelection.forEach(id => { if (!eligibleIds.has(id)) meterSelection.delete(id); });
-      meterPrintBtn.disabled = meterSelection.size === 0;
-      updateSelectionButtonLabel(meterPrintBtn, meterSelection.size);
-    }
-
-    // "payment" ไม่มี checkbox/print ของตัวเอง -- แต่ละใบมีปุ่ม "พิมพ์ Slip" อยู่
-    // บนการ์ดเองแล้ว (ดู renderRequestCardsInto) isMeterTab เป็น false ตอนอยู่
-    // แท็บนี้ ปุ่ม/โหมดของคุมส่งแผนกมิเตอร์จึงถูกซ่อนไปแล้วจากบล็อกข้างบน
-    renderRequestCardsInto(extendWorkList, filtered, {
-      isMeterTab,
-      searchQuery: extendSearchQuery,
-      onArchiveMerged: renderExtendWork
-    });
-  }
-
   function renderExtendWork() {
     const jobs = extendJobs();
     renderExtendChips(jobs);
 
-    // ชิป dispatch (แจ้งเตือนการรับชำระเงิน/คุมคำร้องส่งแผนกต่าง ๆ) วาดคนละแบบ
-    // กับมุมมองงานปกติ (การ์ดแบบ "request card" ธรรมดา ไม่ใช่การ์ดงานที่จัดกลุ่ม
-    // ตามสถานะ) และ extendFilterMatches ก็ไม่รู้จัก key พวกนี้ (จะเข้าใจผิดว่า
-    // เป็นชื่อสถานะแล้วไม่เจอคำร้องไหนเลย) จึงต้องแยกออกไปทั้งหมดตั้งแต่ต้นฟังก์ชัน
-    if (DERIVED_TAB_FILTERS[extendFilter]) {
-      renderExtendDispatchTab(extendFilter, jobs);
-      return;
-    }
-
     extendWorkAddBtn.hidden = false;
-    meterModes.hidden = true;
-    meterPrintBtn.hidden = true;
 
     const filtered = sortRequestsForDisplay(jobs
       .filter(extendFilterMatches)
@@ -10485,6 +10775,1101 @@ ${sheetHtml}
     bootOverlay.hidden = true;
     enterApp();
     restoreNavState();
+  }
+
+
+  /** ข้อความผิดพลาดที่อ่านรู้เรื่อง -- โมดูลใหม่ทั้งสามใช้ร่วมกัน */
+  function moduleErrorText(err) {
+    const message = String(err && err.message ? err.message : err || "");
+    if (!message || message === "[object Object]") return "เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง";
+    return message;
+  }
+
+  /** อ่านไฟล์เป็น data URL -- รูปแบบเดียวกับที่ backend.uploadBrochureImage รับ */
+  function readFileAsDataUrl(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = () => reject(new Error("อ่านไฟล์ไม่สำเร็จ"));
+      reader.readAsDataURL(file);
+    });
+  }
+
+  // ================================================================ โมดูลงานใหม่
+  // โบรชัวร์ธุรกิจเสริม / งานเสนอราคา / ระบบรับฟังเสียงของลูกค้า (PEA-VOC)
+  //
+  // ทั้งสามเก็บในตาราง work_items ตัวเดียวกัน แยกด้วย kind (ดู migration
+  // 20260919000001_work_items.sql ว่าทำไมจึงเป็นตารางเดียว) และทั้งสามอ่านผ่าน
+  // backend.loadWorkItems() ตรง ๆ ไม่ผ่านชั้นแคชแบบ requestsCache -- เปิดจากหน้า
+  // ของตัวเองเท่านั้น ไม่มีหน้าไหนต้องอ่านค่าแบบ synchronous ระหว่างวาดรายการคำร้อง
+  //
+  // รูปร่างข้อมูลของแต่ละ kind อยู่ใน item.data (jsonb) ส่วน title/status/sortOrder
+  // เป็นคอลัมน์จริงเพราะทุกหน้าจอเรียง/ค้น/กรองด้วยสามฟิลด์นี้
+
+  /** การ์ดบริการใบไหนมีปุ่มเข้าโมดูลย่อย (ปุ่มใน #serviceModules) */
+  const SERVICE_MODULES = { sideBusiness: true };
+
+  function newWorkItemId() {
+    return newRequestId();
+  }
+
+  // ---------------------------------------------------------------- โบรชัวร์
+  const brochureView = document.getElementById("brochureView");
+  const brochureList = document.getElementById("brochureList");
+  const brochureCount = document.getElementById("brochureCount");
+  const brochureError = document.getElementById("brochureError");
+  const brochureAddBtn = document.getElementById("brochureAddBtn");
+  const brochureEditModal = document.getElementById("brochureEditModal");
+  const brochureEditTitle = document.getElementById("brochureEditTitle");
+  const brochureTitleInput = document.getElementById("brochureTitleInput");
+  const brochureDescInput = document.getElementById("brochureDescInput");
+  const brochureImageInput = document.getElementById("brochureImageInput");
+  const brochureEditImages = document.getElementById("brochureEditImages");
+  const brochureEditError = document.getElementById("brochureEditError");
+  const brochureSaveBtn = document.getElementById("brochureSaveBtn");
+  const brochureDeleteBtn = document.getElementById("brochureDeleteBtn");
+  const brochureViewerModal = document.getElementById("brochureViewerModal");
+  const brochureViewerTitle = document.getElementById("brochureViewerTitle");
+  const brochureViewerImage = document.getElementById("brochureViewerImage");
+  const brochureViewerNote = document.getElementById("brochureViewerNote");
+  const brochureDownloadBtn = document.getElementById("brochureDownloadBtn");
+  const brochureCopyBtn = document.getElementById("brochureCopyBtn");
+
+  let brochures = [];
+  // โบรชัวร์ที่กำลังแก้อยู่ (null = กำลังสร้างใหม่) และรายการ path รูปของมัน --
+  // แยกจาก brochures เพื่อให้กดยกเลิกแล้วของเดิมไม่ถูกแตะ
+  let brochureEditing = null;
+  let brochureEditPaths = [];
+
+  async function openBrochureView() {
+    showView("brochure");
+    hideError(brochureError);
+    brochureList.innerHTML = '<div class="request-empty">กำลังโหลด...</div>';
+    try {
+      brochures = await backend.loadWorkItems("brochure");
+    } catch (err) {
+      brochures = [];
+      showError(brochureError, moduleErrorText(err));
+    }
+    renderBrochures();
+  }
+
+  function renderBrochures() {
+    brochureList.innerHTML = "";
+    brochureCount.textContent = `ทั้งหมด ${brochures.length} รายการ`;
+
+    if (!brochures.length) {
+      const empty = document.createElement("div");
+      empty.className = "request-empty";
+      empty.textContent = 'ยังไม่มีโบรชัวร์ -- กด "+ เพิ่มโบรชัวร์" เพื่อเริ่ม';
+      brochureList.appendChild(empty);
+      return;
+    }
+
+    brochures.forEach(item => {
+      const data = item.data || {};
+      const images = Array.isArray(data.images) ? data.images : [];
+
+      const card = document.createElement("article");
+      card.className = "brochure-card";
+
+      const thumb = document.createElement("div");
+      thumb.className = "brochure-thumb";
+      if (images.length) {
+        const img = document.createElement("img");
+        img.alt = item.title || "โบรชัวร์";
+        img.loading = "lazy";
+        // path -> signed URL ตอนวาดเท่านั้น เหมือนทุกไฟล์แนบในระบบนี้ (ไม่มี
+        // public URL อยู่ในโค้ดเลย) -- แปะ data-path ไว้กันกรณี URL มาช้าแล้ว
+        // ผู้ใช้เปลี่ยนหน้าไปแล้ว จะได้ไม่เอา URL ไปใส่รูปของรายการอื่น
+        img.dataset.path = images[0];
+        fileUrl("brochure", images[0]).then(url => {
+          if (url && img.dataset.path === images[0]) img.src = url;
+        });
+        img.addEventListener("click", () => openBrochureViewer(item, 0));
+        thumb.appendChild(img);
+      } else {
+        thumb.textContent = "ยังไม่มีรูป";
+        thumb.classList.add("is-empty");
+      }
+
+      const body = document.createElement("div");
+      body.className = "brochure-body";
+
+      const title = document.createElement("h3");
+      title.textContent = item.title || "(ไม่มีชื่อ)";
+
+      const desc = document.createElement("p");
+      desc.className = "brochure-desc";
+      desc.textContent = data.description || "";
+
+      const actions = document.createElement("div");
+      actions.className = "brochure-actions";
+
+      if (images.length) {
+        const viewBtn = document.createElement("button");
+        viewBtn.type = "button";
+        viewBtn.className = "btn btn-primary";
+        viewBtn.textContent = images.length > 1 ? `ดูรูป (${images.length})` : "ดูรูป";
+        viewBtn.addEventListener("click", () => openBrochureViewer(item, 0));
+        actions.appendChild(viewBtn);
+      }
+
+      const editBtn = document.createElement("button");
+      editBtn.type = "button";
+      editBtn.className = "btn btn-ghost";
+      editBtn.textContent = "แก้ไข";
+      editBtn.addEventListener("click", () => openBrochureEditor(item));
+      actions.appendChild(editBtn);
+
+      body.append(title, desc, actions);
+      card.append(thumb, body);
+      brochureList.appendChild(card);
+    });
+  }
+
+  function openBrochureEditor(item) {
+    brochureEditing = item || null;
+    brochureEditPaths = item && Array.isArray(item.data?.images) ? item.data.images.slice() : [];
+    brochureEditTitle.textContent = item ? "แก้ไขโบรชัวร์" : "เพิ่มโบรชัวร์";
+    brochureTitleInput.value = item ? (item.title || "") : "";
+    brochureDescInput.value = item ? (item.data?.description || "") : "";
+    brochureImageInput.value = "";
+    brochureDeleteBtn.hidden = !item;
+    hideError(brochureEditError);
+    renderBrochureEditImages();
+    brochureEditModal.hidden = false;
+  }
+
+  function closeBrochureEditor() {
+    brochureEditModal.hidden = true;
+    brochureEditing = null;
+    brochureEditPaths = [];
+  }
+
+  function renderBrochureEditImages() {
+    brochureEditImages.innerHTML = "";
+    brochureEditPaths.forEach(path => {
+      const wrap = document.createElement("div");
+      wrap.className = "brochure-edit-image";
+
+      const img = document.createElement("img");
+      img.alt = "";
+      img.dataset.path = path;
+      fileUrl("brochure", path).then(url => {
+        if (url && img.dataset.path === path) img.src = url;
+      });
+
+      const removeBtn = document.createElement("button");
+      removeBtn.type = "button";
+      removeBtn.className = "btn btn-ghost";
+      removeBtn.textContent = "ลบรูป";
+      // ตัดออกจากรายการเท่านั้น ยังไม่ลบไฟล์บน Storage -- กดยกเลิกแล้วต้องได้ของเดิม
+      // คืนครบ ไฟล์ที่ไม่ถูกอ้างถึงหลังบันทึกจึงกลายเป็นไฟล์กำพร้าเล็ก ๆ ซึ่งรับได้
+      // สำหรับสื่อการตลาด (ต่างจากไฟล์แนบของคำร้องที่มี detach RPC ดูแลให้)
+      removeBtn.addEventListener("click", () => {
+        brochureEditPaths = brochureEditPaths.filter(p => p !== path);
+        renderBrochureEditImages();
+      });
+
+      wrap.append(img, removeBtn);
+      brochureEditImages.appendChild(wrap);
+    });
+  }
+
+  brochureImageInput.addEventListener("change", async () => {
+    const files = Array.from(brochureImageInput.files || []);
+    if (!files.length) return;
+    hideError(brochureEditError);
+    setBusy(brochureSaveBtn, true, "กำลังอัปโหลด...");
+    try {
+      // ทีละไฟล์ ไม่ยิงรวมก้อนเดียว -- ไฟล์ที่สามพังไม่ควรทำให้สองไฟล์แรกที่
+      // อัปสำเร็จแล้วหายไปด้วย (เหตุผลเดียวกับการแนบแผนผังหลายไฟล์)
+      for (const file of files) {
+        const dataUrl = await readFileAsDataUrl(file);
+        const path = await backend.uploadBrochureImage(dataUrl);
+        brochureEditPaths.push(path);
+      }
+      renderBrochureEditImages();
+    } catch (err) {
+      showError(brochureEditError, moduleErrorText(err));
+    } finally {
+      setBusy(brochureSaveBtn, false);
+      brochureImageInput.value = "";
+    }
+  });
+
+  brochureAddBtn.addEventListener("click", () => openBrochureEditor(null));
+  document.getElementById("brochureCancelBtn").addEventListener("click", closeBrochureEditor);
+  brochureEditModal.addEventListener("click", (e) => {
+    if (e.target === brochureEditModal) closeBrochureEditor();
+  });
+
+  brochureSaveBtn.addEventListener("click", async () => {
+    const title = brochureTitleInput.value.trim();
+    if (!title) {
+      showError(brochureEditError, "กรุณากรอกชื่อโบรชัวร์");
+      return;
+    }
+    hideError(brochureEditError);
+    setBusy(brochureSaveBtn, true, "กำลังบันทึก...");
+    try {
+      await backend.saveWorkItem("brochure", {
+        id: brochureEditing ? brochureEditing.id : newWorkItemId(),
+        title,
+        status: "",
+        data: {
+          description: brochureDescInput.value.trim(),
+          images: brochureEditPaths.slice()
+        }
+      });
+      closeBrochureEditor();
+      await openBrochureView();
+    } catch (err) {
+      showError(brochureEditError, moduleErrorText(err));
+    } finally {
+      setBusy(brochureSaveBtn, false);
+    }
+  });
+
+  brochureDeleteBtn.addEventListener("click", async () => {
+    if (!brochureEditing) return;
+    if (!confirm(`ลบโบรชัวร์ "${brochureEditing.title}" ใช่หรือไม่?`)) return;
+    setBusy(brochureDeleteBtn, true, "กำลังลบ...");
+    try {
+      await backend.deleteWorkItem(brochureEditing.id);
+      closeBrochureEditor();
+      await openBrochureView();
+    } catch (err) {
+      showError(brochureEditError, moduleErrorText(err));
+    } finally {
+      setBusy(brochureDeleteBtn, false);
+    }
+  });
+
+  /**
+   * หน้าต่างดูรูปเต็ม -- ดาวน์โหลด หรือคัดลอกรูปไปวางในไลน์
+   *
+   * "คัดลอกรูป" ใช้ Clipboard API แบบ image/png ซึ่งเบราว์เซอร์รองรับเฉพาะ PNG
+   * (รูปที่เก็บไว้เป็น JPEG หลังย่อ) จึงต้องวาดลง <canvas> แล้ว export เป็น PNG
+   * ก่อน -- ไม่ใช่ก๊อบ blob เดิมตรง ๆ
+   *
+   * บนเบราว์เซอร์/บริบทที่คัดลอกไม่ได้ (Safari เก่า, หน้าไม่ใช่ HTTPS, ผู้ใช้
+   * ไม่อนุญาต) จะบอกให้ใช้ปุ่มดาวน์โหลดแทน แทนที่จะเงียบไปเฉย ๆ -- ปุ่มที่กดแล้ว
+   * ไม่มีอะไรเกิดขึ้นทำให้คนกดซ้ำแล้วคิดว่าระบบพัง
+   */
+  let brochureViewerState = { item: null, index: 0 };
+
+  async function openBrochureViewer(item, index) {
+    const images = Array.isArray(item.data?.images) ? item.data.images : [];
+    if (!images.length) return;
+    brochureViewerState = { item, index };
+    brochureViewerTitle.textContent = images.length > 1
+      ? `${item.title || "โบรชัวร์"} (รูปที่ ${index + 1}/${images.length})`
+      : (item.title || "โบรชัวร์");
+    brochureViewerNote.hidden = true;
+    brochureViewerImage.removeAttribute("src");
+    brochureViewerModal.hidden = false;
+
+    const url = await fileUrl("brochure", images[index]);
+    if (!url) return;
+    brochureViewerImage.src = url;
+    brochureViewerImage.alt = item.title || "โบรชัวร์";
+    // แอตทริบิวต์ download ถูกเมินเมื่อ href ข้ามโดเมน (Storage อยู่คนละโฮสต์กับ
+    // หน้าเว็บ) เบราว์เซอร์จะเปิดรูปแทนที่จะเซฟ -- ดึงเป็น blob แล้วทำ object URL
+    // ให้แทน ทำไม่สำเร็จก็ถอยไปใช้ URL ตรง ๆ (อย่างน้อยยังเปิดรูปแล้วกดเซฟเองได้)
+    brochureDownloadBtn.href = url;
+    brochureDownloadBtn.download = brochureDownloadBtn.download = `${(item.title || "brochure").replace(/[\\/:*?"<>|]/g, "_")}.jpg`;
+    try {
+      const res = await fetch(url);
+      const blob = await res.blob();
+      if (brochureDownloadObjectUrl) URL.revokeObjectURL(brochureDownloadObjectUrl);
+      brochureDownloadObjectUrl = URL.createObjectURL(blob);
+      brochureDownloadBtn.href = brochureDownloadObjectUrl;
+    } catch (err) {
+      console.warn("CS Connect: เตรียมไฟล์ดาวน์โหลดไม่สำเร็จ ใช้ลิงก์ตรงแทน", err);
+    }
+  }
+
+  // object URL ของไฟล์ที่เตรียมไว้ให้ดาวน์โหลด -- คืนหน่วยความจำก่อนสร้างอันใหม่
+  let brochureDownloadObjectUrl = "";
+
+  function closeBrochureViewer() {
+    brochureViewerModal.hidden = true;
+    brochureViewerImage.removeAttribute("src");
+  }
+
+  document.getElementById("brochureViewerCloseBtn").addEventListener("click", closeBrochureViewer);
+  brochureViewerModal.addEventListener("click", (e) => {
+    if (e.target === brochureViewerModal) closeBrochureViewer();
+  });
+
+  brochureCopyBtn.addEventListener("click", async () => {
+    brochureViewerNote.hidden = true;
+    setBusy(brochureCopyBtn, true, "กำลังคัดลอก...");
+    try {
+      if (!navigator.clipboard || typeof ClipboardItem === "undefined") {
+        throw new Error("เบราว์เซอร์นี้คัดลอกรูปไม่ได้ กรุณาใช้ปุ่มดาวน์โหลดแทน");
+      }
+      if (!brochureViewerImage.naturalWidth) {
+        throw new Error("รูปยังโหลดไม่เสร็จ กรุณารอสักครู่แล้วลองใหม่");
+      }
+      const canvas = document.createElement("canvas");
+      canvas.width = brochureViewerImage.naturalWidth;
+      canvas.height = brochureViewerImage.naturalHeight;
+      canvas.getContext("2d").drawImage(brochureViewerImage, 0, 0);
+      const blob = await new Promise(resolve => canvas.toBlob(resolve, "image/png"));
+      if (!blob) throw new Error("แปลงรูปไม่สำเร็จ กรุณาใช้ปุ่มดาวน์โหลดแทน");
+      await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
+      brochureViewerNote.textContent = "คัดลอกรูปแล้ว -- ไปที่ไลน์แล้วกดวาง (Ctrl+V) เพื่อส่งให้ลูกค้า";
+      brochureViewerNote.hidden = false;
+    } catch (err) {
+      brochureViewerNote.textContent = moduleErrorText(err);
+      brochureViewerNote.hidden = false;
+    } finally {
+      setBusy(brochureCopyBtn, false);
+    }
+  });
+
+  // ---------------------------------------------------------- งานเสนอราคา
+  const quotationListMode = document.getElementById("quotationListMode");
+  const quotationFormMode = document.getElementById("quotationFormMode");
+  const quotationList = document.getElementById("quotationList");
+  const quotationCount = document.getElementById("quotationCount");
+  const quotationError = document.getElementById("quotationError");
+  const quotationSearch = document.getElementById("quotationSearch");
+  const quotationForm = document.getElementById("quotationForm");
+  const quotationFormError = document.getElementById("quotationFormError");
+  const quotationFormTitle = document.getElementById("quotationFormTitle");
+  const quotationFormSubtitle = document.getElementById("quotationFormSubtitle");
+  const quotationDeleteBtn = document.getElementById("quotationDeleteBtn");
+  const quoLines = document.getElementById("quoLines");
+
+  let quotations = [];
+  let quotationEditing = null;
+  let quotationQuery = "";
+  // รายการราคาที่กำลังแก้ -- ผูกสดกับหน้าจอเหมือนหน้าประมาณการ (ทุกการพิมพ์
+  // เขียนลงโมเดลทันที) ไม่ใช่อ่านค่าจาก DOM ตอนกดบันทึกทีเดียว ซึ่งเป็นจุดที่
+  // หน้าจอแบบนี้ทำข้อมูลหายบ่อยที่สุด
+  let quoLineModel = [];
+
+  async function openQuotationView() {
+    showView("quotation");
+    quotationListMode.hidden = false;
+    quotationFormMode.hidden = true;
+    hideError(quotationError);
+    quotationList.innerHTML = '<div class="request-empty">กำลังโหลด...</div>';
+    try {
+      quotations = await backend.loadWorkItems("quotation");
+    } catch (err) {
+      quotations = [];
+      showError(quotationError, moduleErrorText(err));
+    }
+    renderQuotations();
+  }
+
+  function renderQuotations() {
+    const query = quotationQuery.trim().toLowerCase();
+    const filtered = quotations.filter(item => {
+      if (!query) return true;
+      const d = item.data || {};
+      return [item.title, item.status, d.number, d.customer, d.phone, d.subject]
+        .some(v => String(v || "").toLowerCase().includes(query));
+    });
+
+    quotationCount.textContent = `ทั้งหมด ${filtered.length} รายการ`;
+    quotationList.innerHTML = "";
+
+    if (!filtered.length) {
+      const empty = document.createElement("div");
+      empty.className = "request-empty";
+      empty.textContent = query ? "ไม่พบใบเสนอราคาที่ค้นหา" : "ยังไม่มีใบเสนอราคา";
+      quotationList.appendChild(empty);
+      return;
+    }
+
+    filtered.forEach(item => {
+      const d = item.data || {};
+      const card = document.createElement("div");
+      card.className = "request-card request-card-clickable";
+
+      const top = document.createElement("div");
+      top.className = "request-card-top";
+
+      const badges = document.createElement("div");
+      badges.className = "request-badges";
+      if (d.number) {
+        const numberEl = document.createElement("span");
+        numberEl.className = "request-badge request-badge-id";
+        numberEl.textContent = d.number;
+        badges.appendChild(numberEl);
+      }
+      const statusEl = document.createElement("span");
+      statusEl.className = `request-badge request-badge-status tone-${QUOTATION_STATUS_TONE[item.status] || "info"}`;
+      statusEl.textContent = item.status || "ร่าง";
+      badges.appendChild(statusEl);
+
+      const dateEl = document.createElement("span");
+      dateEl.className = "request-date";
+      dateEl.textContent = d.date ? formatThaiDate(d.date) : "";
+      top.append(badges, dateEl);
+
+      const name = document.createElement("div");
+      name.className = "request-name";
+      name.textContent = d.customer || item.title || "(ไม่ระบุลูกค้า)";
+
+      card.append(top, name);
+
+      if (d.subject) {
+        const subject = document.createElement("div");
+        subject.className = "request-meta";
+        subject.textContent = d.subject;
+        card.appendChild(subject);
+      }
+
+      const total = document.createElement("div");
+      total.className = "request-meta request-meta-queue";
+      total.textContent = `รวมทั้งสิ้น: ${formatMoney(quotationTotals(d.lines, d.vatEnabled).grand)} บาท`;
+      card.appendChild(total);
+
+      card.addEventListener("click", () => openQuotationForm(item));
+      quotationList.appendChild(card);
+    });
+  }
+
+  const QUOTATION_STATUS_TONE = {
+    "ร่าง": "info",
+    "เสนอราคาแล้ว": "warning",
+    "ลูกค้าตอบรับ": "success",
+    "ทำสัญญา/เริ่มงาน": "success",
+    "ส่งมอบงานแล้ว": "success",
+    "ยกเลิก": "danger"
+  };
+
+  /** รวมเป็นเงิน / VAT 7% / รวมทั้งสิ้น -- ที่เดียวที่รู้วิธีคิด */
+  function quotationTotals(lines, vatEnabled) {
+    const subtotal = (Array.isArray(lines) ? lines : []).reduce((sum, line) => {
+      const qty = Number(line.qty) || 0;
+      const price = Number(line.price) || 0;
+      return sum + qty * price;
+    }, 0);
+    const vat = vatEnabled === false ? 0 : subtotal * 0.07;
+    return { subtotal, vat, grand: subtotal + vat };
+  }
+
+  function formatMoney(value) {
+    return (Number(value) || 0).toLocaleString("th-TH", {
+      minimumFractionDigits: 2, maximumFractionDigits: 2
+    });
+  }
+
+  function openQuotationForm(item) {
+    quotationEditing = item || null;
+    quotationListMode.hidden = true;
+    quotationFormMode.hidden = false;
+    hideError(quotationFormError);
+    window.scrollTo(0, 0);
+
+    const d = item ? (item.data || {}) : {};
+    quotationFormTitle.textContent = item ? "แก้ไขใบเสนอราคา" : "สร้างใบเสนอราคา";
+    quotationFormSubtitle.textContent = item
+      ? `แก้ไขล่าสุด: ${item.updatedByName || item.createdByName || "-"}`
+      : "กรอกข้อมูลแล้วกดบันทึก";
+
+    document.getElementById("quoNumber").value = d.number || "";
+    document.getElementById("quoDate").value = d.date || todayDateString();
+    document.getElementById("quoCustomer").value = d.customer || "";
+    document.getElementById("quoPhone").value = d.phone || "";
+    document.getElementById("quoStatus").value = item ? (item.status || "ร่าง") : "ร่าง";
+    document.getElementById("quoSubject").value = d.subject || "";
+    document.getElementById("quoNote").value = d.note || "";
+    document.getElementById("quoVatEnabled").checked = d.vatEnabled !== false;
+
+    quoLineModel = Array.isArray(d.lines) && d.lines.length
+      ? d.lines.map(l => ({ ...l }))
+      : [{ description: "", qty: 1, unit: "งาน", price: 0 }];
+    renderQuoLines();
+
+    quotationDeleteBtn.hidden = !item;
+  }
+
+  function renderQuoLines() {
+    quoLines.innerHTML = "";
+    quoLineModel.forEach((line, index) => {
+      const row = document.createElement("div");
+      row.className = "quo-line";
+
+      const desc = document.createElement("input");
+      desc.type = "text";
+      desc.className = "quo-line-desc";
+      desc.placeholder = "รายการ";
+      desc.value = line.description || "";
+      desc.addEventListener("input", () => { line.description = desc.value; });
+
+      const qty = document.createElement("input");
+      qty.type = "number";
+      qty.min = "0";
+      qty.step = "any";
+      qty.placeholder = "จำนวน";
+      qty.value = line.qty ?? "";
+      qty.addEventListener("input", () => { line.qty = qty.value; updateQuoTotals(); });
+
+      const unit = document.createElement("input");
+      unit.type = "text";
+      unit.placeholder = "หน่วย";
+      unit.value = line.unit || "";
+      unit.addEventListener("input", () => { line.unit = unit.value; });
+
+      const price = document.createElement("input");
+      price.type = "number";
+      price.min = "0";
+      price.step = "0.01";
+      price.placeholder = "ราคาต่อหน่วย";
+      price.value = line.price ?? "";
+      price.addEventListener("input", () => { line.price = price.value; updateQuoTotals(); });
+
+      const amount = document.createElement("span");
+      amount.className = "quo-line-amount";
+      amount.textContent = formatMoney((Number(line.qty) || 0) * (Number(line.price) || 0));
+
+      const removeBtn = document.createElement("button");
+      removeBtn.type = "button";
+      removeBtn.className = "btn btn-ghost quo-line-remove";
+      removeBtn.textContent = "ลบ";
+      removeBtn.setAttribute("aria-label", `ลบรายการที่ ${index + 1}`);
+      removeBtn.addEventListener("click", () => {
+        quoLineModel.splice(index, 1);
+        if (!quoLineModel.length) quoLineModel.push({ description: "", qty: 1, unit: "งาน", price: 0 });
+        renderQuoLines();
+      });
+
+      row.append(desc, qty, unit, price, amount, removeBtn);
+      quoLines.appendChild(row);
+    });
+    updateQuoTotals();
+  }
+
+  function updateQuoTotals() {
+    const vatEnabled = document.getElementById("quoVatEnabled").checked;
+    const totals = quotationTotals(quoLineModel, vatEnabled);
+    document.getElementById("quoSubtotal").textContent = formatMoney(totals.subtotal);
+    document.getElementById("quoVat").textContent = formatMoney(totals.vat);
+    document.getElementById("quoGrand").textContent = formatMoney(totals.grand);
+    // ยอดรายบรรทัดต้องขยับตามด้วย ไม่งั้นยอดรวมกับยอดรายบรรทัดจะขัดกันเอง
+    quoLines.querySelectorAll(".quo-line").forEach((row, i) => {
+      const line = quoLineModel[i];
+      if (!line) return;
+      const amount = row.querySelector(".quo-line-amount");
+      if (amount) amount.textContent = formatMoney((Number(line.qty) || 0) * (Number(line.price) || 0));
+    });
+  }
+
+  document.getElementById("quoAddLineBtn").addEventListener("click", () => {
+    quoLineModel.push({ description: "", qty: 1, unit: "งาน", price: 0 });
+    renderQuoLines();
+  });
+
+  document.getElementById("quoVatEnabled").addEventListener("change", updateQuoTotals);
+
+  document.getElementById("quotationAddBtn").addEventListener("click", () => openQuotationForm(null));
+  document.getElementById("quotationBackToListBtn").addEventListener("click", () => {
+    quotationFormMode.hidden = true;
+    quotationListMode.hidden = false;
+    renderQuotations();
+  });
+
+  quotationSearch.addEventListener("input", () => {
+    quotationQuery = quotationSearch.value;
+    renderQuotations();
+  });
+
+  quotationForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    hideError(quotationFormError);
+    const customer = document.getElementById("quoCustomer").value.trim();
+    if (!customer) {
+      showError(quotationFormError, "กรุณากรอกชื่อลูกค้า");
+      return;
+    }
+
+    const phoneRaw = document.getElementById("quoPhone").value.trim();
+    let phone = "";
+    if (phoneRaw) {
+      const parsed = readPhoneField(phoneRaw, "เบอร์โทรศัพท์", false);
+      if (parsed.error) {
+        showError(quotationFormError, parsed.error);
+        return;
+      }
+      phone = parsed.value;
+    }
+
+    const btn = quotationForm.querySelector('button[type="submit"]');
+    setBusy(btn, true, "กำลังบันทึก...");
+    try {
+      const subject = document.getElementById("quoSubject").value.trim();
+      await backend.saveWorkItem("quotation", {
+        id: quotationEditing ? quotationEditing.id : newWorkItemId(),
+        // title ใช้เป็นชื่อที่ค้นหา/เรียงในคอลัมน์จริง -- งานที่เสนอราคาอ่านรู้เรื่อง
+        // กว่าเลขที่ใบเสนอราคาเวลาไล่ดูรายการ
+        title: subject || customer,
+        status: document.getElementById("quoStatus").value,
+        data: {
+          number: document.getElementById("quoNumber").value.trim(),
+          date: document.getElementById("quoDate").value,
+          customer,
+          phone,
+          subject,
+          note: document.getElementById("quoNote").value.trim(),
+          vatEnabled: document.getElementById("quoVatEnabled").checked,
+          lines: quoLineModel
+            .filter(l => String(l.description || "").trim())
+            .map(l => ({
+              description: String(l.description).trim(),
+              qty: Number(l.qty) || 0,
+              unit: String(l.unit || "").trim(),
+              price: Number(l.price) || 0
+            }))
+        }
+      });
+      await openQuotationView();
+    } catch (err) {
+      showError(quotationFormError, moduleErrorText(err));
+    } finally {
+      setBusy(btn, false);
+    }
+  });
+
+  quotationDeleteBtn.addEventListener("click", async () => {
+    if (!quotationEditing) return;
+    if (!confirm("ลบใบเสนอราคานี้ใช่หรือไม่?")) return;
+    setBusy(quotationDeleteBtn, true, "กำลังลบ...");
+    try {
+      await backend.deleteWorkItem(quotationEditing.id);
+      await openQuotationView();
+    } catch (err) {
+      showError(quotationFormError, moduleErrorText(err));
+    } finally {
+      setBusy(quotationDeleteBtn, false);
+    }
+  });
+
+  /**
+   * พิมพ์ใบเสนอราคา -- เอกสาร A4 หนึ่งใบ สร้างด้วย window.open + document.write
+   * แบบเดียวกับสมุดคุมและใบภาพหน้างาน (CSP ของหน้านี้บล็อกสคริปต์ inline ทุกตัว
+   * จึงห้ามใส่ on* attribute ใด ๆ ลงไป)
+   *
+   * พิมพ์จากค่าที่อยู่บนหน้าจอ ไม่ใช่จากที่บันทึกไว้ -- ตรงกับที่ตาเห็น และป้าย
+   * ยังไม่บันทึกอยู่ข้าง ๆ ปุ่มอยู่แล้ว
+   */
+  document.getElementById("quotationPrintBtn").addEventListener("click", () => {
+    const printWindow = window.open("", "_blank");
+    if (!printWindow) return;
+
+    const vatEnabled = document.getElementById("quoVatEnabled").checked;
+    const lines = quoLineModel.filter(l => String(l.description || "").trim());
+    const totals = quotationTotals(lines, vatEnabled);
+    const staff = actingStaff();
+
+    const rows = lines.map((line, i) => `
+      <tr>
+        <td class="c">${i + 1}</td>
+        <td>${escapeForPrint(line.description)}</td>
+        <td class="c">${escapeForPrint(String(line.qty ?? ""))}</td>
+        <td class="c">${escapeForPrint(line.unit || "")}</td>
+        <td class="r">${formatMoney(line.price)}</td>
+        <td class="r">${formatMoney((Number(line.qty) || 0) * (Number(line.price) || 0))}</td>
+      </tr>
+    `).join("");
+
+    printWindow.document.write(`
+      <html>
+        <head>
+          <title>ใบเสนอราคา</title>
+          <link rel="preconnect" href="https://fonts.googleapis.com">
+          <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;700&display=swap" rel="stylesheet">
+          <style>
+            @page { size: A4; margin: 1.5cm 2cm; }
+            body { font-family: Sarabun, sans-serif; color: #221530; margin: 0; padding: 24px; }
+            h1 { font-size: 22px; text-align: center; margin: 0 0 4px; }
+            .sub { text-align: center; color: #6b5c82; font-size: 13px; margin: 0 0 24px; }
+            .meta { display: flex; justify-content: space-between; gap: 24px; font-size: 14px; margin-bottom: 18px; }
+            .meta div { flex: 1; }
+            .meta p { margin: 0 0 4px; }
+            table { width: 100%; border-collapse: collapse; }
+            th, td { border: 1px solid #cdb9ea; padding: 8px 10px; font-size: 14px; vertical-align: top; }
+            th { background: #ece0f8; }
+            td.c { text-align: center; }
+            td.r { text-align: right; font-variant-numeric: tabular-nums; }
+            tfoot td { font-weight: 600; }
+            .note { margin-top: 18px; font-size: 14px; white-space: pre-wrap; }
+            .sig { display: flex; justify-content: flex-end; margin-top: 56px; }
+            .sig div { text-align: center; font-size: 14px; line-height: 1.15; }
+            .sig p { margin: 0; }
+            .sig .n { margin-top: 6pt; }
+            @media print { body { padding: 0; } .actions { display: none; } }
+            .actions { text-align: center; margin-top: 32px; }
+            .actions button {
+              font: inherit; font-size: 15px; font-weight: 600; padding: 12px 28px;
+              border-radius: 10px; border: none; background: #57298c; color: #fff; cursor: pointer;
+            }
+          </style>
+        </head>
+        <body>
+          <h1>ใบเสนอราคา</h1>
+          <p class="sub">การไฟฟ้าส่วนภูมิภาค — งานธุรกิจเสริม (PEA Engineering Service)</p>
+          <div class="meta">
+            <div>
+              <p><strong>ลูกค้า:</strong> ${escapeForPrint(document.getElementById("quoCustomer").value)}</p>
+              <p><strong>โทร:</strong> ${escapeForPrint(document.getElementById("quoPhone").value)}</p>
+              <p><strong>งาน:</strong> ${escapeForPrint(document.getElementById("quoSubject").value)}</p>
+            </div>
+            <div>
+              <p><strong>เลขที่:</strong> ${escapeForPrint(document.getElementById("quoNumber").value)}</p>
+              <p><strong>วันที่:</strong> ${escapeForPrint(formatThaiDate(document.getElementById("quoDate").value))}</p>
+            </div>
+          </div>
+          <table>
+            <thead>
+              <tr><th>ลำดับ</th><th>รายการ</th><th>จำนวน</th><th>หน่วย</th><th>ราคาต่อหน่วย</th><th>จำนวนเงิน</th></tr>
+            </thead>
+            <tbody>${rows || '<tr><td colspan="6" class="c">ไม่มีรายการ</td></tr>'}</tbody>
+            <tfoot>
+              <tr><td colspan="5" class="r">รวมเป็นเงิน</td><td class="r">${formatMoney(totals.subtotal)}</td></tr>
+              ${vatEnabled ? `<tr><td colspan="5" class="r">ภาษีมูลค่าเพิ่ม 7%</td><td class="r">${formatMoney(totals.vat)}</td></tr>` : ""}
+              <tr><td colspan="5" class="r">รวมทั้งสิ้น</td><td class="r">${formatMoney(totals.grand)}</td></tr>
+            </tfoot>
+          </table>
+          <div class="note">${escapeForPrint(document.getElementById("quoNote").value)}</div>
+          <div class="sig">
+            <div>
+              <p>ลงชื่อ ....................................... ผู้เสนอราคา</p>
+              <p class="n">(${escapeForPrint(staff.byName || "")})</p>
+            </div>
+          </div>
+          <div class="actions"><button type="button" id="printBtn">พิมพ์</button></div>
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
+    printWindow.document.getElementById("printBtn")
+      .addEventListener("click", () => printWindow.print());
+  });
+
+  // -------------------------------------------- ระบบรับฟังเสียงของลูกค้า (VOC)
+  const vocListMode = document.getElementById("vocListMode");
+  const vocFormMode = document.getElementById("vocFormMode");
+  const vocList = document.getElementById("vocList");
+  const vocCount = document.getElementById("vocCount");
+  const vocError = document.getElementById("vocError");
+  const vocSearch = document.getElementById("vocSearch");
+  const vocChips = document.getElementById("vocChips");
+  const vocForm = document.getElementById("vocForm");
+  const vocFormError = document.getElementById("vocFormError");
+  const vocFormTitle = document.getElementById("vocFormTitle");
+  const vocFormSubtitle = document.getElementById("vocFormSubtitle");
+  const vocDeleteBtn = document.getElementById("vocDeleteBtn");
+
+  const VOC_STATUS_TONE = {
+    "รับเรื่อง": "warning",
+    "กำลังดำเนินการ": "warning",
+    "ส่งต่อหน่วยงานอื่น": "info",
+    "แก้ไขแล้ว": "success",
+    "แจ้งผลลูกค้าแล้ว": "success",
+    "ยุติเรื่อง": "info"
+  };
+
+  let vocCases = [];
+  let vocEditing = null;
+  let vocQuery = "";
+  let vocFilter = "all";
+
+  async function openVocView() {
+    showView("voc");
+    vocListMode.hidden = false;
+    vocFormMode.hidden = true;
+    hideError(vocError);
+    vocList.innerHTML = '<div class="request-empty">กำลังโหลด...</div>';
+    try {
+      vocCases = await backend.loadWorkItems("voc");
+    } catch (err) {
+      vocCases = [];
+      showError(vocError, moduleErrorText(err));
+    }
+    renderVocList();
+  }
+
+  function renderVocChips() {
+    const statuses = Array.from(document.getElementById("vocStatus").options).map(o => o.value);
+    const chips = [{ key: "all", label: "ทั้งหมด", count: vocCases.length }]
+      .concat(statuses.map(status => ({
+        key: status,
+        label: status,
+        count: vocCases.filter(c => c.status === status).length
+      })));
+
+    vocChips.innerHTML = "";
+    chips.forEach(chip => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "status-chip";
+      if (chip.key === vocFilter) btn.classList.add("active");
+      if (!chip.count) btn.classList.add("is-empty");
+      const label = document.createElement("span");
+      label.textContent = chip.label;
+      const count = document.createElement("span");
+      count.className = "status-chip-count";
+      count.textContent = String(chip.count);
+      btn.append(label, count);
+      btn.addEventListener("click", () => {
+        vocFilter = chip.key;
+        renderVocList();
+      });
+      vocChips.appendChild(btn);
+    });
+  }
+
+  function renderVocList() {
+    renderVocChips();
+    const query = vocQuery.trim().toLowerCase();
+    const filtered = vocCases.filter(item => {
+      if (vocFilter !== "all" && item.status !== vocFilter) return false;
+      if (!query) return true;
+      const d = item.data || {};
+      return [item.title, d.name, d.phone, d.ca, d.detail, d.category, d.location, d.owner]
+        .some(v => String(v || "").toLowerCase().includes(query));
+    });
+
+    vocCount.textContent = `ทั้งหมด ${filtered.length} เรื่อง`;
+    vocList.innerHTML = "";
+
+    if (!filtered.length) {
+      const empty = document.createElement("div");
+      empty.className = "request-empty";
+      empty.textContent = query || vocFilter !== "all" ? "ไม่พบเรื่องที่ค้นหา" : "ยังไม่มีเรื่องจากลูกค้า";
+      vocList.appendChild(empty);
+      return;
+    }
+
+    filtered.forEach(item => {
+      const d = item.data || {};
+      const card = document.createElement("div");
+      card.className = "request-card request-card-clickable";
+
+      const top = document.createElement("div");
+      top.className = "request-card-top";
+
+      const badges = document.createElement("div");
+      badges.className = "request-badges";
+
+      if (d.type) {
+        const typeEl = document.createElement("span");
+        typeEl.className = "request-badge tone-info";
+        typeEl.textContent = d.type;
+        badges.appendChild(typeEl);
+      }
+      if (d.category) {
+        const catEl = document.createElement("span");
+        catEl.className = "request-badge request-badge-purpose";
+        catEl.textContent = d.category;
+        badges.appendChild(catEl);
+      }
+      const statusEl = document.createElement("span");
+      statusEl.className = `request-badge request-badge-status tone-${VOC_STATUS_TONE[item.status] || "info"}`;
+      statusEl.textContent = item.status || "รับเรื่อง";
+      badges.appendChild(statusEl);
+
+      const dateEl = document.createElement("span");
+      dateEl.className = "request-date";
+      dateEl.textContent = d.date ? formatThaiDate(d.date) : "";
+      top.append(badges, dateEl);
+
+      const title = document.createElement("div");
+      title.className = "request-name";
+      title.textContent = item.title || "(ไม่ระบุเรื่อง)";
+
+      card.append(top, title);
+
+      if (d.name) {
+        const who = document.createElement("div");
+        who.className = "request-meta";
+        who.textContent = `ผู้แจ้ง: ${d.name}${d.channel ? ` · ${d.channel}` : ""}`;
+        card.appendChild(who);
+      }
+      if (d.owner) {
+        const owner = document.createElement("div");
+        owner.className = "request-meta";
+        owner.textContent = `ผู้รับผิดชอบ: ${d.owner}`;
+        card.appendChild(owner);
+      }
+      // เกินกำหนดแล้วแต่ยังไม่ปิดเรื่อง -- นี่คือสิ่งที่หน้าจอนี้มีไว้เพื่อตอบ
+      if (d.dueDate && !d.closedDate && d.dueDate < todayDateString()) {
+        const overdue = document.createElement("div");
+        overdue.className = "request-meta request-meta-queue";
+        overdue.textContent = `เกินกำหนดแล้ว (กำหนด ${formatThaiDate(d.dueDate)})`;
+        card.appendChild(overdue);
+      }
+
+      card.addEventListener("click", () => openVocForm(item));
+      vocList.appendChild(card);
+    });
+  }
+
+  function openVocForm(item) {
+    vocEditing = item || null;
+    vocListMode.hidden = true;
+    vocFormMode.hidden = false;
+    hideError(vocFormError);
+    window.scrollTo(0, 0);
+
+    const d = item ? (item.data || {}) : {};
+    vocFormTitle.textContent = item ? "รายละเอียดเรื่อง" : "รับเรื่องใหม่";
+    vocFormSubtitle.textContent = item
+      ? `รับเรื่องโดย: ${item.createdByName || "-"}`
+      : "กรอกข้อมูลแล้วกดบันทึก";
+
+    document.getElementById("vocDate").value = d.date || todayDateString();
+    document.getElementById("vocChannel").value = d.channel || "เคาน์เตอร์บริการ";
+    document.getElementById("vocType").value = d.type || "ข้อร้องเรียน";
+    document.getElementById("vocCategory").value = d.category || "กระแสไฟฟ้าขัดข้อง";
+    document.getElementById("vocName").value = d.name || "";
+    document.getElementById("vocPhone").value = d.phone || "";
+    document.getElementById("vocCa").value = d.ca || "";
+    document.getElementById("vocLocation").value = d.location || "";
+    document.getElementById("vocSubject").value = item ? (item.title || "") : "";
+    document.getElementById("vocDetail").value = d.detail || "";
+    document.getElementById("vocStatus").value = item ? (item.status || "รับเรื่อง") : "รับเรื่อง";
+    document.getElementById("vocOwner").value = d.owner || "";
+    document.getElementById("vocDueDate").value = d.dueDate || "";
+    document.getElementById("vocClosedDate").value = d.closedDate || "";
+    document.getElementById("vocAction").value = d.action || "";
+
+    vocDeleteBtn.hidden = !item;
+  }
+
+  document.getElementById("vocAddBtn").addEventListener("click", () => openVocForm(null));
+  document.getElementById("vocBackToListBtn").addEventListener("click", () => {
+    vocFormMode.hidden = true;
+    vocListMode.hidden = false;
+    renderVocList();
+  });
+
+  vocSearch.addEventListener("input", () => {
+    vocQuery = vocSearch.value;
+    renderVocList();
+  });
+
+  vocForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    hideError(vocFormError);
+
+    const subject = document.getElementById("vocSubject").value.trim();
+    const name = document.getElementById("vocName").value.trim();
+    if (!subject) { showError(vocFormError, "กรุณากรอกเรื่อง"); return; }
+    if (!name) { showError(vocFormError, "กรุณากรอกชื่อผู้แจ้ง"); return; }
+
+    // เบอร์โทรเป็นทางเดียวที่จะแจ้งผลกลับ -- ตรวจรูปแบบเดียวกับทุกฟอร์มในระบบ
+    // แต่ไม่บังคับกรอก เพราะเรื่องที่มาทางหนังสือร้องเรียนอาจไม่มีเบอร์ติดมา
+    const phoneRaw = document.getElementById("vocPhone").value.trim();
+    let phone = "";
+    if (phoneRaw) {
+      const parsed = readPhoneField(phoneRaw, "เบอร์โทรศัพท์", false);
+      if (parsed.error) { showError(vocFormError, parsed.error); return; }
+      phone = parsed.value;
+    }
+
+    const btn = vocForm.querySelector('button[type="submit"]');
+    setBusy(btn, true, "กำลังบันทึก...");
+    try {
+      await backend.saveWorkItem("voc", {
+        id: vocEditing ? vocEditing.id : newWorkItemId(),
+        title: subject,
+        status: document.getElementById("vocStatus").value,
+        data: {
+          date: document.getElementById("vocDate").value,
+          channel: document.getElementById("vocChannel").value,
+          type: document.getElementById("vocType").value,
+          category: document.getElementById("vocCategory").value,
+          name,
+          phone,
+          ca: document.getElementById("vocCa").value.trim(),
+          location: document.getElementById("vocLocation").value.trim(),
+          detail: document.getElementById("vocDetail").value.trim(),
+          owner: document.getElementById("vocOwner").value.trim(),
+          dueDate: document.getElementById("vocDueDate").value,
+          closedDate: document.getElementById("vocClosedDate").value,
+          action: document.getElementById("vocAction").value.trim()
+        }
+      });
+      await openVocView();
+    } catch (err) {
+      showError(vocFormError, moduleErrorText(err));
+    } finally {
+      setBusy(btn, false);
+    }
+  });
+
+  vocDeleteBtn.addEventListener("click", async () => {
+    if (!vocEditing) return;
+    if (!confirm("ลบเรื่องนี้ใช่หรือไม่?")) return;
+    setBusy(vocDeleteBtn, true, "กำลังลบ...");
+    try {
+      await backend.deleteWorkItem(vocEditing.id);
+      await openVocView();
+    } catch (err) {
+      showError(vocFormError, moduleErrorText(err));
+    } finally {
+      setBusy(vocDeleteBtn, false);
+    }
+  });
+
+  // ทางเข้า/ทางออกของสามโมดูล
+  document.querySelectorAll("[data-service-module]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const key = btn.dataset.serviceModule;
+      if (key === "brochure") { saveNavState({ card: "sideBusiness", module: "brochure" }); openBrochureView(); }
+      if (key === "quotation") { saveNavState({ card: "sideBusiness", module: "quotation" }); openQuotationView(); }
+    });
+  });
+
+  // โบรชัวร์/เสนอราคาเปิดมาจากการ์ดงานธุรกิจเสริม จึงกลับไปที่การ์ดนั้น ไม่ใช่หน้าแรก
+  document.getElementById("brochureBackBtn").addEventListener("click", () => {
+    document.querySelector('.service-card[data-service="sideBusiness"]').click();
+  });
+  document.getElementById("quotationBackBtn").addEventListener("click", () => {
+    document.querySelector('.service-card[data-service="sideBusiness"]').click();
+  });
+  document.getElementById("vocBackBtn").addEventListener("click", () => enterApp());
+
+  /**
+   * ล้างข้อมูลของทั้งสามโมดูลออกจากหน้าจอตอนออกจากระบบ
+   *
+   * เหตุผลเดียวกับ clearWorkspaceScreens(): การออกจากระบบในแอปนี้ไม่ได้โหลดหน้าใหม่
+   * แค่สลับ hidden ของ <section> ชื่อลูกค้า เบอร์โทร และเนื้อหาเรื่องร้องเรียน
+   * ที่วาดไว้แล้วจึงยังอยู่ใน DOM ให้คนถัดไปที่เครื่องเดียวกันเปิด devtools อ่านได้
+   */
+  function clearModuleScreens() {
+    brochures = [];
+    quotations = [];
+    vocCases = [];
+    quoLineModel = [];
+    brochureEditing = null;
+    quotationEditing = null;
+    vocEditing = null;
+    brochureEditPaths = [];
+    quotationQuery = "";
+    vocQuery = "";
+    vocFilter = "all";
+    brochureList.innerHTML = "";
+    quotationList.innerHTML = "";
+    vocList.innerHTML = "";
+    vocChips.innerHTML = "";
+    quoLines.innerHTML = "";
+    quotationSearch.value = "";
+    vocSearch.value = "";
+    quotationForm.reset();
+    vocForm.reset();
+    closeBrochureEditor();
+    closeBrochureViewer();
   }
 
   init();
