@@ -2512,6 +2512,16 @@
     return `${wbsPrefix()}0000`;
   }
 
+  /**
+   * ค่าเริ่มต้นในช่อง WBS (ลำดับลงท้าย .0000) ไม่ใช่เลขจริง เป็นแบบให้พิมพ์ทับ
+   * -- บันทึกเป็นค่าว่างแทน ไม่งั้นใบใหม่ทุกใบจะถือเลขเดียวกันหมดแล้วชนกฎห้ามซ้ำ
+   * (ฝั่งฐานข้อมูลก็ข้ามค่าแบบนี้เหมือนกัน ดู migration 20260921000001)
+   */
+  function wbsValueToSave(raw) {
+    const wbs = String(raw || "").trim();
+    return /\.0+$/.test(wbs) ? "" : wbs;
+  }
+
   function generateTrackingNumber(type) {
     return generateTrackingNumbers(1, type)[0];
   }
@@ -7466,7 +7476,7 @@
       const jobStatus = extJobStatus.value;
       const note = document.getElementById("extNote").value.trim();
       const trackingNumber = extTrackingNumber.value;
-      const wbs = extWbs.value.trim();
+      const wbs = wbsValueToSave(extWbs.value);
       const approvalNo = extApprovalNo.value.trim();
       const approvalDate = extApprovalDate.value;
       const deed = extDeed.value.trim();
