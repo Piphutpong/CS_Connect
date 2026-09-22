@@ -14432,23 +14432,38 @@ ${sheetHtml}
   }
 
   /** ราคาสุทธิตามโปรแกรมประมาณการ กฟภ. -- คืนทุกก้อนไว้โชว์ในตารางด้วย */
+  /**
+   * ปัดเศษขึ้นเป็นจำนวนเต็มบาท -- ใช้กับสี่ก้อนที่ระบบคิดให้เองในใบประมาณการ
+   * (ค่าควบคุมงาน ค่าขนส่ง ค่าเบ็ดเตล็ด ค่าดำเนินการ) ตามที่เจ้าของระบบกำหนด
+   * และตรงกับที่กระดาษคำนวณของแผนกทำอยู่ ส่วนค่าวัสดุกับค่าแรงเป็นค่าที่กรอกเอง
+   * จึงคงทศนิยมไว้ตามที่กรอก
+   *
+   * ลบ 1e-9 ก่อนปัดเพื่อกันเลขทศนิยมของคอมพิวเตอร์ -- 0.05 x 1029 ได้
+   * 51.45000000000001 ซึ่งถ้าปัดขึ้นตรง ๆ จะกลายเป็น 52 ทั้งที่ควรเป็น 51.45 -> 52
+   * (กรณีนี้ตรงกันพอดี แต่เลขที่ลงตัวอยู่แล้วอย่าง 43.80000000000001 จะเพี้ยนเป็น 44
+   * ทั้งที่ควรได้ 44 จาก 43.8 -- กันไว้ให้ผลไม่ขึ้นกับความคลาดเคลื่อนของ float)
+   */
+  function ceilBaht(value) {
+    return Math.ceil((Number(value) || 0) - 1e-9);
+  }
+
   function protectEstimateBreakdown(workKind, materialCost, labourCost) {
     const material = workKind === "remove" ? 0 : quoRound2(materialCost);
     const labour = quoRound2(labourCost);
-    const supervision = quoRound2(labour * 0.30);
+    const supervision = ceilBaht(labour * 0.30);
 
     let misc, transport;
     if (workKind === "remove") {
       // รื้อถอน: ค่าเบ็ดเตล็ดมาจากค่าแรง แล้วค่าขนส่งมาจากค่าเบ็ดเตล็ดอีกที
-      misc = quoRound2(labour * 0.35);
-      transport = quoRound2(misc * 0.25);
+      misc = ceilBaht(labour * 0.35);
+      transport = ceilBaht(misc * 0.25);
     } else {
-      transport = quoRound2(material * 0.05);
-      misc = quoRound2((material + labour + supervision + transport) * 0.05);
+      transport = ceilBaht(material * 0.05);
+      misc = ceilBaht((material + labour + supervision + transport) * 0.05);
     }
 
     const base = material + labour + supervision + transport + misc;
-    const operation = quoRound2(base * 0.05);
+    const operation = ceilBaht(base * 0.05);
     const net = quoRound2(base + operation);
     return { material, labour, supervision, transport, misc, operation, net };
   }
