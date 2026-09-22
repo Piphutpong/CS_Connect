@@ -381,6 +381,21 @@
     async deleteWorkItem() {
       throw new Error("โหมดออฟไลน์ไม่รองรับโมดูลงานใหม่");
     },
+    async loadCrm() {
+      return { customers: [] };
+    },
+    async saveCrmCustomer() {
+      throw new Error("โหมดออฟไลน์ไม่รองรับโมดูลงานใหม่");
+    },
+    async saveCrmSite() {
+      throw new Error("โหมดออฟไลน์ไม่รองรับโมดูลงานใหม่");
+    },
+    async deleteCrmCustomer() {
+      throw new Error("โหมดออฟไลน์ไม่รองรับโมดูลงานใหม่");
+    },
+    async deleteCrmSite() {
+      throw new Error("โหมดออฟไลน์ไม่รองรับโมดูลงานใหม่");
+    },
 
     async uploadBrochureImage() {
       throw new Error("โหมดออฟไลน์ไม่รองรับการอัปโหลดรูป");
@@ -874,6 +889,30 @@
         return callAsUser(() => rpc("delete_work_item", { p_id: id }));
       },
 
+      // CRM -- โหลดลูกค้าพร้อมผู้ติดต่อและสถานที่มาทั้งชุดในคำสั่งเดียว
+      // แผนกหนึ่งมีลูกค้าหลักร้อย โหลดทีเดียวแล้วค้นในเครื่องเร็วกว่าถามทุกครั้ง
+      async loadCrm() {
+        return callAsUser(() => rpc("load_crm", {}));
+      },
+
+      async saveCrmCustomer(customer) {
+        const data = await callAsUser(() => rpc("save_crm_customer", { p_customer: customer }));
+        return data.customer;
+      },
+
+      async saveCrmSite(site) {
+        const data = await callAsUser(() => rpc("save_crm_site", { p_site: site }));
+        return data.site;
+      },
+
+      async deleteCrmCustomer(id) {
+        return callAsUser(() => rpc("delete_crm_customer", { p_id: id }));
+      },
+
+      async deleteCrmSite(id) {
+        return callAsUser(() => rpc("delete_crm_site", { p_id: id }));
+      },
+
       /**
        * อัปรูปโบรชัวร์ขึ้น Storage แล้วคืน path ที่เก็บลง work_items.data.images
        *
@@ -1164,7 +1203,8 @@
     // ส่วน PEA-VOC เป็นการ์ดของตัวเองบนหน้าแรก
     brochure: document.getElementById("brochureView"),
     quotation: document.getElementById("quotationView"),
-    voc: document.getElementById("vocView")
+    voc: document.getElementById("vocView"),
+    mywork: document.getElementById("myWorkView")
   };
 
   function showView(name) {
@@ -3652,6 +3692,12 @@
       // รอสำรวจบนการ์ดคือสิ่งที่หน้าคิวเดิมมีแล้วหน้านี้ไม่มี จึงยกมาไว้ที่นี่แทน
       // (หน้ารายละเอียดของโมดูลงาน -- แท็บแผนผัง/ภาพหน้างาน/ประมาณการ -- ยังอยู่
       // เหมือนเดิม เปิดได้จากการกดการ์ดคำร้องขยายเขตฯ ใบใดก็ได้)
+      if (key === "mywork") {
+        saveNavState({ card: "mywork" });
+        openMyWorkView();
+        return;
+      }
+
       if (WORK_KIND_TITLES[key]) {
         saveNavState({ card: key });
         openWorkList(key);
@@ -3766,6 +3812,11 @@
         requestFormError.hidden = false;
         return;
       }
+    }
+
+    if (formReturnTo === "mywork") {
+      openMyWorkView();
+      return;
     }
 
     if (formReturnTo === "extendWork") {
@@ -15431,6 +15482,690 @@ ${sheetHtml}
     protectCatalogMode.hidden = true;
   }
 
+  // ============================================================== งานของฉัน
+  /**
+   * รวมงานจากทุกที่ในระบบที่เป็นของคนที่ล็อกอินอยู่มาไว้หน้าเดียว
+   *
+   * "ของฉัน" มีสองชั้น และแยกกันชัดเจนบนหน้าจอ:
+   *   งานในมือ    -- ถูกจ่ายงานให้ (assigneeEmail) หรือเป็นผู้รับผิดชอบ (VOC/CRM)
+   *                  คืองานที่ถ้าไม่ทำก็ไม่มีใครทำแทน
+   *   ที่ฉันเพิ่งแตะ -- ฉันสร้างหรือแก้ล่าสุด แต่ไม่ได้ถูกจ่ายงานให้
+   *                  คือไว้ทำต่อจากเมื่อวาน ไม่ใช่ภาระของฉันโดยตรง
+   *
+   * จับคู่ด้วย "อีเมล" เสมอ ไม่ใช่ชื่อที่แสดง -- ชื่อซ้ำกันได้และเปลี่ยนได้
+   * (กฎเดียวกับ audit stamp ทุกจุดในระบบนี้)
+   *
+   * เรื่องสิทธิ์ที่ต้องเข้าใจให้ตรง: แถบ "Work Load ทีม" ซ่อนจากคนที่ไม่ใช่หัวหน้า
+   * เป็นความเรียบร้อยของหน้าจอ ไม่ใช่กำแพงความปลอดภัย -- ข้อมูลคำร้องทั้งชุดถูก
+   * ส่งไปเบราว์เซอร์ของทุกคนอยู่แล้ว (load_workspace ส่งทั้งชุดมาให้ค้นในเครื่อง)
+   * สิ่งที่เป็นกำแพงจริงคือการ "จ่ายงาน" ซึ่ง assign_requests ตรวจสิทธิ์ที่
+   * เซิร์ฟเวอร์ทุกครั้งโดยอ่าน role ใหม่จากฐานข้อมูล
+   */
+  const MYWORK_STALE_KEY = "csconnect_myWorkStaleDays";
+
+  // สถานะที่แปลว่า "ลูกค้าหรือหน่วยงานอื่นส่งกลับมาให้เราทำต่อ" -- ต้องขึ้นก่อน
+  // เสมอไม่ว่าจะค้างมากี่วัน เพราะเป็นงานที่รออยู่ที่ตัวเราคนเดียว
+  const MYWORK_ATTENTION_STATUSES = new Set([
+    "รอเอกสารเพิ่มเติม", "รอแก้ไข", "ผมต. ตีกลับ"
+  ]);
+
+  /**
+   * สถานะที่ถือว่างานจบแล้ว -- คัดออกจาก "งานในมือ" ทั้งหมด
+   *
+   * ต้องตรงกับ app.closed_statuses() ฝั่งฐานข้อมูลเสมอ เป็นการคัดลอกด้วยมือ
+   * แบบเดียวกับ TRACKING_TYPE_CODES และ JOB_STATUS_TONE (ระบบนี้ไม่มีขั้นตอน
+   * build ที่จะแชร์ค่าข้ามฝั่งได้) แก้ที่ไหนต้องแก้อีกที่ด้วย
+   *
+   * "ส่ง ผบร." ตั้งใจไม่อยู่ในนี้ -- เป็นสตริงเดียวกับสถานะกลางทางของขอขยายเขตฯ
+   * ถ้าใส่เข้าไป งานขยายเขตฯ ที่ยังไม่จบจะหายจากงานในมือเงียบ ๆ
+   */
+  const MYWORK_CLOSED_STATUSES = new Set([
+    "ส่งแผนกมิเตอร์แล้ว", "ยกเลิกคำร้อง", "จัดเก็บเอกสาร (ผบส.)", "ส่ง ผสน. แล้ว"
+  ]);
+
+  let myWorkPane = "overview";
+  let myWorkStaleDays = 14;
+  let myWorkQuotations = [];
+  let myWorkVocCases = [];
+  let myWorkCrmCustomers = [];
+  let myWorkTeamPerson = "";     // อีเมลของคนที่หัวหน้ากดดูอยู่
+
+  const myWorkView = document.getElementById("myWorkView");
+  const myWorkError = document.getElementById("myWorkError");
+  const myWorkTitle = document.getElementById("myWorkTitle");
+  const myWorkCount = document.getElementById("myWorkCount");
+  const myWorkStaleSelect = document.getElementById("myWorkStaleDays");
+  const myWorkNavItems = document.querySelectorAll("[data-mywork-pane]");
+  const myWorkModes = document.querySelectorAll("[data-mywork-mode]");
+
+  function myEmail() {
+    return String(getSession()?.email || "").toLowerCase();
+  }
+
+  function sameEmail(value) {
+    const me = myEmail();
+    return Boolean(me) && String(value || "").toLowerCase() === me;
+  }
+
+  /**
+   * วันที่ "คืบหน้าล่าสุด" ของคำร้อง -- ใช้เวลาที่สถานะเปลี่ยนครั้งสุดท้ายเป็นหลัก
+   * ตามที่เจ้าของระบบเลือก เพราะสะท้อนว่า "ไม่มีความคืบหน้ามากี่วัน" ตรงกว่าวันที่
+   * รับคำร้อง (คำร้องเก่าที่เพิ่งขยับสถานะเมื่อวานไม่ควรนับว่าค้าง)
+   * ไล่ไปหา updatedAt -> createdAt -> receivedDate เมื่อไม่มีประวัติสถานะ
+   * (คำร้องที่บันทึกไว้ก่อนระบบมี statusHistory)
+   */
+  function lastProgressAt(record) {
+    const history = Array.isArray(record.statusHistory) ? record.statusHistory : [];
+    for (let i = history.length - 1; i >= 0; i -= 1) {
+      const at = Number(history[i] && history[i].at);
+      if (at > 0) return at;
+    }
+    if (Number(record.updatedAt) > 0) return Number(record.updatedAt);
+    if (Number(record.createdAt) > 0) return Number(record.createdAt);
+    if (record.receivedDate) {
+      const ms = Date.parse(record.receivedDate);
+      if (!Number.isNaN(ms)) return ms;
+    }
+    return 0;
+  }
+
+  function daysSince(ms) {
+    if (!(Number(ms) > 0)) return null;
+    return Math.floor((Date.now() - Number(ms)) / 86400000);
+  }
+
+  function isClosedRequest(record) {
+    return MYWORK_CLOSED_STATUSES.has(String(record.jobStatus || ""));
+  }
+
+  /** คำร้องที่ถูกจ่ายงานให้ฉันและยังไม่ปิด */
+  function myAssignedRequests() {
+    return getRequests().filter(r => sameEmail(r.assigneeEmail) && !isClosedRequest(r));
+  }
+
+  /** คำร้องที่ฉันสร้าง/แก้ล่าสุด แต่ไม่ได้ถูกจ่ายให้ฉัน และยังไม่ปิด */
+  function myTouchedRequests() {
+    return getRequests().filter(r =>
+      !isClosedRequest(r)
+      && !sameEmail(r.assigneeEmail)
+      && (sameEmail(r.createdByEmail) || sameEmail(r.updatedByEmail)));
+  }
+
+  function myQuotations() {
+    return myWorkQuotations.filter(q =>
+      !(q.data && q.data.isTemplate)
+      && q.status !== "ยกเลิก"
+      && (sameEmail(q.createdByEmail) || sameEmail(q.updatedByEmail)));
+  }
+
+  function myVocCases() {
+    return myWorkVocCases.filter(v => {
+      const d = v.data || {};
+      if (v.status === "ปิดเรื่อง" || v.status === "แจ้งผลลูกค้าแล้ว") return false;
+      // เรื่องเก่าที่บันทึกก่อนระบบเก็บอีเมลผู้รับผิดชอบ ยังจับคู่ด้วยชื่อได้
+      return sameEmail(d.ownerEmail)
+        || (!d.ownerEmail && d.owner && d.owner === (getSession()?.name || "\u0000"));
+    });
+  }
+
+  function myCrmCustomers() {
+    return myWorkCrmCustomers.filter(c => sameEmail(c.ownerEmail));
+  }
+
+  /** งานที่ต้องสะกิด -- สถานะที่รอเราอยู่ หรือค้างไม่คืบหน้าเกินจำนวนวันที่ตั้งไว้ */
+  function myAttentionItems() {
+    const out = [];
+
+    myAssignedRequests().forEach(r => {
+      const stuck = daysSince(lastProgressAt(r));
+      const waiting = MYWORK_ATTENTION_STATUSES.has(String(r.jobStatus || ""));
+      if (!waiting && !(stuck !== null && stuck >= myWorkStaleDays)) return;
+      out.push({
+        kind: "request",
+        record: r,
+        title: r.customerName || r.subject || "(ไม่มีชื่อ)",
+        meta: (REQUEST_TYPES[r.type] || r.type) + " · " + (r.trackingNumber || r.requestNumber || ""),
+        status: r.jobStatus || "",
+        reason: waiting ? "รอเราดำเนินการ" : "ไม่คืบหน้า " + stuck + " วัน",
+        days: stuck === null ? -1 : stuck,
+        urgent: waiting
+      });
+    });
+
+    myVocCases().forEach(v => {
+      const due = (v.data || {}).dueDate;
+      if (!due) return;
+      const late = Math.floor((Date.now() - Date.parse(due)) / 86400000);
+      if (!(late >= 0)) return;
+      out.push({
+        kind: "voc",
+        record: v,
+        title: v.title || "(ไม่มีเรื่อง)",
+        meta: "PEA-VOC · กำหนด " + formatThaiDate(due),
+        status: v.status || "",
+        reason: late === 0 ? "ครบกำหนดวันนี้" : "เลยกำหนด " + late + " วัน",
+        days: late,
+        urgent: true
+      });
+    });
+
+    myQuotations().forEach(q => {
+      if (q.status !== "ร่าง") return;
+      const idle = daysSince(q.updatedAt || q.createdAt);
+      if (!(idle !== null && idle >= 7)) return;
+      out.push({
+        kind: "quotation",
+        record: q,
+        title: (q.data && q.data.subject) || q.title || "(ไม่มีเรื่อง)",
+        meta: "ใบเสนอราคา · " + ((q.data && q.data.refNo) || "ยังไม่มีเลขที่"),
+        status: q.status || "",
+        reason: "เป็นร่างค้างมา " + idle + " วัน",
+        days: idle,
+        urgent: false
+      });
+    });
+
+    // เรื่องที่รอเราอยู่ขึ้นก่อน แล้วค่อยเรียงตามจำนวนวันที่ค้างมากไปน้อย
+    return out.sort((a, b) =>
+      (b.urgent ? 1 : 0) - (a.urgent ? 1 : 0) || b.days - a.days);
+  }
+
+  // ------------------------------------------------------------ เปิดหน้า
+  async function openMyWorkView() {
+    showView("mywork");
+    hideError(myWorkError);
+    myWorkPane = "overview";
+    myWorkTeamPerson = "";
+    try {
+      myWorkStaleDays = Number(localStorage.getItem(MYWORK_STALE_KEY)) || 14;
+    } catch { myWorkStaleDays = 14; }
+    myWorkStaleSelect.value = String(myWorkStaleDays);
+
+    // แถบ Work Load ทีมเป็นของหัวหน้า -- ซ่อนจากคนอื่นเพื่อความเรียบร้อยของหน้าจอ
+    // ไม่ใช่กำแพง (ดูคำอธิบายหัวโมดูล) การจ่ายงานยังตรวจสิทธิ์ที่เซิร์ฟเวอร์เสมอ
+    const isSupervisor = Boolean(getSession()?.isSupervisor || getSession()?.isAdmin);
+    myWorkNavItems.forEach(item => {
+      if (item.dataset.myworkPane === "team") item.hidden = !isSupervisor;
+    });
+
+    renderMyWork();
+    // สามโมดูลนี้ไม่ได้อยู่ในแคชหลัก โหลดเพิ่มแบบไม่บล็อก -- โหลดไม่ได้ก็ยังดูงาน
+    // คำร้องได้ตามปกติ ไม่ใช่เหตุให้ทั้งหน้าใช้ไม่ได้
+    await Promise.allSettled([
+      backend.loadWorkItems("quotation").then(list => { myWorkQuotations = list || []; }),
+      backend.loadWorkItems("voc").then(list => { myWorkVocCases = list || []; }),
+      backend.loadCrm().then(data => { myWorkCrmCustomers = (data && data.customers) || []; })
+    ]);
+    renderMyWork();
+  }
+
+  function setMyWorkPane(pane) {
+    myWorkPane = pane;
+    if (pane !== "team") myWorkTeamPerson = "";
+    renderMyWork();
+  }
+
+  myWorkNavItems.forEach(item => {
+    item.addEventListener("click", () => setMyWorkPane(item.dataset.myworkPane));
+  });
+
+  myWorkStaleSelect.addEventListener("change", () => {
+    myWorkStaleDays = Number(myWorkStaleSelect.value) || 14;
+    try { localStorage.setItem(MYWORK_STALE_KEY, String(myWorkStaleDays)); } catch { /* ไม่เป็นไร */ }
+    renderMyWork();
+  });
+
+  document.getElementById("myWorkBackBtn").addEventListener("click", enterApp);
+
+  // ------------------------------------------------------------ วาดหน้าจอ
+  function renderMyWork() {
+    myWorkNavItems.forEach(item =>
+      item.classList.toggle("active", item.dataset.myworkPane === myWorkPane));
+    myWorkModes.forEach(el => { el.hidden = el.dataset.myworkMode !== myWorkPane; });
+
+    const assigned = myAssignedRequests();
+    const badge = document.querySelector('[data-mywork-badge="jobs"]');
+    const total = assigned.length + myVocCases().length + myCrmCustomers().length + myQuotations().length;
+    badge.textContent = String(total);
+    badge.hidden = total === 0;
+
+    if (myWorkPane === "overview") renderMyWorkOverview();
+    if (myWorkPane === "jobs") renderMyWorkJobs();
+    if (myWorkPane === "recent") renderMyWorkRecent();
+    if (myWorkPane === "team") renderMyWorkTeam();
+  }
+
+  function myWorkEmpty(text) {
+    const div = document.createElement("div");
+    div.className = "request-empty";
+    div.textContent = text;
+    return div;
+  }
+
+  function renderMyWorkOverview() {
+    myWorkTitle.textContent = "ภาพรวมงานของฉัน";
+    const assigned = myAssignedRequests();
+    myWorkCount.textContent = assigned.length
+      ? "งานในมือ " + assigned.length + " คำร้อง"
+      : "ยังไม่มีคำร้องที่จ่ายงานให้คุณ";
+
+    // ① งานที่ต้องสะกิด
+    const attentionEl = document.getElementById("myWorkAttention");
+    attentionEl.innerHTML = "";
+    const items = myAttentionItems();
+    const head = document.createElement("h3");
+    head.className = "mywork-section-head";
+    head.textContent = items.length ? "ต้องทำก่อน (" + items.length + ")" : "ต้องทำก่อน";
+    attentionEl.appendChild(head);
+
+    if (!items.length) {
+      attentionEl.appendChild(myWorkEmpty("ไม่มีงานค้างหรือเลยกำหนด"));
+    } else {
+      items.slice(0, 20).forEach(item => {
+        const row = document.createElement("button");
+        row.type = "button";
+        row.className = "mywork-attention-row";
+        if (item.urgent) row.classList.add("is-urgent");
+
+        const main = document.createElement("div");
+        main.className = "mywork-attention-main";
+        const title = document.createElement("div");
+        title.className = "mywork-attention-title";
+        title.textContent = item.title;
+        const meta = document.createElement("div");
+        meta.className = "mywork-attention-meta";
+        meta.textContent = item.meta;
+        main.append(title, meta);
+
+        const status = document.createElement("span");
+        status.className = "request-badge request-badge-status";
+        const tone = JOB_STATUS_TONE[item.status];
+        if (tone) status.classList.add("tone-" + tone);
+        status.textContent = item.status || "-";
+
+        const reason = document.createElement("span");
+        reason.className = "mywork-reason";
+        reason.textContent = item.reason;
+
+        row.append(main, status, reason);
+        row.addEventListener("click", () => openMyWorkItem(item));
+        attentionEl.appendChild(row);
+      });
+      if (items.length > 20) {
+        attentionEl.appendChild(myWorkEmpty("และอีก " + (items.length - 20) + " รายการ -- ดูทั้งหมดที่ “งานในมือ”"));
+      }
+    }
+
+    // ② การ์ดนับจำนวนต่อประเภทงาน
+    const tiles = document.getElementById("myWorkTiles");
+    tiles.innerHTML = "";
+    const byType = new Map();
+    assigned.forEach(r => {
+      const key = r.type || "other";
+      byType.set(key, (byType.get(key) || 0) + 1);
+    });
+    const tileDefs = [];
+    ["power", "extend", "general", "deposit"].forEach(type => {
+      if (byType.get(type)) tileDefs.push({
+        label: REQUEST_TYPES[type] || type,
+        count: byType.get(type),
+        go: () => setMyWorkPane("jobs")
+      });
+    });
+    if (myQuotations().length) tileDefs.push({
+      label: "ใบเสนอราคา", count: myQuotations().length, go: () => openQuotationView()
+    });
+    if (myVocCases().length) tileDefs.push({
+      label: "PEA-VOC", count: myVocCases().length, go: () => openVocView()
+    });
+    // หน้าลูกค้า (CRM) ยังทำไม่เสร็จ -- การ์ดจะขึ้นเองเมื่อหน้านั้นมีจริง
+    // ไม่โชว์ปุ่มที่กดแล้วไม่มีอะไรเกิดขึ้น
+    if (views.crm && myCrmCustomers().length) tileDefs.push({
+      label: "ลูกค้าที่ดูแล", count: myCrmCustomers().length, go: () => openCrmView()
+    });
+
+    if (!tileDefs.length) {
+      tiles.appendChild(myWorkEmpty("ยังไม่มีงานในมือ"));
+    } else {
+      tileDefs.forEach(def => {
+        const tile = document.createElement("button");
+        tile.type = "button";
+        tile.className = "mywork-tile";
+        const count = document.createElement("strong");
+        count.textContent = String(def.count);
+        const label = document.createElement("span");
+        label.textContent = def.label;
+        tile.append(count, label);
+        tile.addEventListener("click", def.go);
+        tiles.appendChild(tile);
+      });
+    }
+
+    // ③ คิวรอสำรวจของฉัน
+    const queueEl = document.getElementById("myWorkQueue");
+    queueEl.innerHTML = "";
+    const queue = assigned
+      .filter(r => r.jobStatus === "รอสำรวจ")
+      .sort((a, b) => String(a.receivedDate || "").localeCompare(String(b.receivedDate || "")));
+    if (queue.length) {
+      const qHead = document.createElement("h3");
+      qHead.className = "mywork-section-head";
+      qHead.textContent = "คิวรอสำรวจของฉัน (" + queue.length + ")";
+      queueEl.appendChild(qHead);
+      queue.slice(0, 10).forEach((r, index) => {
+        const row = document.createElement("button");
+        row.type = "button";
+        row.className = "mywork-queue-row";
+        const no = document.createElement("span");
+        no.className = "mywork-queue-no";
+        no.textContent = String(index + 1);
+        const text = document.createElement("span");
+        text.textContent = (r.customerName || "(ไม่มีชื่อ)")
+          + " · " + (r.trackingNumber || "")
+          + " · รับเมื่อ " + formatThaiDate(r.receivedDate);
+        row.append(no, text);
+        row.addEventListener("click", () => openMyWorkItem({ kind: "request", record: r }));
+        queueEl.appendChild(row);
+      });
+    }
+  }
+
+  /** เปิดงานหนึ่งชิ้นไปที่หน้าเดิมของงานนั้น -- ไม่สร้างหน้าแก้ไขซ้ำอีกชุด */
+  function openMyWorkItem(item) {
+    if (item.kind === "request") {
+      openRequestForm(item.record.type, item.record, { returnTo: "mywork" });
+      return;
+    }
+    if (item.kind === "quotation") { openQuotationView(); return; }
+    if (item.kind === "voc") { openVocView(); return; }
+  }
+
+  function renderMyWorkJobs() {
+    myWorkTitle.textContent = "งานในมือ";
+    const assigned = myAssignedRequests();
+    myWorkCount.textContent = "ทั้งหมด " + assigned.length + " คำร้อง";
+
+    const host = document.getElementById("myWorkJobs");
+    host.innerHTML = "";
+    if (!assigned.length) {
+      host.appendChild(myWorkEmpty("ยังไม่มีคำร้องที่จ่ายงานให้คุณ"));
+      return;
+    }
+
+    // แยกตามประเภทงานก่อน แล้วค่อยแยกตามสถานะในแต่ละประเภท -- ตอบคำถาม
+    // "งานขยายเขตฯ ของฉันติดอยู่ขั้นไหนบ้าง" ได้ในหน้าจอเดียว
+    ["power", "extend", "general", "deposit"].forEach(type => {
+      const rows = assigned.filter(r => r.type === type);
+      if (!rows.length) return;
+
+      const head = document.createElement("h3");
+      head.className = "mywork-section-head";
+      head.textContent = (REQUEST_TYPES[type] || type) + " (" + rows.length + ")";
+      host.appendChild(head);
+
+      const byStatus = new Map();
+      rows.forEach(r => {
+        const key = r.jobStatus || "ไม่ระบุสถานะ";
+        if (!byStatus.has(key)) byStatus.set(key, []);
+        byStatus.get(key).push(r);
+      });
+
+      byStatus.forEach((list, status) => {
+        const group = document.createElement("div");
+        group.className = "mywork-status-group";
+        const label = document.createElement("span");
+        label.className = "request-badge request-badge-status";
+        const tone = JOB_STATUS_TONE[status];
+        if (tone) label.classList.add("tone-" + tone);
+        label.textContent = status + " · " + list.length;
+        group.appendChild(label);
+
+        list
+          .sort((a, b) => lastProgressAt(a) - lastProgressAt(b))
+          .forEach(r => {
+            const row = document.createElement("button");
+            row.type = "button";
+            row.className = "mywork-job-row";
+            const stuck = daysSince(lastProgressAt(r));
+            if (stuck !== null && stuck >= myWorkStaleDays) row.classList.add("is-stale");
+
+            const name = document.createElement("span");
+            name.className = "mywork-job-name";
+            name.textContent = (r.trackingNumber || r.requestNumber || "-")
+              + " · " + (r.customerName || r.subject || "(ไม่มีชื่อ)");
+            const age = document.createElement("span");
+            age.className = "mywork-job-age";
+            age.textContent = stuck === null ? "" : "ไม่คืบหน้า " + stuck + " วัน";
+            row.append(name, age);
+            row.addEventListener("click", () => openMyWorkItem({ kind: "request", record: r }));
+            group.appendChild(row);
+          });
+
+        host.appendChild(group);
+      });
+    });
+  }
+
+  function renderMyWorkRecent() {
+    myWorkTitle.textContent = "ที่ฉันเพิ่งแตะ";
+    const rows = myTouchedRequests()
+      .sort((a, b) => (Number(b.updatedAt || b.createdAt) || 0) - (Number(a.updatedAt || a.createdAt) || 0))
+      .slice(0, 30);
+    myWorkCount.textContent = rows.length
+      ? "คำร้องที่คุณสร้างหรือแก้ไขล่าสุด และยังไม่ปิด"
+      : "ไม่มีรายการ";
+
+    const host = document.getElementById("myWorkRecent");
+    host.innerHTML = "";
+    if (!rows.length) {
+      host.appendChild(myWorkEmpty("ยังไม่มีคำร้องที่คุณสร้างหรือแก้ไขค้างไว้"));
+      return;
+    }
+    rows.forEach(r => {
+      const row = document.createElement("button");
+      row.type = "button";
+      row.className = "mywork-job-row";
+      const name = document.createElement("span");
+      name.className = "mywork-job-name";
+      name.textContent = (REQUEST_TYPES[r.type] || r.type)
+        + " · " + (r.trackingNumber || r.requestNumber || "-")
+        + " · " + (r.customerName || r.subject || "(ไม่มีชื่อ)");
+      const when = document.createElement("span");
+      when.className = "mywork-job-age";
+      when.textContent = formatThaiDateTime(r.updatedAt || r.createdAt);
+      row.append(name, when);
+      row.addEventListener("click", () => openMyWorkItem({ kind: "request", record: r }));
+      host.appendChild(row);
+    });
+  }
+
+  /**
+   * Work Load ของทีม -- นับจากคำร้องที่ยังไม่ปิดทั้งหมด จัดกลุ่มตามอีเมลผู้รับงาน
+   * แถว "ยังไม่ได้จ่ายงาน" อยู่ล่างสุดเสมอ เพราะเป็นกองที่หัวหน้าต้องตัดสินใจ
+   * ไม่ใช่ภาระของใครคนใดคนหนึ่ง
+   */
+  function renderMyWorkTeam() {
+    myWorkTitle.textContent = "Work Load ทีม";
+    const host = document.getElementById("myWorkTeam");
+    host.innerHTML = "";
+
+    const open = getRequests().filter(r => !isClosedRequest(r));
+    const people = new Map();
+    const ensure = (email, name) => {
+      const key = String(email || "").toLowerCase();
+      if (!people.has(key)) {
+        people.set(key, { email: key, name: name || "", total: 0, stale: 0, survey: 0, byType: new Map() });
+      }
+      const row = people.get(key);
+      if (!row.name && name) row.name = name;
+      return row;
+    };
+
+    open.forEach(r => {
+      // คำร้องประเภทที่ไม่มีการจ่ายงานเลยไม่ควรถูกนับเป็นภาระของใคร
+      if (!r.assigneeEmail && !WORK_KIND_ASSIGNABLE[r.type]) return;
+      const row = ensure(r.assigneeEmail, r.assignee);
+      row.total += 1;
+      row.byType.set(r.type, (row.byType.get(r.type) || 0) + 1);
+      const stuck = daysSince(lastProgressAt(r));
+      if (stuck !== null && stuck >= myWorkStaleDays) row.stale += 1;
+      if (r.jobStatus === "รอสำรวจ") row.survey += 1;
+    });
+
+    const rows = Array.from(people.values())
+      .sort((a, b) => {
+        if (!a.email) return 1;          // ยังไม่ได้จ่ายงาน -> ล่างสุดเสมอ
+        if (!b.email) return -1;
+        return b.total - a.total;
+      });
+
+    myWorkCount.textContent = "คำร้องที่ยังไม่ปิด " + open.length + " รายการ · "
+      + rows.filter(r => r.email).length + " คนที่มีงานในมือ";
+
+    if (!rows.length) {
+      host.appendChild(myWorkEmpty("ยังไม่มีคำร้องที่ต้องจ่ายงาน"));
+      return;
+    }
+
+    const table = document.createElement("table");
+    table.className = "price-table mywork-team-table";
+    table.innerHTML = `
+      <thead><tr>
+        <th>เจ้าหน้าที่</th>
+        <th class="mywork-num">งานในมือ</th>
+        <th class="mywork-num">ขอใช้ไฟฟ้า</th>
+        <th class="mywork-num">ขยายเขตฯ</th>
+        <th class="mywork-num">รอสำรวจ</th>
+        <th class="mywork-num">ค้างเกินกำหนด</th>
+      </tr></thead>`;
+    const tbody = document.createElement("tbody");
+
+    const max = rows.reduce((m, r) => (r.email ? Math.max(m, r.total) : m), 0);
+    rows.forEach(person => {
+      const tr = document.createElement("tr");
+      tr.className = "mywork-team-row";
+      if (!person.email) tr.classList.add("is-unassigned");
+      if (sameEmail(person.email)) tr.classList.add("is-me");
+
+      const tdName = document.createElement("td");
+      const nameBtn = document.createElement("button");
+      nameBtn.type = "button";
+      nameBtn.className = "mywork-person-btn";
+      nameBtn.textContent = person.email
+        ? (person.name || person.email) + (sameEmail(person.email) ? " (คุณ)" : "")
+        : "ยังไม่ได้จ่ายงาน";
+      nameBtn.addEventListener("click", () => {
+        myWorkTeamPerson = myWorkTeamPerson === person.email ? "" : person.email;
+        renderMyWorkTeam();
+      });
+      tdName.appendChild(nameBtn);
+
+      // แถบสัดส่วนภาระ -- เทียบกันด้วยสายตาได้เร็วกว่าการอ่านตัวเลขทีละช่อง
+      if (person.email && max > 0) {
+        const bar = document.createElement("div");
+        bar.className = "mywork-load-bar";
+        const fill = document.createElement("span");
+        fill.style.width = Math.round((person.total / max) * 100) + "%";
+        bar.appendChild(fill);
+        tdName.appendChild(bar);
+      }
+
+      const num = (value, cls) => {
+        const td = document.createElement("td");
+        td.className = "mywork-num" + (cls ? " " + cls : "");
+        td.textContent = value > 0 ? String(value) : "-";
+        return td;
+      };
+
+      tr.append(
+        tdName,
+        num(person.total, "mywork-total"),
+        num(person.byType.get("power") || 0),
+        num(person.byType.get("extend") || 0),
+        num(person.survey),
+        num(person.stale, person.stale > 0 ? "mywork-stale" : "")
+      );
+      tbody.appendChild(tr);
+
+      // กดที่ชื่อแล้วกางงานของคนนั้นต่อท้ายแถว ไม่ต้องเปลี่ยนหน้า
+      if (myWorkTeamPerson === person.email) {
+        const detail = document.createElement("tr");
+        const cell = document.createElement("td");
+        cell.colSpan = 6;
+        cell.className = "mywork-person-detail";
+        const list = open
+          .filter(r => String(r.assigneeEmail || "").toLowerCase() === person.email)
+          .sort((a, b) => lastProgressAt(a) - lastProgressAt(b));
+        if (!list.length) {
+          cell.appendChild(myWorkEmpty("ไม่มีงาน"));
+        } else {
+          list.forEach(r => {
+            const row = document.createElement("button");
+            row.type = "button";
+            row.className = "mywork-job-row";
+            const stuck = daysSince(lastProgressAt(r));
+            if (stuck !== null && stuck >= myWorkStaleDays) row.classList.add("is-stale");
+            const name = document.createElement("span");
+            name.className = "mywork-job-name";
+            name.textContent = (r.trackingNumber || r.requestNumber || "-")
+              + " · " + (r.customerName || "(ไม่มีชื่อ)")
+              + " · " + (r.jobStatus || "");
+            const age = document.createElement("span");
+            age.className = "mywork-job-age";
+            age.textContent = stuck === null ? "" : "ไม่คืบหน้า " + stuck + " วัน";
+            row.append(name, age);
+            row.addEventListener("click", () => openMyWorkItem({ kind: "request", record: r }));
+            cell.appendChild(row);
+          });
+        }
+        detail.appendChild(cell);
+        tbody.appendChild(detail);
+      }
+    });
+
+    table.appendChild(tbody);
+    host.appendChild(table);
+
+    const note = document.createElement("p");
+    note.className = "field-hint";
+    note.textContent = "เรียงตามภาระมากไปน้อย · กดที่ชื่อเพื่อดูงานของคนนั้น · "
+      + "“ค้างเกินกำหนด” นับจากวันที่เปลี่ยนสถานะล่าสุด ไม่ใช่วันที่รับคำร้อง";
+    host.appendChild(note);
+  }
+
+  /** ล้างหน้างานของฉันตอนออกจากระบบ -- เป็นข้อมูลลูกค้าเหมือนหน้าอื่น */
+  function clearMyWorkScreens() {
+    myWorkQuotations = [];
+    myWorkVocCases = [];
+    myWorkCrmCustomers = [];
+    myWorkTeamPerson = "";
+    myWorkPane = "overview";
+    document.getElementById("myWorkAttention").innerHTML = "";
+    document.getElementById("myWorkTiles").innerHTML = "";
+    document.getElementById("myWorkQueue").innerHTML = "";
+    document.getElementById("myWorkJobs").innerHTML = "";
+    document.getElementById("myWorkRecent").innerHTML = "";
+    document.getElementById("myWorkTeam").innerHTML = "";
+  }
+
+  /**
+   * แปลงชื่อผู้รับผิดชอบ VOC ที่พิมพ์ไว้ เป็นอีเมลของเจ้าหน้าที่คนนั้น
+   *
+   * ช่องนี้เป็นข้อความอิสระ (พิมพ์ชื่อใครก็ได้ รวมถึงคนนอกระบบ) จึงจับคู่กับ
+   * รายชื่อเจ้าหน้าที่แบบ "เจอก็ใช้ ไม่เจอก็ปล่อยว่าง" -- ไม่บังคับให้ต้องเป็น
+   * คนในระบบ แต่ถ้าเป็น จะได้อีเมลติดไปด้วยเพื่อให้หน้า "งานของฉัน" จับคู่ได้แม่น
+   * (ชื่อที่แสดงไม่ซ้ำและไม่ถาวร -- กฎเดียวกับ audit stamp ทุกจุดในระบบนี้)
+   *
+   * เรื่องเก่าที่บันทึกไว้ก่อนมีช่องนี้จะไม่มีอีเมล หน้างานของฉันจึงยังเทียบด้วย
+   * ชื่อเป็นทางสำรองให้ด้วย
+   */
+  function vocOwnerEmailFor(name) {
+    const target = String(name || "").trim();
+    if (!target) return "";
+    const found = (staffRoster || []).find(p => String(p.name || "").trim() === target);
+    return found ? found.email || "" : "";
+  }
+
   // -------------------------------------------- ระบบรับฟังเสียงของลูกค้า (VOC)
   const vocListMode = document.getElementById("vocListMode");
   const vocFormMode = document.getElementById("vocFormMode");
@@ -15596,6 +16331,9 @@ ${sheetHtml}
     vocFormMode.hidden = false;
     hideError(vocFormError);
     window.scrollTo(0, 0);
+    // โหลดรายชื่อเจ้าหน้าที่ไว้ให้ vocOwnerEmailFor() จับคู่ชื่อ -> อีเมลตอนบันทึก
+    // ล้มเหลวก็บันทึกได้ตามปกติ แค่ไม่มีอีเมลติดไปด้วย (ดูคำอธิบายที่ฟังก์ชันนั้น)
+    if (!(staffRoster || []).length) refreshStaffRoster().catch(() => { /* ไม่เป็นไร */ });
 
     const d = item ? (item.data || {}) : {};
     vocFormTitle.textContent = item ? "รายละเอียดเรื่อง" : "รับเรื่องใหม่";
@@ -15671,6 +16409,7 @@ ${sheetHtml}
           location: document.getElementById("vocLocation").value.trim(),
           detail: document.getElementById("vocDetail").value.trim(),
           owner: document.getElementById("vocOwner").value.trim(),
+          ownerEmail: vocOwnerEmailFor(document.getElementById("vocOwner").value.trim()),
           dueDate: document.getElementById("vocDueDate").value,
           closedDate: document.getElementById("vocClosedDate").value,
           action: document.getElementById("vocAction").value.trim()
@@ -15758,6 +16497,7 @@ ${sheetHtml}
     vocSearch.value = "";
     vocForm.reset();
     clearQuotationScreens();
+    clearMyWorkScreens();
     closeBrochureEditor();
     closeBrochureViewer();
   }

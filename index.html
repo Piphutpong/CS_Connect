@@ -24,7 +24,7 @@
 <title>CS Connect</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=Sarabun:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=20260922o">
+<link rel="stylesheet" href="style.css?v=20260922p">
 </head>
 <body>
 
@@ -291,6 +291,14 @@
     </div>
 
     <div class="service-grid">
+      <button class="service-card" data-service="mywork">
+        <span class="service-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none"><path d="M4 7h16v13H4z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M9 7V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2M8 12h8M8 16h5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+        </span>
+        <span class="service-title">งานของฉัน</span>
+        <span class="service-desc">งานทั้งหมดที่อยู่ในมือของคุณจากทุกประเภทงาน ที่เดียวจบ พร้อมงานที่ค้างเกินกำหนด</span>
+      </button>
+
       <button class="service-card" data-service="requests">
         <span class="service-icon" aria-hidden="true">
           <svg viewBox="0 0 24 24" fill="none"><path d="M13 2 3 14h7l-1 8 11-14h-7l1-6Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"/></svg>
@@ -356,6 +364,87 @@
 </section>
 
 <!-- ===== REQUESTS WORKSPACE ===== -->
+<!-- ===== งานของฉัน =====
+     รวมงานจากทุกที่ในระบบที่ "เป็นของคนนี้" มาไว้หน้าเดียว -- คำร้องที่ถูกจ่ายงาน
+     ให้ (assigneeEmail), เรื่อง VOC ที่รับผิดชอบ, ลูกค้า CRM ที่ดูแล, ใบเสนอราคา
+     ที่ทำค้างไว้ เจ้าหน้าที่จึงไม่ต้องไล่เปิดทีละโมดูลเพื่อดูว่าตัวเองมีงานอะไรบ้าง
+     แถบ "Work Load ทีม" เห็นเฉพาะหัวหน้า -- ดูรายละเอียดเรื่องสิทธิ์ที่ openMyWorkView() -->
+<section id="myWorkView" class="app-view" hidden>
+  <header class="topbar">
+    <div class="topbar-brand">
+      <button id="myWorkBackBtn" class="btn btn-ghost btn-icon" aria-label="ย้อนกลับ">
+        <svg viewBox="0 0 24 24" fill="none"><path d="M15 18l-6-6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+      <span class="topbar-title">งานของฉัน</span>
+    </div>
+    <div class="topbar-user">
+      <span id="userGreeting8" class="user-greeting"></span>
+      <button id="logoutBtn8" class="btn btn-ghost">ออกจากระบบ</button>
+    </div>
+  </header>
+
+  <div class="requests-layout">
+    <nav class="requests-sidebar">
+      <button type="button" class="requests-nav-item active" data-mywork-pane="overview">
+        <svg viewBox="0 0 24 24" fill="none"><path d="M4 13h6V4H4zM14 20h6v-9h-6zM4 20h6v-4H4zM14 8h6V4h-6z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>
+        ภาพรวม
+      </button>
+      <button type="button" class="requests-nav-item" data-mywork-pane="jobs">
+        <svg viewBox="0 0 24 24" fill="none"><path d="M4 6h16M4 12h16M4 18h10" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+        งานในมือ
+        <span class="nav-badge" data-mywork-badge="jobs" hidden>0</span>
+      </button>
+      <button type="button" class="requests-nav-item" data-mywork-pane="recent">
+        <svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.6"/><path d="M12 7v5l3.5 2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+        ที่ฉันเพิ่งแตะ
+      </button>
+      <button type="button" class="requests-nav-item" data-mywork-pane="team" hidden>
+        <svg viewBox="0 0 24 24" fill="none"><circle cx="9" cy="8" r="3.2" stroke="currentColor" stroke-width="1.6"/><path d="M3.5 19c0-3 2.5-4.8 5.5-4.8s5.5 1.8 5.5 4.8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><path d="M16 5.5a3 3 0 0 1 0 5.6M17.5 14.4c2 .6 3.5 2.2 3.5 4.6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+        Work Load ทีม
+      </button>
+    </nav>
+
+    <main class="requests-content">
+      <div class="requests-content-heading">
+        <div class="requests-content-heading-row">
+          <div>
+            <h2 id="myWorkTitle">ภาพรวมงานของฉัน</h2>
+            <p id="myWorkCount" class="requests-count"></p>
+          </div>
+          <div class="requests-heading-actions">
+            <label class="quo-bar-field">
+              <span>ถือว่าค้างเมื่อไม่คืบหน้าเกิน</span>
+              <select id="myWorkStaleDays">
+                <option value="7">7 วัน</option>
+                <option value="14" selected>14 วัน</option>
+                <option value="30">30 วัน</option>
+                <option value="60">60 วัน</option>
+              </select>
+            </label>
+          </div>
+        </div>
+      </div>
+      <p id="myWorkError" class="form-error" hidden></p>
+
+      <!-- ① ภาพรวม -->
+      <div id="myWorkOverview" data-mywork-mode="overview">
+        <div id="myWorkAttention" class="mywork-attention"></div>
+        <div id="myWorkTiles" class="mywork-tiles"></div>
+        <div id="myWorkQueue" class="mywork-queue"></div>
+      </div>
+
+      <!-- ② งานในมือ แยกตามประเภทแล้วแยกตามสถานะ -->
+      <div id="myWorkJobs" data-mywork-mode="jobs" hidden></div>
+
+      <!-- ③ ที่ฉันเพิ่งแตะ -->
+      <div id="myWorkRecent" data-mywork-mode="recent" hidden></div>
+
+      <!-- ④ Work Load ทีม (หัวหน้าเท่านั้น) -->
+      <div id="myWorkTeam" data-mywork-mode="team" hidden></div>
+    </main>
+  </div>
+</section>
+
 <section id="requestsView" class="app-view" hidden>
   <header class="topbar">
     <div class="topbar-brand">
@@ -2414,6 +2503,6 @@
      **ต้องเปลี่ยนเลขนี้ทุกครั้งที่แก้ app.js / style.css / track.js / qr.js**
      ไม่งั้นผู้ใช้บางคนจะยังได้ไฟล์เก่าไปอีกพักใหญ่ -->
 <script src="vendor/supabase.js?v=2.116.0"></script>
-<script src="app.js?v=20260922o"></script>
+<script src="app.js?v=20260922p"></script>
 </body>
 </html>

@@ -4809,3 +4809,159 @@ body.quo-print-body {
   color: var(--success);
   font-weight: 600;
 }
+
+/* ============================================================ งานของฉัน ===
+   รวมงานจากทุกโมดูลมาหน้าเดียว -- ใช้โครงเดียวกับหน้างานอื่น (.requests-layout /
+   .requests-sidebar) ส่วนที่เพิ่มคือชิ้นที่ไม่มีของเดิมให้ใช้ */
+.mywork-section-head {
+  margin: 24px 0 10px;
+  font-size: 15px;
+  color: var(--ink-soft);
+}
+.mywork-attention .mywork-section-head:first-child { margin-top: 0; }
+
+/* ① งานที่ต้องสะกิด -- แถวเดียวจบ อ่านจากซ้ายไปขวาได้ทันทีว่างานอะไร สถานะไหน
+      และทำไมถึงขึ้นมาอยู่ตรงนี้ */
+.mywork-attention-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  margin-bottom: 8px;
+  padding: 12px 14px;
+  background: var(--white);
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--warning);
+  border-radius: 10px;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.mywork-attention-row:hover { border-color: var(--volt-300); background: var(--volt-50); }
+.mywork-attention-row.is-urgent { border-left-color: var(--danger); }
+.mywork-attention-main { flex: 1; min-width: 0; }
+.mywork-attention-title { font-weight: 600; color: var(--ink); }
+.mywork-attention-meta { margin-top: 2px; font-size: 13px; color: var(--ink-soft); }
+.mywork-reason {
+  flex: none;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--warning);
+  white-space: nowrap;
+}
+.mywork-attention-row.is-urgent .mywork-reason { color: var(--danger); }
+
+/* ② การ์ดนับจำนวนต่อประเภทงาน */
+.mywork-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 12px;
+  margin-top: 20px;
+}
+.mywork-tile {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 16px;
+  background: var(--white);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.mywork-tile:hover { border-color: var(--volt-300); background: var(--volt-50); }
+.mywork-tile strong { font-size: 26px; color: var(--volt-700); line-height: 1; }
+.mywork-tile span { font-size: 13px; color: var(--ink-soft); }
+
+/* ③ คิวรอสำรวจ */
+.mywork-queue-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  margin-bottom: 6px;
+  padding: 8px 12px;
+  background: var(--white);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.mywork-queue-row:hover { border-color: var(--volt-300); }
+.mywork-queue-no {
+  flex: none;
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--volt-500);
+  color: var(--white);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+/* แถวงานทั่วไป -- ใช้ทั้งหน้างานในมือ ที่ฉันเพิ่งแตะ และตารางทีม */
+.mywork-status-group { margin-bottom: 14px; }
+.mywork-status-group > .request-badge { margin-bottom: 6px; }
+.mywork-job-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  margin-bottom: 4px;
+  padding: 8px 12px;
+  background: var(--white);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.mywork-job-row:hover { border-color: var(--volt-300); background: var(--volt-50); }
+/* งานที่ไม่คืบหน้าเกินจำนวนวันที่ตั้งไว้ -- เห็นได้จากการไล่สายตาลงมาโดยไม่ต้องอ่านเลข */
+.mywork-job-row.is-stale { border-left: 4px solid var(--warning); }
+.mywork-job-name { min-width: 0; overflow-wrap: break-word; }
+.mywork-job-age {
+  flex: none;
+  font-size: 12px;
+  color: var(--ink-soft);
+  white-space: nowrap;
+}
+
+/* ④ ตาราง Work Load ของทีม */
+.mywork-team-table { margin-bottom: 12px; }
+.mywork-team-table .mywork-num { width: 110px; text-align: right; font-variant-numeric: tabular-nums; }
+.mywork-team-table td.mywork-total { font-weight: 700; color: var(--volt-700); }
+.mywork-team-table td.mywork-stale { font-weight: 700; color: var(--danger); }
+.mywork-team-row.is-me { background: var(--volt-50); }
+.mywork-team-row.is-unassigned { background: var(--warning-tint); }
+.mywork-person-btn {
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  font-weight: 600;
+  color: var(--volt-700);
+  text-align: left;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+/* แถบสัดส่วนภาระ -- เทียบกันด้วยสายตาเร็วกว่าอ่านตัวเลขทีละช่อง */
+.mywork-load-bar {
+  height: 4px;
+  margin-top: 6px;
+  border-radius: 2px;
+  background: var(--volt-100);
+  overflow: hidden;
+}
+.mywork-load-bar span {
+  display: block;
+  height: 100%;
+  background: var(--volt-500);
+}
+.mywork-person-detail { background: var(--paper); }
