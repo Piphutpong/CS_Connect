@@ -24,7 +24,7 @@
 <title>CS Connect</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=Sarabun:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=20260922l">
+<link rel="stylesheet" href="style.css?v=20260922m">
 </head>
 <body>
 
@@ -1882,8 +1882,9 @@
           <label class="checkbox-field quo-bar-check"><input type="checkbox" id="quoThaiDigits"><span>เลขไทย</span></label>
           <span id="quoDirty" class="quo-dirty" hidden>ยังไม่ได้บันทึก</span>
           <button type="button" id="quotationDuplicateBtn" class="btn btn-ghost" hidden>ทำสำเนา</button>
-          <button type="button" id="quotationEvBtn" class="btn btn-ghost">คำนวณราคา EV</button>
-          <button type="button" id="quotationProtectBtn" class="btn btn-ghost">คำนวณราคาอุปกรณ์ป้องกัน</button>
+          <button type="button" id="quoPickPriceBtn" class="btn btn-ghost">ราคา PACKAGE บำรุงรักษา</button>
+          <button type="button" id="quotationEvBtn" class="btn btn-ghost">คำนวณราคาติดตั้ง EV (วงจรที่ 2)</button>
+          <button type="button" id="quotationProtectBtn" class="btn btn-ghost">คำนวณราคาติดตั้งอุปกรณ์ป้องกัน</button>
           <button type="button" id="quotationSaveTemplateBtn" class="btn btn-ghost">บันทึกเป็นแม่แบบ</button>
           <button type="button" id="quotationDeleteBtn" class="btn btn-ghost" hidden>ลบ</button>
           <button type="button" id="quotationPrintBtn" class="btn btn-ghost">พิมพ์</button>
@@ -1895,7 +1896,6 @@
            พิมพ์ออกไปจริง (หน้าบนจอจึงตรงกับหน้าที่พิมพ์) -->
       <div class="quo-doc-tools">
         <button type="button" id="quoAddLineBtn" class="btn btn-ghost">+ เพิ่มแถวในตาราง</button>
-        <button type="button" id="quoPickPriceBtn" class="btn btn-ghost">+ เลือกจากรายการราคา</button>
         <label class="checkbox-field"><input type="checkbox" id="quoVatEnabled" checked><span>คิดภาษีมูลค่าเพิ่ม 7%</span></label>
         <span class="quo-doc-tools-sep" aria-hidden="true"></span>
         <button type="button" class="btn btn-ghost" data-quo-optional="reference">+ อ้างถึง</button>
@@ -2217,7 +2217,7 @@
     <!-- เลือกรายการจากรายการราคา ใส่ลงตารางของใบเสนอราคา -->
     <div id="quoPriceModal" class="modal-overlay" hidden>
       <div class="modal-card modal-card-wide">
-        <h3>เลือกจากรายการราคา</h3>
+        <h3>ราคา PACKAGE บำรุงรักษา</h3>
         <input type="search" id="quoPriceSearch" class="quo-price-search" placeholder="ค้นหารายการ...">
         <div id="quoPriceList" class="quo-price-list"></div>
         <p id="quoPriceNote" class="form-success" hidden></p>
@@ -2398,6 +2398,6 @@
      **ต้องเปลี่ยนเลขนี้ทุกครั้งที่แก้ app.js / style.css / track.js / qr.js**
      ไม่งั้นผู้ใช้บางคนจะยังได้ไฟล์เก่าไปอีกพักใหญ่ -->
 <script src="vendor/supabase.js?v=2.116.0"></script>
-<script src="app.js?v=20260922l"></script>
+<script src="app.js?v=20260922m"></script>
 </body>
 </html>

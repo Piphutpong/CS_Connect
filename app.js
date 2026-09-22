@@ -11906,7 +11906,7 @@ ${sheetHtml}
       tr.className = "qd-table-empty qd-screen-only";
       const td = document.createElement("td");
       td.colSpan = 5;
-      td.textContent = "ยังไม่มีรายการ -- กด \"+ เลือกจากรายการราคา\" หรือ \"+ เพิ่มแถวในตาราง\" บนแถบเครื่องมือเหนือกระดาษ";
+      td.textContent = "ยังไม่มีรายการ -- กด \"ราคา PACKAGE บำรุงรักษา\" หรือปุ่มคำนวณราคาบนแถบด้านบน หรือ \"+ เพิ่มแถวในตาราง\" เหนือกระดาษ";
       tr.appendChild(td);
       quoLines.appendChild(tr);
     }
