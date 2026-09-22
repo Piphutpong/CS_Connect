@@ -24,7 +24,7 @@
 <title>CS Connect</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=Sarabun:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=20260922s">
+<link rel="stylesheet" href="style.css?v=20260922t">
 </head>
 <body>
 
@@ -2393,6 +2393,7 @@
         <button type="button" class="requests-mode-btn active" data-crm-tab="home">สิ่งที่ต้องทำ</button>
         <button type="button" class="requests-mode-btn" data-crm-tab="list">รายชื่อลูกค้า</button>
         <button type="button" class="requests-mode-btn" data-crm-tab="pipeline">โอกาสขาย</button>
+        <button type="button" class="requests-mode-btn" data-crm-tab="report">รายงาน</button>
       </div>
 
       <!-- ===== หน้าแรก CRM: สี่กองที่ระบบคิดให้เองจากข้อมูลที่มีอยู่ =====
@@ -2412,6 +2413,8 @@
         <div id="crmWarrantyList"></div>
         <div id="crmQuietList"></div>
         <div id="crmOfferList"></div>
+        <div id="crmFollowList"></div>
+        <div id="crmConsentList"></div>
       </div>
 
       <!-- ===== โอกาสขาย =====
@@ -2431,6 +2434,29 @@
         </div>
         <div id="crmPipelineStats" class="crm-stats"></div>
         <div id="crmPipelineList"></div>
+      </div>
+
+      <!-- ===== รายงาน =====
+           คิดจากข้อมูลที่โหลดมาแล้วทั้งหมด ไม่ได้ถามเซิร์ฟเวอร์เพิ่ม -- ตัวเลขจึง
+           ตรงกับสิ่งที่เห็นในหน้าอื่นเสมอ ไม่มีทางไม่ตรงกันเพราะคนละรอบโหลด -->
+      <div id="crmReportMode" hidden>
+        <div class="requests-content-heading">
+          <div class="requests-content-heading-row">
+            <div>
+              <h2>รายงาน</h2>
+              <p id="crmReportSubtitle" class="requests-count"></p>
+            </div>
+            <div class="requests-heading-actions">
+              <label class="quo-bar-field">
+                <span>ปี</span>
+                <select id="crmReportYear"></select>
+              </label>
+              <button type="button" id="crmReportCsvBtn" class="btn btn-ghost">ดาวน์โหลด CSV</button>
+            </div>
+          </div>
+        </div>
+        <div id="crmReportStats" class="crm-stats"></div>
+        <div id="crmReportBody"></div>
       </div>
 
       <!-- ===== โอกาสขายหนึ่งรายการ ===== -->
@@ -2473,6 +2499,45 @@
 
         <div class="crm-form-grid">
           <label class="field crm-field-wide"><span>หมายเหตุ</span><textarea id="crmOppNote" rows="2"></textarea></label>
+        </div>
+      </div>
+
+      <!-- ===== บันทึกการติดต่อหนึ่งครั้ง =====
+           next_action คือสิ่งที่ทำให้ไทม์ไลน์มีประโยชน์จริง ไม่ใช่แค่สมุดบันทึก --
+           งานติดตามที่ถึงกำหนดจะไปโผล่ในหน้า "สิ่งที่ต้องทำ" -->
+      <div id="crmActMode" hidden>
+        <div class="quo-editor-bar">
+          <button type="button" id="crmActBackBtn" class="btn btn-ghost">← กลับหน้าลูกค้า</button>
+          <div class="quo-editor-title">
+            <h2 id="crmActTitle">บันทึกการติดต่อ</h2>
+            <p id="crmActSubtitle" class="requests-count"></p>
+          </div>
+          <div class="quo-editor-actions">
+            <button type="button" id="crmActDeleteBtn" class="btn btn-ghost" hidden>ลบ</button>
+            <button type="button" id="crmActSaveBtn" class="btn btn-primary">บันทึก</button>
+          </div>
+        </div>
+        <p id="crmActError" class="form-error" hidden></p>
+
+        <div class="crm-form-grid">
+          <label class="field"><span>วันที่ติดต่อ</span><input type="date" id="crmActDate"></label>
+          <label class="field"><span>ช่องทาง</span><select id="crmActChannel"></select></label>
+          <label class="field"><span>คุยกับใคร</span><select id="crmActContact"><option value="">- ไม่ระบุ -</option></select></label>
+          <label class="field"><span>เกี่ยวกับสถานที่</span><select id="crmActSite"><option value="">- ทั้งลูกค้า -</option></select></label>
+          <label class="field"><span>เกี่ยวกับโอกาสขาย</span><select id="crmActOpp"><option value="">- ไม่ระบุ -</option></select></label>
+          <label class="field crm-field-wide"><span>สรุปเรื่องที่คุย</span><textarea id="crmActSummary" rows="3"></textarea></label>
+          <label class="field crm-field-wide"><span>ผลลัพธ์</span><input type="text" id="crmActOutcome" autocomplete="off" placeholder="เช่น ขอใบเสนอราคา / ขอให้ติดต่อใหม่เดือนหน้า"></label>
+        </div>
+
+        <div class="crm-section-head"><h3>งานติดตามถัดไป</h3></div>
+        <p class="field-hint">กรอกแล้วจะไปโผล่ในหน้า "สิ่งที่ต้องทำ" เมื่อถึงกำหนด -- เว้นว่างได้ถ้าเรื่องนี้จบแล้ว</p>
+        <div class="crm-form-grid">
+          <label class="field crm-field-wide"><span>ต้องทำอะไรต่อ</span><input type="text" id="crmActNextAction" autocomplete="off"></label>
+          <label class="field"><span>กำหนดวันที่</span><input type="date" id="crmActNextDate"></label>
+          <label class="field"><span>ผู้รับผิดชอบ</span><select id="crmActNextOwner"><option value="">- ยังไม่ระบุ -</option></select></label>
+          <label class="checkbox-field crm-field-wide">
+            <input type="checkbox" id="crmActNextDone"><span>ตามเรื่องนี้เรียบร้อยแล้ว</span>
+          </label>
         </div>
       </div>
 
@@ -2544,6 +2609,36 @@
           </label>
         </div>
 
+        <!-- ความยินยอมตาม PDPA -- ระบบคำร้องเก็บข้อมูลเพื่อให้บริการตามที่ลูกค้า
+             ร้องขอ แต่ CRM เก็บเพื่อเสนอขายบริการเพิ่ม ซึ่งเป็นคนละวัตถุประสงค์
+             ระบบบันทึกไว้ว่าขอแล้วหรือยัง ไม่ได้บังคับห้ามติดต่อ -->
+        <div class="crm-section-head">
+          <h3>ความยินยอมให้ติดต่อเสนอบริการ (PDPA)</h3>
+        </div>
+        <p class="field-hint">ข้อมูลในระบบคำร้องเก็บไว้เพื่อให้บริการตามที่ลูกค้าร้องขอ การนำมาใช้เสนอขายบริการเพิ่มเป็นคนละวัตถุประสงค์ -- บันทึกไว้ว่าขอความยินยอมแล้วหรือยัง เพื่อให้ตอบได้เมื่อถูกถาม</p>
+        <div class="crm-form-grid">
+          <label class="field"><span>สถานะความยินยอม</span>
+            <select id="crmConsentStatus">
+              <option value="">ยังไม่ได้ขอ</option>
+              <option value="ยินยอม">ยินยอม</option>
+              <option value="ไม่ยินยอม">ไม่ยินยอม</option>
+            </select>
+          </label>
+          <label class="field"><span>วันที่ได้รับความยินยอม</span><input type="date" id="crmConsentAt"></label>
+          <label class="field"><span>ได้มาทางไหน</span>
+            <select id="crmConsentChannel">
+              <option value="">- เลือก -</option>
+              <option value="เอกสารลงนาม">เอกสารลงนาม</option>
+              <option value="อีเมล">อีเมล</option>
+              <option value="LINE">LINE</option>
+              <option value="วาจา (บันทึกไว้)">วาจา (บันทึกไว้)</option>
+            </select>
+          </label>
+          <label class="field crm-field-wide"><span>หมายเหตุความยินยอม</span>
+            <input type="text" id="crmConsentNote" autocomplete="off" placeholder="เช่น เลขที่เอกสาร / ผู้ให้ความยินยอม">
+          </label>
+        </div>
+
         <div class="crm-section-head">
           <h3>ผู้ติดต่อ</h3>
           <button type="button" id="crmAddContactBtn" class="btn btn-ghost">+ เพิ่มผู้ติดต่อ</button>
@@ -2564,6 +2659,12 @@
         </div>
         <p class="field-hint" id="crmSiteSummary"></p>
         <div id="crmSites" class="crm-sites"></div>
+
+        <div class="crm-section-head">
+          <h3>ไทม์ไลน์การติดต่อ</h3>
+          <button type="button" id="crmAddActBtn" class="btn btn-ghost">+ บันทึกการติดต่อ</button>
+        </div>
+        <div id="crmActivities" class="crm-activities"></div>
 
         <div class="crm-section-head">
           <h3>โอกาสขาย</h3>
@@ -2867,6 +2968,6 @@
      **ต้องเปลี่ยนเลขนี้ทุกครั้งที่แก้ app.js / style.css / track.js / qr.js**
      ไม่งั้นผู้ใช้บางคนจะยังได้ไฟล์เก่าไปอีกพักใหญ่ -->
 <script src="vendor/supabase.js?v=2.116.0"></script>
-<script src="app.js?v=20260922s"></script>
+<script src="app.js?v=20260922t"></script>
 </body>
 </html>

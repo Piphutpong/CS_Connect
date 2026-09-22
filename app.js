@@ -408,6 +408,12 @@
     async deleteCrmOpportunity() {
       throw new Error("โหมดออฟไลน์ไม่รองรับโมดูลงานใหม่");
     },
+    async saveCrmActivity() {
+      throw new Error("โหมดออฟไลน์ไม่รองรับโมดูลงานใหม่");
+    },
+    async deleteCrmActivity() {
+      throw new Error("โหมดออฟไลน์ไม่รองรับโมดูลงานใหม่");
+    },
 
     async uploadBrochureImage() {
       throw new Error("โหมดออฟไลน์ไม่รองรับการอัปโหลดรูป");
@@ -941,6 +947,15 @@
 
       async deleteCrmOpportunity(id) {
         return callAsUser(() => rpc("delete_crm_opportunity", { p_id: id }));
+      },
+
+      async saveCrmActivity(act) {
+        const data = await callAsUser(() => rpc("save_crm_activity", { p_act: act }));
+        return data.activity;
+      },
+
+      async deleteCrmActivity(id) {
+        return callAsUser(() => rpc("delete_crm_activity", { p_id: id }));
       },
 
       /**
@@ -16428,6 +16443,20 @@ ${sheetHtml}
       status.textContent = customer.status || "-";
       head.append(name, status);
 
+      // ยังไม่ได้ขอความยินยอมให้ติดต่อเสนอบริการ -- ต้องเห็นตั้งแต่รายชื่อ
+      // ไม่ใช่ตอนเปิดเข้าไปแล้ว
+      if (customer.consentStatus === "ไม่ยินยอม") {
+        const tag = document.createElement("span");
+        tag.className = "request-badge tone-danger";
+        tag.textContent = "ไม่ยินยอมให้ติดต่อ";
+        head.appendChild(tag);
+      } else if (customer.consentStatus !== "ยินยอม") {
+        const tag = document.createElement("span");
+        tag.className = "request-badge tone-warning";
+        tag.textContent = "ยังไม่ได้ขอความยินยอม";
+        head.appendChild(tag);
+      }
+
       const meta = document.createElement("div");
       meta.className = "crm-card-meta";
       const bits = [];
@@ -16477,6 +16506,10 @@ ${sheetHtml}
     crmField("crmStatus").value = (customer && customer.status) || "ผู้มุ่งหวัง";
     crmField("crmAddress").value = (customer && customer.address) || "";
     crmField("crmNote").value = (customer && customer.note) || "";
+    crmField("crmConsentStatus").value = (customer && customer.consentStatus) || "";
+    crmField("crmConsentAt").value = (customer && customer.consentAt) || "";
+    crmField("crmConsentChannel").value = (customer && customer.consentChannel) || "";
+    crmField("crmConsentNote").value = (customer && customer.consentNote) || "";
 
     renderCrmOwnerOptions(customer && customer.ownerEmail);
     document.getElementById("crmCustomerTitle").textContent = customer ? "แก้ไขลูกค้า" : "ลูกค้าใหม่";
@@ -16487,13 +16520,16 @@ ${sheetHtml}
 
     renderCrmContacts();
     renderCrmSites();
+    renderCrmActivities();
     renderCrmCustomerOpps();
     renderCrmCustomerQuotes();
 
     crmListMode.hidden = true;
     crmHomeMode.hidden = true;
     crmPipelineModeEl.hidden = true;
+    crmReportMode.hidden = true;
     crmOppModeEl.hidden = true;
+    crmActMode.hidden = true;
     crmSiteMode.hidden = true;
     crmJobMode.hidden = true;
     crmCustomerMode.hidden = false;
@@ -16690,6 +16726,10 @@ ${sheetHtml}
         ownerName: owner.value ? (owner.options[owner.selectedIndex].textContent || "") : "",
         status: crmField("crmStatus").value,
         note: crmField("crmNote").value.trim(),
+        consentStatus: crmField("crmConsentStatus").value,
+        consentAt: crmField("crmConsentAt").value,
+        consentChannel: crmField("crmConsentChannel").value,
+        consentNote: crmField("crmConsentNote").value.trim(),
         contacts: crmContactDraft
           .filter(c => String(c.name || "").trim() || String(c.phone || "").trim())
           .map((c, index) => ({ ...c, sortOrder: index }))
@@ -16767,7 +16807,9 @@ ${sheetHtml}
     crmListMode.hidden = true;
     crmHomeMode.hidden = true;
     crmPipelineModeEl.hidden = true;
+    crmReportMode.hidden = true;
     crmOppModeEl.hidden = true;
+    crmActMode.hidden = true;
     crmCustomerMode.hidden = true;
     crmJobMode.hidden = true;
     crmSiteMode.hidden = false;
@@ -16981,8 +17023,19 @@ ${sheetHtml}
     quoCustomerId = "";
     document.getElementById("crmCustomerOpps").innerHTML = "";
     document.getElementById("crmCustomerQuotes").innerHTML = "";
+    crmActEditing = null;
+    document.getElementById("crmActivities").innerHTML = "";
     document.getElementById("crmPipelineList").innerHTML = "";
     document.getElementById("crmPipelineStats").innerHTML = "";
+    document.getElementById("crmReportBody").innerHTML = "";
+    document.getElementById("crmReportStats").innerHTML = "";
+    document.getElementById("crmReportYear").innerHTML = "";
+    ["crmFollowList", "crmConsentList"].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.innerHTML = "";
+    });
+    if (crmActMode) crmActMode.hidden = true;
+    if (crmReportMode) crmReportMode.hidden = true;
     if (crmPipelineModeEl) crmPipelineModeEl.hidden = true;
     if (crmOppModeEl) crmOppModeEl.hidden = true;
     document.getElementById("crmJobs").innerHTML = "";
@@ -17212,6 +17265,10 @@ ${sheetHtml}
 
     crmListMode.hidden = true;
     crmHomeMode.hidden = true;
+    crmPipelineModeEl.hidden = true;
+    crmReportMode.hidden = true;
+    crmOppModeEl.hidden = true;
+    crmActMode.hidden = true;
     crmCustomerMode.hidden = true;
     crmSiteMode.hidden = true;
     crmJobMode.hidden = false;
@@ -17369,7 +17426,9 @@ ${sheetHtml}
       { id: "crmDueList", items: crmDueItems(), head: "ครบกำหนดบำรุงรักษา", empty: "ไม่มีงานที่ถึงรอบใน " + CRM_DUE_WINDOW_DAYS + " วัน" },
       { id: "crmWarrantyList", items: crmWarrantyItems(), head: "ประกันใกล้หมดอายุ", empty: "ไม่มีประกันที่ใกล้หมดอายุ" },
       { id: "crmQuietList", items: crmQuietCustomers(), head: "ลูกค้าที่เงียบไป", empty: "ไม่มีลูกค้าที่เงียบเกิน 1 ปี" },
-      { id: "crmOfferList", items: crmOpportunities(), head: "ข้อเสนอที่ควรยื่น", empty: "ยังไม่มีข้อเสนอที่ระบบชี้เป้าได้" }
+      { id: "crmOfferList", items: crmOpportunities(), head: "ข้อเสนอที่ควรยื่น", empty: "ยังไม่มีข้อเสนอที่ระบบชี้เป้าได้" },
+      { id: "crmFollowList", items: crmFollowUps(), head: "งานติดตามที่ถึงกำหนด", empty: "ไม่มีงานติดตามที่ถึงกำหนด" },
+      { id: "crmConsentList", items: crmConsentGaps(), head: "ยังไม่ได้ขอความยินยอม (PDPA)", empty: "ลูกค้าที่กำลังเสนอขายมีบันทึกความยินยอมครบแล้ว" }
     ];
 
     groups.forEach(group => {
@@ -17472,11 +17531,14 @@ ${sheetHtml}
     crmSiteMode.hidden = true;
     crmJobMode.hidden = true;
     crmOppModeEl.hidden = true;
+    if (crmActMode) crmActMode.hidden = true;
     crmHomeMode.hidden = tab !== "home";
     crmListMode.hidden = tab !== "list";
     crmPipelineModeEl.hidden = tab !== "pipeline";
+    crmReportMode.hidden = tab !== "report";
     if (tab === "home") renderCrmHome();
     else if (tab === "pipeline") renderCrmPipeline();
+    else if (tab === "report") renderCrmReport();
     else renderCrmList();
     window.scrollTo(0, 0);
   }
@@ -17796,6 +17858,8 @@ ${sheetHtml}
     crmListMode.hidden = true;
     crmHomeMode.hidden = true;
     crmPipelineMode.hidden = true;
+    crmReportMode.hidden = true;
+    crmActMode.hidden = true;
     crmCustomerMode.hidden = true;
     crmSiteMode.hidden = true;
     crmJobMode.hidden = true;
@@ -18046,7 +18110,558 @@ ${sheetHtml}
   }
 
   crmWireHome();
+  // ------------------------------ ไทม์ไลน์การติดต่อ / PDPA / รายงาน (เฟส 4)
+  /**
+   * ช่องทางติดต่อ -- แยก "โทรออก" กับ "รับสาย" เพราะสองอย่างนี้ตอบคำถามคนละข้อ
+   * (เราตามลูกค้า หรือลูกค้าตามเรา) ซึ่งเป็นสัญญาณคนละแบบเวลาดูย้อนหลัง
+   */
+  const CRM_CHANNELS = ["โทรออก", "รับสาย", "LINE", "อีเมล", "เข้าพบ", "อื่น ๆ"];
+
+  const CRM_CHANNEL_TONE = {
+    "โทรออก": "info", "รับสาย": "success", "LINE": "success",
+    "อีเมล": "info", "เข้าพบ": "warning", "อื่น ๆ": "info"
+  };
+
+  let crmActMode = null;
+  let crmReportMode = null;
+  let crmActError = null;
+  let crmActEditing = null;
+
+  function crmActivities(customer) {
+    return Array.isArray(customer && customer.activities) ? customer.activities : [];
+  }
+
+  function crmAllActivities() {
+    const out = [];
+    crmCustomers.forEach(customer => {
+      crmActivities(customer).forEach(act => out.push({ act, customer }));
+    });
+    return out;
+  }
+
+  /** งานติดตามที่ยังไม่ได้ทำและถึงกำหนดแล้ว (หรือใกล้ถึง) */
+  function crmFollowUps() {
+    const out = [];
+    crmAllActivities().forEach(({ act, customer }) => {
+      if (act.nextActionDone) return;
+      const days = crmDaysUntil(act.nextActionDate);
+      if (days === null || days > 14) return;
+      out.push({
+        kind: "followup", customer, act,
+        title: customer.name,
+        detail: act.nextAction || "(ไม่ได้ระบุว่าต้องทำอะไร)",
+        reason: days < 0 ? "เลยกำหนดมา " + Math.abs(days) + " วัน"
+          : days === 0 ? "ถึงกำหนดวันนี้" : "อีก " + days + " วัน",
+        days,
+        urgent: days <= 0
+      });
+    });
+    return out.sort((a, b) => a.days - b.days);
+  }
+
+  /** ลูกค้าที่ยังไม่ได้ขอความยินยอม แต่มีการเสนอขายอยู่ -- ต้องตามเก็บ */
+  function crmConsentGaps() {
+    const out = [];
+    crmCustomers.forEach(customer => {
+      if (customer.consentStatus === "ยินยอม" || customer.consentStatus === "ไม่ยินยอม") return;
+      // ขึ้นเฉพาะรายที่กำลังเสนอขายอยู่จริง -- ลูกค้าที่ยังไม่ได้ทำอะไรด้วยยังไม่
+      // ต้องรีบขอความยินยอม จะได้ไม่กลายเป็นรายการยาวที่ไม่มีใครอ่าน
+      const active = crmOpps(customer).some(o => !CRM_OPP_CLOSED.has(o.status));
+      if (!active) return;
+      out.push({
+        kind: "consent", customer,
+        title: customer.name,
+        detail: "กำลังเสนอขายอยู่ แต่ยังไม่ได้บันทึกความยินยอมให้ติดต่อเสนอบริการ",
+        reason: "ยังไม่ได้ขอ",
+        urgent: false
+      });
+    });
+    return out;
+  }
+
+  // ------------------------------------------------------------ ไทม์ไลน์
+  function renderCrmActivities() {
+    const host = document.getElementById("crmActivities");
+    host.innerHTML = "";
+    document.getElementById("crmAddActBtn").disabled = !crmEditing;
+    if (!crmEditing) {
+      host.appendChild(crmEmptyBox("บันทึกลูกค้าก่อน แล้วจึงบันทึกการติดต่อได้"));
+      return;
+    }
+    const rows = crmActivities(crmEditing);
+    if (!rows.length) {
+      host.appendChild(crmEmptyBox("ยังไม่มีประวัติการติดต่อ"));
+      return;
+    }
+
+    rows.forEach(act => {
+      const card = document.createElement("button");
+      card.type = "button";
+      card.className = "crm-act-card";
+      // งานติดตามที่เลยกำหนดแล้วต้องเห็นจากการไล่สายตา ไม่ต้องอ่านทุกบรรทัด
+      if (act.nextAction && !act.nextActionDone
+          && act.nextActionDate && crmDaysUntil(act.nextActionDate) < 0) {
+        card.classList.add("is-overdue");
+      }
+
+      const head = document.createElement("div");
+      head.className = "crm-card-head";
+      const when = document.createElement("span");
+      when.className = "crm-card-name";
+      when.textContent = act.activityDate ? formatThaiDate(act.activityDate) : "(ไม่ระบุวันที่)";
+      head.appendChild(when);
+
+      if (act.channel) {
+        const ch = document.createElement("span");
+        ch.className = "request-badge";
+        const tone = CRM_CHANNEL_TONE[act.channel];
+        if (tone) ch.classList.add("tone-" + tone);
+        ch.textContent = act.channel;
+        head.appendChild(ch);
+      }
+      const contact = crmContacts(crmEditing).find(c => String(c.id) === String(act.contactId));
+      if (contact) {
+        const who = document.createElement("span");
+        who.className = "crm-act-who";
+        who.textContent = contact.name || contact.phone || "";
+        head.appendChild(who);
+      }
+
+      card.appendChild(head);
+
+      if (act.summary) {
+        const summary = document.createElement("div");
+        summary.className = "crm-act-summary";
+        summary.textContent = act.summary;
+        card.appendChild(summary);
+      }
+      if (act.outcome) {
+        const outcome = document.createElement("div");
+        outcome.className = "crm-card-meta";
+        outcome.textContent = "ผล: " + act.outcome;
+        card.appendChild(outcome);
+      }
+      if (act.nextAction) {
+        const next = document.createElement("div");
+        next.className = "crm-act-next";
+        const days = crmDaysUntil(act.nextActionDate);
+        next.textContent = (act.nextActionDone ? "ตามแล้ว: " : "ต้องตาม: ") + act.nextAction
+          + (act.nextActionDate ? " · " + formatThaiDate(act.nextActionDate) : "")
+          + (!act.nextActionDone && days !== null
+              ? (days < 0 ? " (เลยมา " + Math.abs(days) + " วัน)" : " (อีก " + days + " วัน)")
+              : "")
+          + (act.nextActionOwnerName ? " · " + act.nextActionOwnerName : "");
+        if (act.nextActionDone) next.classList.add("is-done");
+        card.appendChild(next);
+      }
+
+      const by = document.createElement("div");
+      by.className = "crm-act-by";
+      by.textContent = "บันทึกโดย " + (act.createdByName || "-");
+      card.appendChild(by);
+
+      card.addEventListener("click", () => openCrmAct(act));
+      host.appendChild(card);
+    });
+  }
+
+  function openCrmAct(act) {
+    if (!crmEditing) return;
+    crmActEditing = act || null;
+    hideError(crmActError);
+
+    const channel = crmField("crmActChannel");
+    channel.innerHTML = "";
+    CRM_CHANNELS.forEach(ch => {
+      const option = document.createElement("option");
+      option.value = ch;
+      option.textContent = ch;
+      channel.appendChild(option);
+    });
+    channel.value = (act && act.channel) || "โทรออก";
+
+    const contact = crmField("crmActContact");
+    contact.innerHTML = '<option value="">- ไม่ระบุ -</option>';
+    crmContacts(crmEditing).forEach(c => {
+      const option = document.createElement("option");
+      option.value = String(c.id);
+      option.textContent = (c.name || "(ไม่มีชื่อ)") + (c.role ? " · " + c.role : "");
+      contact.appendChild(option);
+    });
+    contact.value = act && act.contactId ? String(act.contactId) : "";
+
+    const site = crmField("crmActSite");
+    site.innerHTML = '<option value="">- ทั้งลูกค้า -</option>';
+    crmSites(crmEditing).forEach(s => {
+      const option = document.createElement("option");
+      option.value = String(s.id);
+      option.textContent = (s.ca ? "CA " + s.ca + " · " : "") + (s.name || "");
+      site.appendChild(option);
+    });
+    site.value = act && act.siteId ? String(act.siteId) : "";
+
+    const opp = crmField("crmActOpp");
+    opp.innerHTML = '<option value="">- ไม่ระบุ -</option>';
+    crmOpps(crmEditing).forEach(o => {
+      const option = document.createElement("option");
+      option.value = String(o.id);
+      option.textContent = o.title + " [" + o.status + "]";
+      opp.appendChild(option);
+    });
+    opp.value = act && act.opportunityId ? String(act.opportunityId) : "";
+
+    crmField("crmActDate").value = (act && act.activityDate) || todayDateString();
+    crmField("crmActSummary").value = (act && act.summary) || "";
+    crmField("crmActOutcome").value = (act && act.outcome) || "";
+    crmField("crmActNextAction").value = (act && act.nextAction) || "";
+    crmField("crmActNextDate").value = (act && act.nextActionDate) || "";
+    crmField("crmActNextDone").checked = Boolean(act && act.nextActionDone);
+
+    const owner = crmField("crmActNextOwner");
+    owner.innerHTML = '<option value="">- ยังไม่ระบุ -</option>';
+    (staffRoster || []).forEach(person => {
+      const option = document.createElement("option");
+      option.value = person.email || "";
+      option.textContent = person.name || person.email || "";
+      owner.appendChild(option);
+    });
+    const selectedOwner = (act && act.nextActionOwnerEmail) || (getSession()?.email || "");
+    if (selectedOwner && !Array.from(owner.options).some(o => o.value === selectedOwner)) {
+      const option = document.createElement("option");
+      option.value = selectedOwner;
+      option.textContent = selectedOwner + " (ไม่อยู่ในรายชื่อแล้ว)";
+      owner.appendChild(option);
+    }
+    owner.value = selectedOwner;
+
+    document.getElementById("crmActTitle").textContent = act ? "แก้ไขการติดต่อ" : "บันทึกการติดต่อ";
+    document.getElementById("crmActSubtitle").textContent = crmEditing.name || "";
+    document.getElementById("crmActDeleteBtn").hidden = !act;
+
+    crmListMode.hidden = true;
+    crmHomeMode.hidden = true;
+    crmPipelineModeEl.hidden = true;
+    crmReportMode.hidden = true;
+    crmOppModeEl.hidden = true;
+    crmCustomerMode.hidden = true;
+    crmSiteMode.hidden = true;
+    crmJobMode.hidden = true;
+    crmActMode.hidden = false;
+    window.scrollTo(0, 0);
+  }
+
+  async function saveCrmAct() {
+    hideError(crmActError);
+    if (!crmEditing) return;
+    const owner = crmField("crmActNextOwner");
+    const btn = document.getElementById("crmActSaveBtn");
+    setBusy(btn, true, "กำลังบันทึก...");
+    try {
+      await backend.saveCrmActivity({
+        id: crmActEditing ? crmActEditing.id : newWorkItemId(),
+        customerId: crmEditing.id,
+        siteId: crmField("crmActSite").value,
+        contactId: crmField("crmActContact").value,
+        opportunityId: crmField("crmActOpp").value,
+        activityDate: crmField("crmActDate").value,
+        channel: crmField("crmActChannel").value,
+        summary: crmField("crmActSummary").value.trim(),
+        outcome: crmField("crmActOutcome").value.trim(),
+        nextAction: crmField("crmActNextAction").value.trim(),
+        nextActionDate: crmField("crmActNextDate").value,
+        nextActionOwnerEmail: owner.value,
+        nextActionOwnerName: owner.value ? (owner.options[owner.selectedIndex].textContent || "") : "",
+        nextActionDone: crmField("crmActNextDone").checked
+      });
+      await crmReloadInto();
+      crmActMode.hidden = true;
+      crmCustomerMode.hidden = false;
+      renderCrmActivities();
+      window.scrollTo(0, 0);
+    } catch (err) {
+      showError(crmActError, moduleErrorText(err));
+    } finally {
+      setBusy(btn, false);
+    }
+  }
+
+  async function deleteCrmAct() {
+    if (!crmActEditing) return;
+    if (!confirm("ลบบันทึกการติดต่อนี้ใช่หรือไม่?")) return;
+    const btn = document.getElementById("crmActDeleteBtn");
+    setBusy(btn, true, "กำลังลบ...");
+    try {
+      await backend.deleteCrmActivity(crmActEditing.id);
+      await crmReloadInto();
+      crmActEditing = null;
+      crmActMode.hidden = true;
+      crmCustomerMode.hidden = false;
+      renderCrmActivities();
+    } catch (err) {
+      showError(crmActError, moduleErrorText(err));
+    } finally {
+      setBusy(btn, false);
+    }
+  }
+
+  // ------------------------------------------------------------ รายงาน
+  /**
+   * คิดจากข้อมูลที่โหลดมาแล้วทั้งหมด ไม่ได้ถามเซิร์ฟเวอร์เพิ่ม -- ตัวเลขจึงตรงกับ
+   * สิ่งที่เห็นในหน้าอื่นเสมอ ไม่มีทางไม่ตรงกันเพราะคนละรอบโหลด
+   */
+  function crmReportYears() {
+    const years = new Set();
+    crmAllJobs().forEach(({ job }) => {
+      if (job.serviceDate) years.add(job.serviceDate.slice(0, 4));
+    });
+    crmAllOpps().forEach(({ opp }) => {
+      if (opp.expectedCloseDate) years.add(opp.expectedCloseDate.slice(0, 4));
+    });
+    const list = Array.from(years).sort().reverse();
+    const thisYear = String(new Date().getFullYear());
+    if (!list.includes(thisYear)) list.unshift(thisYear);
+    return list;
+  }
+
+  function renderCrmReport() {
+    const yearSelect = document.getElementById("crmReportYear");
+    if (!yearSelect.options.length) {
+      crmReportYears().forEach(y => {
+        const option = document.createElement("option");
+        option.value = y;
+        // ปี ค.ศ. ในข้อมูล แต่คนอ่านเป็น พ.ศ. -- แสดงทั้งสองกันสับสน
+        option.textContent = (Number(y) + 543) + " (ค.ศ. " + y + ")";
+        yearSelect.appendChild(option);
+      });
+    }
+    const year = yearSelect.value || crmReportYears()[0] || String(new Date().getFullYear());
+    yearSelect.value = year;
+
+    const jobs = crmAllJobs().filter(({ job }) =>
+      job.status !== "ยกเลิก" && String(job.serviceDate || "").startsWith(year));
+    const revenue = jobs.reduce((s, { job }) => s + (Number(job.amount) || 0), 0);
+
+    const opps = crmAllOpps().filter(({ opp }) =>
+      String(opp.expectedCloseDate || "").startsWith(year));
+    const won = opps.filter(({ opp }) => opp.status === "ปิดการขาย");
+    const lost = opps.filter(({ opp }) => opp.status === "ไม่สำเร็จ");
+    const decided = won.length + lost.length;
+
+    const totalKva = crmCustomers.reduce((s, c) => s + crmTotalKva(c), 0);
+    const totalKwp = crmCustomers.reduce((s, c) => s + crmTotalKwp(c), 0);
+
+    document.getElementById("crmReportSubtitle").textContent =
+      "ปี พ.ศ. " + (Number(year) + 543) + " · งานบริการ " + jobs.length + " งาน";
+
+    const stats = [
+      { label: "รายได้จากงานบริการ", value: formatMoney(revenue), sub: jobs.length + " งานในปีนี้" },
+      { label: "อัตราปิดการขาย", value: decided ? Math.round((won.length / decided) * 100) + "%" : "-",
+        sub: decided ? won.length + " ชนะ / " + lost.length + " แพ้" : "ยังไม่มีรายการที่ปิด" },
+      { label: "ลูกค้าทั้งหมด", value: String(crmCustomers.length),
+        sub: crmCustomers.filter(c => c.status === "ลูกค้าปัจจุบัน").length + " รายที่ใช้บริการอยู่" },
+      { label: "อุปกรณ์ที่ดูแล", value: formatMoney(totalKva) + " kVA",
+        sub: totalKwp > 0 ? "Solar " + formatMoney(totalKwp) + " kWp" : "ยังไม่มี Solar" }
+    ];
+
+    const statsEl = document.getElementById("crmReportStats");
+    statsEl.innerHTML = "";
+    stats.forEach(stat => {
+      const tile = document.createElement("div");
+      tile.className = "crm-stat";
+      const value = document.createElement("strong");
+      value.textContent = stat.value;
+      const label = document.createElement("span");
+      label.textContent = stat.label;
+      const sub = document.createElement("small");
+      sub.textContent = stat.sub;
+      tile.append(value, label, sub);
+      statsEl.appendChild(tile);
+    });
+
+    const body = document.getElementById("crmReportBody");
+    body.innerHTML = "";
+
+    // ---- รายได้รายเดือน
+    const byMonth = new Array(12).fill(0);
+    const countMonth = new Array(12).fill(0);
+    jobs.forEach(({ job }) => {
+      const m = Number(String(job.serviceDate).slice(5, 7)) - 1;
+      if (m >= 0 && m < 12) {
+        byMonth[m] += Number(job.amount) || 0;
+        countMonth[m] += 1;
+      }
+    });
+    const maxMonth = Math.max(...byMonth, 1);
+    const monthNames = ["ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.",
+                        "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."];
+
+    body.appendChild(crmReportHead("รายได้รายเดือน"));
+    const chart = document.createElement("div");
+    chart.className = "crm-month-chart";
+    byMonth.forEach((amount, index) => {
+      const row = document.createElement("div");
+      row.className = "crm-month-row";
+      const label = document.createElement("span");
+      label.className = "crm-month-label";
+      label.textContent = monthNames[index];
+      const bar = document.createElement("div");
+      bar.className = "crm-month-bar";
+      const fill = document.createElement("span");
+      fill.style.width = Math.round((amount / maxMonth) * 100) + "%";
+      bar.appendChild(fill);
+      const value = document.createElement("span");
+      value.className = "crm-month-value";
+      value.textContent = amount > 0 ? formatMoney(amount) + " (" + countMonth[index] + ")" : "-";
+      row.append(label, bar, value);
+      chart.appendChild(row);
+    });
+    body.appendChild(chart);
+
+    // ---- แยกตามประเภทบริการ
+    body.appendChild(crmReportHead("แยกตามประเภทบริการ"));
+    const byType = new Map();
+    jobs.forEach(({ job }) => {
+      const key = job.serviceType || "(ไม่ระบุ)";
+      const row = byType.get(key) || { count: 0, amount: 0 };
+      row.count += 1;
+      row.amount += Number(job.amount) || 0;
+      byType.set(key, row);
+    });
+    body.appendChild(crmReportTable(
+      ["ประเภทบริการ", "จำนวนงาน", "รายได้ (บาท)"],
+      Array.from(byType.entries())
+        .sort((a, b) => b[1].amount - a[1].amount)
+        .map(([name, row]) => [name, String(row.count), formatMoney(row.amount)]),
+      "ยังไม่มีงานบริการในปีนี้"));
+
+    // ---- ลูกค้าอันดับต้น
+    body.appendChild(crmReportHead("ลูกค้าที่ใช้บริการมากที่สุด"));
+    const byCustomer = new Map();
+    jobs.forEach(({ job, customer }) => {
+      const row = byCustomer.get(customer.id) || { name: customer.name, count: 0, amount: 0 };
+      row.count += 1;
+      row.amount += Number(job.amount) || 0;
+      byCustomer.set(customer.id, row);
+    });
+    body.appendChild(crmReportTable(
+      ["ลูกค้า", "จำนวนงาน", "รายได้ (บาท)"],
+      Array.from(byCustomer.values())
+        .sort((a, b) => b.amount - a.amount)
+        .slice(0, 15)
+        .map(row => [row.name, String(row.count), formatMoney(row.amount)]),
+      "ยังไม่มีงานบริการในปีนี้"));
+
+    // ---- เหตุผลที่แพ้ -- ตารางที่บอกว่าควรแก้อะไร ไม่ใช่แค่ว่าแพ้เท่าไหร่
+    body.appendChild(crmReportHead("เหตุผลที่ไม่สำเร็จ"));
+    body.appendChild(crmReportTable(
+      ["ลูกค้า", "เรื่อง", "มูลค่าที่คาด", "เหตุผล"],
+      lost.map(({ opp, customer }) => [
+        customer.name, opp.title,
+        Number(opp.expectedAmount) > 0 ? formatMoney(opp.expectedAmount) : "-",
+        opp.lostReason || "(ไม่ได้บันทึก)"
+      ]),
+      "ไม่มีรายการที่ไม่สำเร็จในปีนี้"));
+  }
+
+  function crmReportHead(text) {
+    const head = document.createElement("h3");
+    head.className = "mywork-section-head";
+    head.textContent = text;
+    return head;
+  }
+
+  function crmReportTable(headers, rows, emptyText) {
+    if (!rows.length) return crmEmptyBox(emptyText);
+    const table = document.createElement("table");
+    table.className = "price-table crm-report-table";
+    const thead = document.createElement("thead");
+    const headRow = document.createElement("tr");
+    headers.forEach((h, index) => {
+      const th = document.createElement("th");
+      th.textContent = h;
+      if (index > 0) th.className = "mywork-num";
+      headRow.appendChild(th);
+    });
+    thead.appendChild(headRow);
+    const tbody = document.createElement("tbody");
+    rows.forEach(cells => {
+      const tr = document.createElement("tr");
+      cells.forEach((cell, index) => {
+        const td = document.createElement("td");
+        td.textContent = cell;
+        if (index > 0 && index < cells.length - (headers.length > 3 ? 1 : 0)) {
+          td.className = "mywork-num";
+        }
+        tr.appendChild(td);
+      });
+      tbody.appendChild(tr);
+    });
+    table.append(thead, tbody);
+    return table;
+  }
+
+  /**
+   * ดาวน์โหลดงานบริการของปีที่เลือกเป็น CSV
+   *
+   * ใส่ BOM นำหน้า -- Excel บน Windows อ่าน CSV เป็น ANSI ถ้าไม่มี BOM
+   * ภาษาไทยจะกลายเป็นตัวขยะทั้งไฟล์ ซึ่งเป็นปัญหาที่เจอทุกครั้งที่ลืม
+   */
+  function crmReportCsv() {
+    const year = document.getElementById("crmReportYear").value;
+    const jobs = crmAllJobs().filter(({ job }) =>
+      job.status !== "ยกเลิก" && String(job.serviceDate || "").startsWith(year));
+
+    const esc = value => {
+      const text = String(value === null || value === undefined ? "" : value);
+      return /[",\n]/.test(text) ? '"' + text.replace(/"/g, '""') + '"' : text;
+    };
+
+    const lines = [
+      ["วันที่", "ลูกค้า", "BP", "สถานที่", "CA", "ประเภทบริการ", "ผู้ปฏิบัติงาน",
+       "มูลค่า", "ประกันถึง", "ครบรอบถัดไป", "ผลการตรวจ"].join(",")
+    ];
+    jobs
+      .sort((a, b) => String(a.job.serviceDate || "").localeCompare(String(b.job.serviceDate || "")))
+      .forEach(({ job, site, customer }) => {
+        lines.push([
+          job.serviceDate || "", customer.name || "", customer.bp || "",
+          site.name || "", site.ca || "", job.serviceType || "", job.staffNames || "",
+          Number(job.amount) || 0, job.warrantyEnd || "", job.nextServiceDate || "",
+          job.findings || ""
+        ].map(esc).join(","));
+      });
+
+    const blob = new Blob(["﻿" + lines.join("\r\n")], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "crm-งานบริการ-" + (Number(year) + 543) + ".csv";
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+
+  // ------------------------------------------------------------ ผูกปุ่ม
+  function crmWireActivities() {
+    crmActMode = document.getElementById("crmActMode");
+    crmReportMode = document.getElementById("crmReportMode");
+    crmActError = document.getElementById("crmActError");
+
+    document.getElementById("crmAddActBtn").addEventListener("click", () => openCrmAct(null));
+    document.getElementById("crmActBackBtn").addEventListener("click", () => {
+      crmActMode.hidden = true;
+      crmCustomerMode.hidden = false;
+      window.scrollTo(0, 0);
+    });
+    document.getElementById("crmActSaveBtn").addEventListener("click", saveCrmAct);
+    document.getElementById("crmActDeleteBtn").addEventListener("click", deleteCrmAct);
+    document.getElementById("crmReportYear").addEventListener("change", renderCrmReport);
+    document.getElementById("crmReportCsvBtn").addEventListener("click", crmReportCsv);
+  }
+
   crmWirePipeline();
+  crmWireActivities();
 
   // -------------------------------------------- ระบบรับฟังเสียงของลูกค้า (VOC)
   const vocListMode = document.getElementById("vocListMode");

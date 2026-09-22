@@ -5105,3 +5105,68 @@ body.quo-print-body {
   color: var(--volt-700);
   font-variant-numeric: tabular-nums;
 }
+
+/* ------------------- CRM เฟส 4: ไทม์ไลน์การติดต่อ / PDPA / รายงาน --------- */
+.crm-activities { margin-top: 4px; }
+
+.crm-act-card {
+  display: block;
+  width: 100%;
+  margin-bottom: 10px;
+  padding: 14px 16px;
+  background: var(--white);
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--volt-300);
+  border-radius: 12px;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.crm-act-card:hover { border-color: var(--volt-500); background: var(--volt-50); }
+/* งานติดตามที่เลยกำหนดต้องเห็นจากการไล่สายตา ไม่ต้องอ่านทุกบรรทัด */
+.crm-act-card.is-overdue { border-left-color: var(--danger); }
+.crm-act-who { font-size: 13px; color: var(--ink-soft); }
+.crm-act-summary { margin-top: 6px; white-space: pre-wrap; }
+.crm-act-next {
+  margin-top: 8px;
+  padding: 6px 10px;
+  background: var(--warning-tint);
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--warning);
+}
+.crm-act-next.is-done {
+  background: var(--success-tint);
+  color: var(--success);
+  font-weight: 400;
+  text-decoration: line-through;
+}
+.crm-act-by { margin-top: 6px; font-size: 12px; color: var(--ink-soft); }
+
+/* กราฟแท่งรายได้รายเดือน -- อ่านสัดส่วนด้วยสายตาได้เร็วกว่าไล่อ่านตัวเลข */
+.crm-month-chart { margin-bottom: 8px; }
+.crm-month-row {
+  display: grid;
+  grid-template-columns: 52px 1fr 160px;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 4px;
+}
+.crm-month-label { font-size: 13px; color: var(--ink-soft); }
+.crm-month-bar {
+  height: 18px;
+  background: var(--volt-50);
+  border-radius: 4px;
+  overflow: hidden;
+}
+.crm-month-bar span { display: block; height: 100%; background: var(--volt-500); }
+.crm-month-value {
+  text-align: right;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+}
+
+.crm-report-table { margin-bottom: 8px; }
+.crm-report-table td:first-child { overflow-wrap: break-word; }
