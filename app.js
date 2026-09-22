@@ -12793,6 +12793,7 @@ ${sheetHtml}
     quotationFormMode.hidden = true;
     evCalcMode.hidden = true;
     priceBookMode.hidden = true;
+    priceBookListMode.hidden = true;
     protectCalcMode.hidden = true;
     protectCatalogMode.hidden = true;
     quotationListMode.hidden = false;
@@ -12824,6 +12825,7 @@ ${sheetHtml}
     }
     evCalcMode.hidden = true;
     priceBookMode.hidden = true;
+    priceBookListMode.hidden = true;
     protectCalcMode.hidden = true;
     protectCatalogMode.hidden = true;
     quotationListMode.hidden = false;
@@ -12835,8 +12837,7 @@ ${sheetHtml}
       : "ค้นหาด้วยเรื่อง, ผู้รับ, เลขที่หนังสือ...";
 
     if (quotationTab === "prices") {
-      quotationListTitle.textContent = "ราคาและค่าแรง";
-      await ensurePriceBooks();
+      quotationListTitle.textContent = "ราคา PACKAGE";
       await ensurePriceItems();
       renderPriceItems();
       return;
@@ -13008,12 +13009,6 @@ ${sheetHtml}
     const rows = sortedPriceItems(priceItems).filter(item => item.isNew || priceMatches(item, query));
     quotationCount.textContent = `ทั้งหมด ${priceItems.filter(p => !p.isNew).length} รายการ`;
     quotationList.innerHTML = "";
-    quotationList.appendChild(renderPriceBooksSection());
-
-    const priceHead = document.createElement("h3");
-    priceHead.className = "book-section-head";
-    priceHead.textContent = "รายการราคาเดี่ยว (หยิบใส่ใบเสนอราคาได้ทีละรายการ)";
-    quotationList.appendChild(priceHead);
 
     const hint = document.createElement("p");
     hint.className = "field-hint";
@@ -13303,6 +13298,7 @@ ${sheetHtml}
 
   const evCalcMode = document.getElementById("evCalcMode");
   const priceBookMode = document.getElementById("priceBookMode");
+  const priceBookListMode = document.getElementById("priceBookListMode");
   const evBookSelect = document.getElementById("evBook");
   const evDaysSelect = document.getElementById("evDays");
   const evJobName = document.getElementById("evJobName");
@@ -13430,6 +13426,7 @@ ${sheetHtml}
     quotationListMode.hidden = true;
     quotationFormMode.hidden = true;
     priceBookMode.hidden = true;
+    priceBookListMode.hidden = true;
     evCalcMode.hidden = false;
     window.scrollTo(0, 0);
 
@@ -13792,6 +13789,34 @@ ${sheetHtml}
     openEvCalc({ fromQuotation: true });
   });
 
+  async function openPriceBookList() {
+    hideError(quotationError);
+    quotationListMode.hidden = true;
+    quotationFormMode.hidden = true;
+    evCalcMode.hidden = true;
+    priceBookMode.hidden = true;
+    priceBookListMode.hidden = false;
+    window.scrollTo(0, 0);
+    await ensurePriceBooks();
+    renderPriceBookList();
+  }
+
+  function renderPriceBookList() {
+    const host = document.getElementById("priceBookList");
+    host.innerHTML = "";
+    host.appendChild(renderPriceBooksSection());
+    const current = currentPriceBook();
+    document.getElementById("priceBookListSubtitle").textContent = current
+      ? "งวดที่ใช้อยู่: " + current.title
+      : "ยังไม่มีงวดราคา";
+  }
+
+  document.getElementById("evManageBtn").addEventListener("click", openPriceBookList);
+  document.getElementById("priceBookListBackBtn").addEventListener("click", () => {
+    priceBookListMode.hidden = true;
+    openEvCalc({ fromQuotation: evReturnToQuotation });
+  });
+
   // ---------------------------------------------------------------- งวดราคา
   function setBookDirty(dirty) {
     bookDirtyFlag = dirty;
@@ -13863,6 +13888,7 @@ ${sheetHtml}
     quotationListMode.hidden = true;
     quotationFormMode.hidden = true;
     evCalcMode.hidden = true;
+    priceBookListMode.hidden = true;
     priceBookMode.hidden = false;
 
     renderBookLabour();
@@ -14060,7 +14086,7 @@ ${sheetHtml}
     if (bookDirtyFlag && !confirm("มีการแก้ไขที่ยังไม่ได้บันทึก ออกจากหน้านี้ใช่หรือไม่?")) return;
     setBookDirty(false);
     priceBookMode.hidden = true;
-    setQuotationTab("prices");
+    openPriceBookList();
   });
 
   document.getElementById("bookSaveBtn").addEventListener("click", async () => {
@@ -14127,7 +14153,7 @@ ${sheetHtml}
       priceBooks = priceBooks.filter(b => String(b.id) !== String(bookEditing.id));
       setBookDirty(false);
       priceBookMode.hidden = true;
-      setQuotationTab("prices");
+      openPriceBookList();
     } catch (err) {
       showError(bookError, moduleErrorText(err));
     } finally {
@@ -14209,7 +14235,7 @@ ${sheetHtml}
     const head = document.createElement("div");
     head.className = "book-list-head";
     const title = document.createElement("h3");
-    title.textContent = "งวดราคาอุปกรณ์และค่าแรง (ใช้กับเครื่องคำนวณ EV Charger)";
+    title.textContent = "งวดราคาอุปกรณ์และค่าแรง";
     const addBtn = document.createElement("button");
     addBtn.type = "button";
     addBtn.className = "btn btn-primary";
@@ -14310,6 +14336,8 @@ ${sheetHtml}
     pricePasteModal.hidden = true;
     evCalcMode.hidden = true;
     priceBookMode.hidden = true;
+    priceBookListMode.hidden = true;
+    document.getElementById("priceBookList").innerHTML = "";
     setBookDirty(false);
   }
 
@@ -14559,6 +14587,7 @@ ${sheetHtml}
     quotationFormMode.hidden = true;
     evCalcMode.hidden = true;
     priceBookMode.hidden = true;
+    priceBookListMode.hidden = true;
     protectCatalogMode.hidden = true;
     protectCalcMode.hidden = false;
     window.scrollTo(0, 0);
@@ -14942,6 +14971,7 @@ ${sheetHtml}
     quotationFormMode.hidden = true;
     evCalcMode.hidden = true;
     priceBookMode.hidden = true;
+    priceBookListMode.hidden = true;
     protectCalcMode.hidden = true;
     protectCatalogMode.hidden = false;
     window.scrollTo(0, 0);

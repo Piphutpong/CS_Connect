@@ -24,7 +24,7 @@
 <title>CS Connect</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=Sarabun:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=20260922m">
+<link rel="stylesheet" href="style.css?v=20260922n">
 </head>
 <body>
 
@@ -1842,9 +1842,9 @@
         <div class="requests-modes" id="quotationTabs">
           <button type="button" class="requests-mode-btn active" data-quo-tab="docs">ใบเสนอราคา</button>
           <button type="button" class="requests-mode-btn" data-quo-tab="templates">แม่แบบ</button>
-          <button type="button" class="requests-mode-btn" data-quo-tab="ev">คำนวณราคา EV Charger</button>
-          <button type="button" class="requests-mode-btn" data-quo-tab="protect">คำนวณราคาอุปกรณ์ป้องกัน</button>
-          <button type="button" class="requests-mode-btn" data-quo-tab="prices">ราคาและค่าแรง</button>
+          <button type="button" class="requests-mode-btn" data-quo-tab="ev">คำนวณราคาติดตั้ง EV (วงจรที่ 2)</button>
+          <button type="button" class="requests-mode-btn" data-quo-tab="protect">คำนวณราคาติดตั้งอุปกรณ์ป้องกัน</button>
+          <button type="button" class="requests-mode-btn" data-quo-tab="prices">ราคา PACKAGE</button>
         </div>
         <div class="requests-search">
           <input type="search" id="quotationSearch" placeholder="ค้นหาด้วยเรื่อง, ผู้รับ, เลขที่หนังสือ...">
@@ -1971,10 +1971,11 @@
       <div class="quo-editor-bar">
         <button type="button" id="evBackBtn" class="btn btn-ghost">← กลับ</button>
         <div class="quo-editor-title">
-          <h2>คำนวณราคา — ติดตั้ง EV Charger วงจรที่ 2</h2>
+          <h2>คำนวณราคาติดตั้ง EV (วงจรที่ 2)</h2>
           <p id="evSubtitle" class="requests-count"></p>
         </div>
         <div class="quo-editor-actions">
+          <button type="button" id="evManageBtn" class="btn btn-ghost">จัดการราคา/ค่าแรง</button>
           <button type="button" id="evResetBtn" class="btn btn-ghost">ล้างจำนวนที่เลือก</button>
           <button type="button" id="evApplyBtn" class="btn btn-primary">ใส่ราคาในใบเสนอราคา</button>
         </div>
@@ -2023,7 +2024,7 @@
       <div class="quo-editor-bar">
         <button type="button" id="protectBackBtn" class="btn btn-ghost">← กลับ</button>
         <div class="quo-editor-title">
-          <h2>คำนวณราคา — งานอุปกรณ์ป้องกัน</h2>
+          <h2>คำนวณราคาติดตั้งอุปกรณ์ป้องกัน</h2>
           <p id="protectSubtitle" class="requests-count"></p>
         </div>
         <div class="quo-editor-actions">
@@ -2130,6 +2131,21 @@
           <button type="button" id="protectSurveySaveBtn" class="btn btn-primary">บันทึก</button>
         </div>
       </div>
+    </div>
+
+    <!-- ===== รายการงวดราคาของ EV Charger =====
+         เปิดจากปุ่ม "จัดการราคา/ค่าแรง" ในเครื่องคำนวณ EV -- ทางเข้าทางเดียว
+         เหมือนที่หน้าจัดการรายการอุปกรณ์ป้องกันเปิดจากเครื่องคำนวณของตัวเอง -->
+    <div id="priceBookListMode" hidden>
+      <div class="quo-editor-bar">
+        <button type="button" id="priceBookListBackBtn" class="btn btn-ghost">← กลับ</button>
+        <div class="quo-editor-title">
+          <h2>ราคาอุปกรณ์และค่าแรง EV Charger</h2>
+          <p id="priceBookListSubtitle" class="requests-count"></p>
+        </div>
+      </div>
+      <p id="priceBookListError" class="form-error" hidden></p>
+      <div id="priceBookList"></div>
     </div>
 
     <!-- ===== งวดราคา: แก้ราคาอุปกรณ์ทั้งงวด + ค่าแรง + อัตรา แล้วบันทึกครั้งเดียว ===== -->
@@ -2398,6 +2414,6 @@
      **ต้องเปลี่ยนเลขนี้ทุกครั้งที่แก้ app.js / style.css / track.js / qr.js**
      ไม่งั้นผู้ใช้บางคนจะยังได้ไฟล์เก่าไปอีกพักใหญ่ -->
 <script src="vendor/supabase.js?v=2.116.0"></script>
-<script src="app.js?v=20260922m"></script>
+<script src="app.js?v=20260922n"></script>
 </body>
 </html>
