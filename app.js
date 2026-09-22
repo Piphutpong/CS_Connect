@@ -14484,13 +14484,15 @@ ${sheetHtml}
     // ใช้ราคาที่สูงกว่าเสมอ -- ถ้ายังไม่มีราคาสืบก็ใช้ราคาประมาณการไปก่อน
     const usedSurvey = surveyPrice > breakdown.net;
     const realCost = usedSurvey ? surveyPrice : breakdown.net;
-    const overhead = quoRound2(realCost * PROTECT_OUTER_OVERHEAD_PCT / 100);
+    // ทุกก้อนที่คิดเป็นร้อยละ ปัดเศษขึ้นเป็นจำนวนเต็มบาทเหมือนสี่ก้อนในใบประมาณการ
+    // ส่วนยอดรวมเป็นแค่ผลบวก จึงคงทศนิยมไว้ (ราคาสืบหรือค่าแรงอาจมีสตางค์)
+    const overhead = ceilBaht(realCost * PROTECT_OUTER_OVERHEAD_PCT / 100);
     const totalCost = quoRound2(realCost + overhead);
     const profitPct = hasMaintenance
       ? PROTECT_MAINTENANCE_PROFIT_PCT
       : profitPctFor(book, totalCost);
-    const profit = quoRound2(totalCost * profitPct / 100);
-    // ปัดขึ้นหลักสิบเฉพาะขั้นสุดท้ายนี้ขั้นเดียว
+    const profit = ceilBaht(totalCost * profitPct / 100);
+    // ค่าบริการที่เสนอลูกค้าปัดขึ้นหลักสิบ -- ขั้นเดียวในสูตรที่ปัดหยาบกว่าหลักบาท
     const service = Math.ceil(quoRound2(totalCost + profit) / 10) * 10;
 
     return {
