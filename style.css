@@ -4600,16 +4600,43 @@ body.quo-print-body {
   background: var(--white);
   overflow: hidden;
 }
+/* หัวหมวด -- ปุ่มย่อ/ขยาย ไม่ใช่แค่ป้ายชื่อ เริ่มต้นย่อทุกหมวดยกเว้นหมวดแรก
+   (ดู resetEvGroupCollapse() ใน app.js) เพราะงวดหนึ่งมีอุปกรณ์เป็นสิบหมวด
+   เปิดมาเห็นเต็มหน้าจอทันทีจะหาของที่ต้องการยากกว่าไล่เปิดทีละหมวด */
 .ev-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  margin: 0;
   padding: 8px 14px;
   background: var(--volt-50);
-  color: var(--volt-700);
-  font-weight: 600;
-  font-size: 13px;
+  border: none;
   border-bottom: 1px solid var(--border);
   border-top: 1px solid var(--border);
+  color: var(--volt-700);
+  font: inherit;
+  font-weight: 600;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
 }
+.ev-group:hover { background: var(--volt-100); }
 .ev-group:first-child { border-top: none; }
+.ev-group-arrow {
+  flex: none;
+  display: inline-block;
+  font-size: 11px;
+  transition: transform 0.15s ease;
+}
+.ev-group.is-collapsed .ev-group-arrow { transform: rotate(-90deg); }
+.ev-group-label { flex: 1; min-width: 0; }
+.ev-group-count {
+  flex: none;
+  font-weight: 400;
+  font-size: 12px;
+  color: var(--ink-soft);
+}
 
 .ev-item {
   display: grid;

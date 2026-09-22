@@ -13241,6 +13241,7 @@ ${sheetHtml}
   let bookItemQuery = "";
 
   let evQty = new Map();      // key ของรายการ -> จำนวนที่เลือก
+  let evCollapsedGroups = new Set();   // ชื่อหมวดที่ถูกย่อไว้ -- ตั้งต้นใหม่ทุกครั้งที่เปลี่ยนงวด
   let evBookId = null;
   let evDays = null;
   let evSearchQuery = "";
@@ -13384,6 +13385,7 @@ ${sheetHtml}
     const book = (prev && priceBookById(prev.bookId)) || currentPriceBook();
     evBookId = book ? book.id : null;
     evQty = new Map();
+    resetEvGroupCollapse(book);
     if (prev && Array.isArray(prev.lines)) prev.lines.forEach(l => evQty.set(l.key, Number(l.qty) || 0));
     evDays = prev ? Number(prev.days) : null;
     evJobName.value = (prev && prev.jobName) || EV_DEFAULT_JOB_NAME;
@@ -13397,6 +13399,23 @@ ${sheetHtml}
     evSubtitle.textContent = evReturnToQuotation
       ? "คิดราคาแล้วกด “ใส่ราคาในใบเสนอราคา” เพื่อกลับไปที่ใบเดิม"
       : "คิดราคาแล้วกด “ใส่ราคาในใบเสนอราคา” เพื่อสร้างใบใหม่จากราคานี้";
+  }
+
+  /** ตั้งค่าย่อ/ขยายเริ่มต้นของงวดที่เลือก -- ขยายไว้เฉพาะหมวดแรกที่พบในงวด
+   *  (ลำดับตามที่บันทึกไว้ในงวด ไม่ใช่ลำดับตัวอักษร) ส่วนที่เหลือย่อไว้ก่อน
+   *  ให้เห็นภาพรวมโดยไม่ต้องเลื่อนอ่านอุปกรณ์หลายสิบรายการทันทีที่เปิดหน้า */
+  function resetEvGroupCollapse(book) {
+    evCollapsedGroups = new Set();
+    const items = book && book.data && Array.isArray(book.data.items) ? book.data.items : [];
+    const seen = new Set();
+    let first = null;
+    items.forEach(item => {
+      const group = item.group || "ไม่ระบุหมวด";
+      if (seen.has(group)) return;
+      seen.add(group);
+      if (first === null) first = group;
+      else evCollapsedGroups.add(group);
+    });
   }
 
   function renderEvBookOptions() {
@@ -13474,89 +13493,124 @@ ${sheetHtml}
       return;
     }
 
-    let lastGroup = null;
+    // จัดกลุ่มด้วย Map คงลำดับที่พบครั้งแรก (ไม่ใช่เรียงตัวอักษร) ให้ตรงกับลำดับ
+    // ที่บันทึกไว้ในงวดเสมอ -- เหมือนพฤติกรรมเดิมตอนเทียบ lastGroup ตรง ๆ
+    const groups = new Map();
     shown.forEach(item => {
       const group = item.group || "ไม่ระบุหมวด";
-      if (group !== lastGroup) {
-        const head = document.createElement("div");
-        head.className = "ev-group";
-        head.textContent = group;
-        evItemsEl.appendChild(head);
-        lastGroup = group;
-      }
+      if (!groups.has(group)) groups.set(group, []);
+      groups.get(group).push(item);
+    });
 
-      const row = document.createElement("div");
-      row.className = "ev-item";
+    groups.forEach((groupItems, group) => {
+      const collapsed = evCollapsedGroups.has(group);
+      const pickedCount = groupItems.filter(i => Number(evQty.get(i.key)) > 0).length;
 
-      const name = document.createElement("div");
-      name.className = "ev-item-name";
-      name.textContent = item.name;
-      if (item.brand) {
-        const brand = document.createElement("span");
-        brand.className = "ev-item-brand";
-        brand.textContent = item.brand;
-        name.appendChild(brand);
-      }
+      const head = document.createElement("button");
+      head.type = "button";
+      head.className = "ev-group";
+      head.classList.toggle("is-collapsed", collapsed);
+      head.setAttribute("aria-expanded", String(!collapsed));
 
-      const price = document.createElement("div");
-      price.className = "ev-item-price";
-      price.textContent = formatMoney(item.price) + " / " + (item.unit || "หน่วย");
+      const arrow = document.createElement("span");
+      arrow.className = "ev-group-arrow";
+      arrow.textContent = "\u25be";
+      arrow.setAttribute("aria-hidden", "true");
 
-      const qtyWrap = document.createElement("div");
-      qtyWrap.className = "ev-item-qty";
-      const minus = document.createElement("button");
-      minus.type = "button";
-      minus.className = "ev-step";
-      minus.textContent = "−";
-      minus.setAttribute("aria-label", "ลดจำนวน " + item.name);
-      const qty = document.createElement("input");
-      qty.type = "text";
-      qty.inputMode = "decimal";
-      qty.className = "ev-qty-input";
-      qty.value = Number(evQty.get(item.key)) > 0 ? String(evQty.get(item.key)) : "";
-      qty.placeholder = "0";
-      qty.setAttribute("aria-label", "จำนวน " + item.name);
-      const plus = document.createElement("button");
-      plus.type = "button";
-      plus.className = "ev-step";
-      plus.textContent = "+";
-      plus.setAttribute("aria-label", "เพิ่มจำนวน " + item.name);
+      const label = document.createElement("span");
+      label.className = "ev-group-label";
+      label.textContent = group;
 
-      const amount = document.createElement("div");
-      amount.className = "ev-item-amount";
+      const count = document.createElement("span");
+      count.className = "ev-group-count";
+      count.textContent = pickedCount > 0
+        ? groupItems.length + " รายการ · เลือกแล้ว " + pickedCount
+        : groupItems.length + " รายการ";
 
-      const paint = () => {
-        const value = Number(evQty.get(item.key)) || 0;
-        amount.textContent = value > 0 ? formatMoney(quoRound2(value * (Number(item.price) || 0))) : "";
-        row.classList.toggle("is-picked", value > 0);
-      };
-      const setQty = (value) => {
-        const next = Math.max(0, quoRound2(value));
-        if (next > 0) evQty.set(item.key, next);
-        else evQty.delete(item.key);
+      head.append(arrow, label, count);
+      head.addEventListener("click", () => {
+        if (evCollapsedGroups.has(group)) evCollapsedGroups.delete(group);
+        else evCollapsedGroups.add(group);
+        renderEvItems();
+      });
+      evItemsEl.appendChild(head);
+
+      if (collapsed) return;
+
+      groupItems.forEach(item => {
+        const row = document.createElement("div");
+        row.className = "ev-item";
+
+        const name = document.createElement("div");
+        name.className = "ev-item-name";
+        name.textContent = item.name;
+        if (item.brand) {
+          const brand = document.createElement("span");
+          brand.className = "ev-item-brand";
+          brand.textContent = item.brand;
+          name.appendChild(brand);
+        }
+
+        const price = document.createElement("div");
+        price.className = "ev-item-price";
+        price.textContent = formatMoney(item.price) + " / " + (item.unit || "หน่วย");
+
+        const qtyWrap = document.createElement("div");
+        qtyWrap.className = "ev-item-qty";
+        const minus = document.createElement("button");
+        minus.type = "button";
+        minus.className = "ev-step";
+        minus.textContent = "−";
+        minus.setAttribute("aria-label", "ลดจำนวน " + item.name);
+        const qty = document.createElement("input");
+        qty.type = "text";
+        qty.inputMode = "decimal";
+        qty.className = "ev-qty-input";
+        qty.value = Number(evQty.get(item.key)) > 0 ? String(evQty.get(item.key)) : "";
+        qty.placeholder = "0";
+        qty.setAttribute("aria-label", "จำนวน " + item.name);
+        const plus = document.createElement("button");
+        plus.type = "button";
+        plus.className = "ev-step";
+        plus.textContent = "+";
+        plus.setAttribute("aria-label", "เพิ่มจำนวน " + item.name);
+
+        const amount = document.createElement("div");
+        amount.className = "ev-item-amount";
+
+        const paint = () => {
+          const value = Number(evQty.get(item.key)) || 0;
+          amount.textContent = value > 0 ? formatMoney(quoRound2(value * (Number(item.price) || 0))) : "";
+          row.classList.toggle("is-picked", value > 0);
+        };
+        const setQty = (value) => {
+          const next = Math.max(0, quoRound2(value));
+          if (next > 0) evQty.set(item.key, next);
+          else evQty.delete(item.key);
+          paint();
+          renderEvSummary();
+        };
+
+        qty.addEventListener("input", () => {
+          const value = quoParseNumber(qty.value);
+          setQty(Number.isNaN(value) ? 0 : value);
+        });
+        minus.addEventListener("click", () => {
+          const value = Math.max(0, (Number(evQty.get(item.key)) || 0) - 1);
+          qty.value = value > 0 ? String(value) : "";
+          setQty(value);
+        });
+        plus.addEventListener("click", () => {
+          const value = (Number(evQty.get(item.key)) || 0) + 1;
+          qty.value = String(value);
+          setQty(value);
+        });
+
+        qtyWrap.append(minus, qty, plus);
+        row.append(name, price, qtyWrap, amount);
+        evItemsEl.appendChild(row);
         paint();
-        renderEvSummary();
-      };
-
-      qty.addEventListener("input", () => {
-        const value = quoParseNumber(qty.value);
-        setQty(Number.isNaN(value) ? 0 : value);
       });
-      minus.addEventListener("click", () => {
-        const value = Math.max(0, (Number(evQty.get(item.key)) || 0) - 1);
-        qty.value = value > 0 ? String(value) : "";
-        setQty(value);
-      });
-      plus.addEventListener("click", () => {
-        const value = (Number(evQty.get(item.key)) || 0) + 1;
-        qty.value = String(value);
-        setQty(value);
-      });
-
-      qtyWrap.append(minus, qty, plus);
-      row.append(name, price, qtyWrap, amount);
-      evItemsEl.appendChild(row);
-      paint();
     });
 
     renderEvSummary();
@@ -13610,6 +13664,7 @@ ${sheetHtml}
     evBookId = evBookSelect.value;
     // รายการของคนละงวดเป็นคนละ key -- ล้างจำนวนที่เลือกไว้ ไม่ให้ค้างของที่ไม่มีอยู่
     evQty = new Map();
+    resetEvGroupCollapse(priceBookById(evBookId));
     renderEvDaysOptions();
     renderEvItems();
   });
