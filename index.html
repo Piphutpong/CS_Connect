@@ -24,7 +24,7 @@
 <title>CS Connect</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=Sarabun:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=20260922t">
+<link rel="stylesheet" href="style.css?v=20260922u">
 </head>
 <body>
 
@@ -326,12 +326,28 @@
         <span class="service-desc">คิวงานสำรวจของช่าง จ่ายงานและติดตามงานในมือ</span>
       </button>
 
+      <button class="service-card" data-service="sideBusiness">
+        <span class="service-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none"><rect x="3" y="7" width="18" height="13" rx="2" stroke="currentColor" stroke-width="1.6"/><path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M3 12h18" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </span>
+        <span class="service-title">งานธุรกิจเสริม</span>
+        <span class="service-desc">PEA Engineering Service — บริการตรวจสอบและบำรุงรักษาระบบไฟฟ้า</span>
+      </button>
+
       <button class="service-card" data-service="solar">
         <span class="service-icon" aria-hidden="true">
           <svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="4" stroke="currentColor" stroke-width="1.6"/><path d="M12 2v2.5M12 19.5V22M22 12h-2.5M4.5 12H2M19.07 4.93l-1.77 1.77M6.7 17.3l-1.77 1.77M19.07 19.07l-1.77-1.77M6.7 6.7 4.93 4.93" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
         </span>
         <span class="service-title">Solar</span>
         <span class="service-desc">คำร้องเกี่ยวกับระบบผลิตไฟฟ้าพลังงานแสงอาทิตย์</span>
+      </button>
+
+      <button class="service-card" data-service="voc">
+        <span class="service-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none"><path d="M20 12a8 8 0 1 0-3.2 6.4L21 20l-1.2-3.6A7.9 7.9 0 0 0 20 12Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M9 10h6M9 14h4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+        </span>
+        <span class="service-title">ระบบรับฟังเสียงของลูกค้า (PEA-VOC)</span>
+        <span class="service-desc">รับเรื่องร้องเรียน ข้อเสนอแนะ และคำชมจากลูกค้า พร้อมติดตามการแก้ไข</span>
       </button>
 
       <!-- ลิงก์ออกไปยัง Google Sheet ของแผนก ไม่มีข้อมูลของตัวเองในระบบนี้เลย --
@@ -342,22 +358,6 @@
         </span>
         <span class="service-title">KPI แผนกบริการและลูกค้าสัมพันธ์</span>
         <span class="service-desc">ตัวชี้วัดผลการดำเนินงานของแผนก (Google Sheet)</span>
-      </button>
-
-      <button class="service-card" data-service="sideBusiness">
-        <span class="service-icon" aria-hidden="true">
-          <svg viewBox="0 0 24 24" fill="none"><rect x="3" y="7" width="18" height="13" rx="2" stroke="currentColor" stroke-width="1.6"/><path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M3 12h18" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
-        </span>
-        <span class="service-title">งานธุรกิจเสริม</span>
-        <span class="service-desc">PEA Engineering Service — บริการตรวจสอบและบำรุงรักษาระบบไฟฟ้า</span>
-      </button>
-
-      <button class="service-card" data-service="voc">
-        <span class="service-icon" aria-hidden="true">
-          <svg viewBox="0 0 24 24" fill="none"><path d="M20 12a8 8 0 1 0-3.2 6.4L21 20l-1.2-3.6A7.9 7.9 0 0 0 20 12Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M9 10h6M9 14h4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
-        </span>
-        <span class="service-title">ระบบรับฟังเสียงของลูกค้า (PEA-VOC)</span>
-        <span class="service-desc">รับเรื่องร้องเรียน ข้อเสนอแนะ และคำชมจากลูกค้า พร้อมติดตามการแก้ไข</span>
       </button>
     </div>
   </main>
@@ -2968,6 +2968,6 @@
      **ต้องเปลี่ยนเลขนี้ทุกครั้งที่แก้ app.js / style.css / track.js / qr.js**
      ไม่งั้นผู้ใช้บางคนจะยังได้ไฟล์เก่าไปอีกพักใหญ่ -->
 <script src="vendor/supabase.js?v=2.116.0"></script>
-<script src="app.js?v=20260922t"></script>
+<script src="app.js?v=20260922u"></script>
 </body>
 </html>
