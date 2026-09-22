@@ -14352,6 +14352,9 @@ ${sheetHtml}
   let protectSearchQuery = "";
   let protectReturnToQuotation = false;
   let protectCatalogKind = "install";
+  // ประเภทงานที่ถูกย่อไว้ในหน้าคำนวณ -- ตั้งต้นย่องานรื้อถอน เปิดงานติดตั้งไว้
+  // เพราะงานที่เสนอลูกค้าส่วนใหญ่เป็นงานติดตั้ง
+  let protectCollapsedKinds = new Set(["remove"]);
   let protectSurveyEditing = null;  // รายการที่กำลังแก้ประวัติราคาสืบ
   let protectSurveyDraft = [];
 
@@ -14569,6 +14572,7 @@ ${sheetHtml}
     protectSearch.value = "";
     protectSearchQuery = "";
     protectOnlyPicked.checked = false;
+    protectCollapsedKinds = new Set(["remove"]);
 
     renderProtectPeriodOptions();
     renderProtectBookOptions();
@@ -14656,10 +14660,40 @@ ${sheetHtml}
       const rows = shown.filter(item => (protectData(item).workKind === "remove" ? "remove" : "install") === kind);
       if (!rows.length) return;
 
-      const head = document.createElement("div");
+      const collapsed = protectCollapsedKinds.has(kind);
+      const pickedCount = rows.filter(item =>
+        Number(protectQty.get(String(item.id))) > 0).length;
+
+      const head = document.createElement("button");
+      head.type = "button";
       head.className = "ev-group";
-      head.textContent = PROTECT_KIND_LABEL[kind];
+      head.classList.toggle("is-collapsed", collapsed);
+      head.setAttribute("aria-expanded", String(!collapsed));
+
+      const arrow = document.createElement("span");
+      arrow.className = "ev-group-arrow";
+      arrow.textContent = "\u25be";
+      arrow.setAttribute("aria-hidden", "true");
+
+      const label = document.createElement("span");
+      label.className = "ev-group-label";
+      label.textContent = PROTECT_KIND_LABEL[kind];
+
+      const count = document.createElement("span");
+      count.className = "ev-group-count";
+      count.textContent = pickedCount > 0
+        ? rows.length + " รายการ · เลือกแล้ว " + pickedCount
+        : rows.length + " รายการ";
+
+      head.append(arrow, label, count);
+      head.addEventListener("click", () => {
+        if (protectCollapsedKinds.has(kind)) protectCollapsedKinds.delete(kind);
+        else protectCollapsedKinds.add(kind);
+        renderProtectItems();
+      });
       protectItemsEl.appendChild(head);
+
+      if (collapsed) return;
 
       rows.forEach(item => {
         const calc = computeProtectRow(item, protectPeriod, book, hasMaintenance);
