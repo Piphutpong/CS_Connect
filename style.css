@@ -5075,3 +5075,33 @@ body.quo-print-body {
   color: var(--ink-soft);
   white-space: pre-wrap;
 }
+
+/* ------------------------------------ CRM เฟส 3: โอกาสขาย + อัตราปิดการขาย */
+.crm-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 12px;
+  margin-bottom: 20px;
+}
+.crm-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 14px 16px;
+  background: var(--white);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+.crm-stat strong { font-size: 24px; line-height: 1.1; color: var(--volt-700); }
+.crm-stat span { font-size: 13px; color: var(--ink); }
+.crm-stat small { font-size: 12px; color: var(--ink-soft); }
+
+/* แถวโอกาสขายใช้โครงเดียวกับแถว "ต้องทำก่อน" ของหน้างานของฉัน ต่างกันที่มี
+   ป้ายขั้นตอนกับมูลค่าอยู่ท้ายแถว */
+.crm-opp-row { border-left-color: var(--info); }
+.crm-opp-amount {
+  min-width: 120px;
+  text-align: right;
+  color: var(--volt-700);
+  font-variant-numeric: tabular-nums;
+}

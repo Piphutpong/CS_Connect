@@ -24,7 +24,7 @@
 <title>CS Connect</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=Sarabun:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=20260922r">
+<link rel="stylesheet" href="style.css?v=20260922s">
 </head>
 <body>
 
@@ -1982,6 +1982,10 @@
           <button type="button" id="quotationEvBtn" class="btn btn-ghost">คำนวณราคาติดตั้ง EV (วงจรที่ 2)</button>
           <button type="button" id="quotationProtectBtn" class="btn btn-ghost">คำนวณราคาติดตั้งอุปกรณ์ป้องกัน</button>
           <button type="button" id="quoPickPriceBtn" class="btn btn-ghost">ราคา PACKAGE บำรุงรักษา</button>
+          <label class="quo-bar-field" id="quoCustomerField">
+            <span>ลูกค้า (CRM)</span>
+            <select id="quoCustomer"><option value="">- ไม่ผูก -</option></select>
+          </label>
           <button type="button" id="quotationSaveTemplateBtn" class="btn btn-ghost">บันทึกเป็นแม่แบบ</button>
           <button type="button" id="quotationDeleteBtn" class="btn btn-ghost" hidden>ลบ</button>
           <button type="button" id="quotationPrintBtn" class="btn btn-ghost">พิมพ์</button>
@@ -2388,6 +2392,7 @@
       <div class="requests-modes crm-tabs">
         <button type="button" class="requests-mode-btn active" data-crm-tab="home">สิ่งที่ต้องทำ</button>
         <button type="button" class="requests-mode-btn" data-crm-tab="list">รายชื่อลูกค้า</button>
+        <button type="button" class="requests-mode-btn" data-crm-tab="pipeline">โอกาสขาย</button>
       </div>
 
       <!-- ===== หน้าแรก CRM: สี่กองที่ระบบคิดให้เองจากข้อมูลที่มีอยู่ =====
@@ -2407,6 +2412,68 @@
         <div id="crmWarrantyList"></div>
         <div id="crmQuietList"></div>
         <div id="crmOfferList"></div>
+      </div>
+
+      <!-- ===== โอกาสขาย =====
+           งานที่ยังไม่เกิดขึ้น ต่างจากประวัติงานบริการที่เป็นงานที่ทำไปแล้ว
+           จัดกลุ่มตามขั้นตอนขาย และสรุปอัตราปิดการขายจากที่ปิดไปแล้วจริง -->
+      <div id="crmPipelineMode" hidden>
+        <div class="requests-content-heading">
+          <div class="requests-content-heading-row">
+            <div>
+              <h2>โอกาสขาย</h2>
+              <p id="crmPipelineCount" class="requests-count"></p>
+            </div>
+            <div class="requests-heading-actions">
+              <button type="button" id="crmAddOppBtn" class="btn btn-primary">+ เพิ่มโอกาสขาย</button>
+            </div>
+          </div>
+        </div>
+        <div id="crmPipelineStats" class="crm-stats"></div>
+        <div id="crmPipelineList"></div>
+      </div>
+
+      <!-- ===== โอกาสขายหนึ่งรายการ ===== -->
+      <div id="crmOppMode" hidden>
+        <div class="quo-editor-bar">
+          <button type="button" id="crmOppBackBtn" class="btn btn-ghost">← กลับ</button>
+          <div class="quo-editor-title">
+            <h2 id="crmOppTitle">โอกาสขายใหม่</h2>
+            <p id="crmOppSubtitle" class="requests-count"></p>
+          </div>
+          <div class="quo-editor-actions">
+            <button type="button" id="crmOppQuoteBtn" class="btn btn-ghost">สร้างใบเสนอราคา</button>
+            <button type="button" id="crmOppDeleteBtn" class="btn btn-ghost" hidden>ลบ</button>
+            <button type="button" id="crmOppSaveBtn" class="btn btn-primary">บันทึก</button>
+          </div>
+        </div>
+        <p id="crmOppError" class="form-error" hidden></p>
+
+        <div class="crm-form-grid">
+          <label class="field crm-field-wide"><span>เรื่องที่จะเสนอ *</span>
+            <input type="text" id="crmOppName" autocomplete="off" placeholder="เช่น สัญญาบำรุงรักษาหม้อแปลง ปี 2570">
+          </label>
+          <label class="field"><span>ลูกค้า *</span><select id="crmOppCustomer"></select></label>
+          <label class="field"><span>สถานที่ (ว่างได้)</span><select id="crmOppSite"></select></label>
+          <label class="field"><span>ประเภทบริการ</span><select id="crmOppService"></select></label>
+          <label class="field"><span>มูลค่าที่คาด (บาท)</span><input type="text" id="crmOppAmount" inputmode="decimal" placeholder="0.00"></label>
+          <label class="field"><span>ขั้นตอน</span><select id="crmOppStatus"></select></label>
+          <label class="field"><span>คาดว่าจะปิดวันที่</span><input type="date" id="crmOppCloseDate"></label>
+          <label class="field"><span>ผู้รับผิดชอบ</span><select id="crmOppOwner"><option value="">- ยังไม่ระบุ -</option></select></label>
+          <label class="field"><span>ใบเสนอราคาที่ผูกไว้</span><select id="crmOppQuotation"><option value="">- ยังไม่มี -</option></select></label>
+        </div>
+
+        <!-- ขึ้นเฉพาะตอนปิดเป็น "ไม่สำเร็จ" -- คำถามที่ตอบไม่ได้ถ้าไม่บันทึกตอนนั้น -->
+        <div id="crmOppLostFields" class="crm-form-grid" hidden>
+          <label class="field crm-field-wide"><span>เหตุผลที่ไม่สำเร็จ</span>
+            <textarea id="crmOppLostReason" rows="2" placeholder="เช่น ราคาสูงกว่าคู่แข่ง / ลูกค้าเลื่อนงบประมาณ"></textarea>
+          </label>
+          <label class="field"><span>ราคาคู่แข่ง (ถ้าทราบ)</span><input type="text" id="crmOppCompetitorPrice" inputmode="decimal"></label>
+        </div>
+
+        <div class="crm-form-grid">
+          <label class="field crm-field-wide"><span>หมายเหตุ</span><textarea id="crmOppNote" rows="2"></textarea></label>
+        </div>
       </div>
 
       <!-- ===== รายชื่อลูกค้า ===== -->
@@ -2497,6 +2564,18 @@
         </div>
         <p class="field-hint" id="crmSiteSummary"></p>
         <div id="crmSites" class="crm-sites"></div>
+
+        <div class="crm-section-head">
+          <h3>โอกาสขาย</h3>
+          <button type="button" id="crmCustomerAddOppBtn" class="btn btn-ghost">+ เพิ่มโอกาสขาย</button>
+        </div>
+        <div id="crmCustomerOpps"></div>
+
+        <div class="crm-section-head">
+          <h3>ใบเสนอราคาของลูกค้ารายนี้</h3>
+          <button type="button" id="crmCustomerQuoteBtn" class="btn btn-ghost">+ สร้างใบเสนอราคา</button>
+        </div>
+        <div id="crmCustomerQuotes"></div>
       </div>
 
       <!-- ===== สถานที่หนึ่งจุด ===== -->
@@ -2788,6 +2867,6 @@
      **ต้องเปลี่ยนเลขนี้ทุกครั้งที่แก้ app.js / style.css / track.js / qr.js**
      ไม่งั้นผู้ใช้บางคนจะยังได้ไฟล์เก่าไปอีกพักใหญ่ -->
 <script src="vendor/supabase.js?v=2.116.0"></script>
-<script src="app.js?v=20260922r"></script>
+<script src="app.js?v=20260922s"></script>
 </body>
 </html>

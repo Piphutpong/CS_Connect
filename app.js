@@ -402,6 +402,12 @@
     async deleteCrmJob() {
       throw new Error("โหมดออฟไลน์ไม่รองรับโมดูลงานใหม่");
     },
+    async saveCrmOpportunity() {
+      throw new Error("โหมดออฟไลน์ไม่รองรับโมดูลงานใหม่");
+    },
+    async deleteCrmOpportunity() {
+      throw new Error("โหมดออฟไลน์ไม่รองรับโมดูลงานใหม่");
+    },
 
     async uploadBrochureImage() {
       throw new Error("โหมดออฟไลน์ไม่รองรับการอัปโหลดรูป");
@@ -926,6 +932,15 @@
 
       async deleteCrmJob(id) {
         return callAsUser(() => rpc("delete_crm_job", { p_id: id }));
+      },
+
+      async saveCrmOpportunity(opp) {
+        const data = await callAsUser(() => rpc("save_crm_opportunity", { p_opp: opp }));
+        return data.opportunity;
+      },
+
+      async deleteCrmOpportunity(id) {
+        return callAsUser(() => rpc("delete_crm_opportunity", { p_id: id }));
       },
 
       /**
@@ -11767,6 +11782,9 @@ ${sheetHtml}
   let quoEvCalc = null;
   // สำเนาผลคำนวณราคาอุปกรณ์ป้องกันของใบที่เปิดอยู่ -- เหตุผลเดียวกับ quoEvCalc
   let quoProtectCalc = null;
+  // ลูกค้า CRM ที่ใบนี้ผูกอยู่ -- ไม่ใช่ช่องบนกระดาษ จึงไม่อยู่ใน quoFieldEls
+  // ต้องถือไว้เองและใส่กลับตอน collectQuoData ไม่งั้นการผูกจะหลุดตอนบันทึก
+  let quoCustomerId = "";
   let quoDirtyFlag = false;
 
   const QUOTATION_STATUS_TONE = {
@@ -12144,6 +12162,8 @@ ${sheetHtml}
     }));
     quoEvCalc = base.evCalc || null;
     quoProtectCalc = base.protectCalc || null;
+    quoCustomerId = base.customerId ? String(base.customerId) : "";
+    renderQuoCustomerOptions();
     quoVatEnabled.checked = base.vatEnabled !== false;
     quoThaiDigits.checked = Boolean(base.thaiDigits);
     quoPaper.classList.toggle("is-thai-digits", quoThaiDigits.checked);
@@ -12171,6 +12191,42 @@ ${sheetHtml}
     syncQuoOptionalLines();
     scheduleQuoLayout(0);
   }
+
+  /**
+   * ตัวเลือกลูกค้า CRM บนใบเสนอราคา
+   *
+   * อ่านจาก crmCustomers ที่โหลดไว้แล้ว -- ถ้ายังไม่เคยเปิดหน้า CRM ในรอบนี้
+   * ก็จะว่าง ซึ่งไม่เป็นไร: ช่องนี้เป็นของเสริม ใบเสนอราคาที่ไม่ผูกลูกค้าก็ใช้ได้
+   * ตามปกติ โหลดมาให้เงียบ ๆ เบื้องหลังแล้ววาดใหม่เมื่อได้
+   */
+  function renderQuoCustomerOptions() {
+    const select = document.getElementById("quoCustomer");
+    if (!select) return;
+    select.innerHTML = '<option value="">- ไม่ผูก -</option>';
+    crmCustomers
+      .slice()
+      .sort((a, b) => String(a.name || "").localeCompare(String(b.name || ""), "th"))
+      .forEach(c => {
+        const option = document.createElement("option");
+        option.value = String(c.id);
+        option.textContent = (c.bp ? "BP " + c.bp + " · " : "") + (c.name || "");
+        select.appendChild(option);
+      });
+    // ลูกค้าที่ถูกลบไปแล้วแต่ใบยังผูกอยู่ -- ใส่กลับเป็นตัวเลือกไว้ ไม่งั้นกดบันทึก
+    // แล้วการผูกจะหลุดโดยไม่มีใครตั้งใจ
+    if (quoCustomerId && !Array.from(select.options).some(o => o.value === quoCustomerId)) {
+      const option = document.createElement("option");
+      option.value = quoCustomerId;
+      option.textContent = "ลูกค้าที่ถูกลบไปแล้ว";
+      select.appendChild(option);
+    }
+    select.value = quoCustomerId;
+  }
+
+  document.getElementById("quoCustomer").addEventListener("change", (e) => {
+    quoCustomerId = e.target.value;
+    setQuoDirty(true);
+  });
 
   function renderQuoSubtitle() {
     const item = quotationEditing;
@@ -12202,6 +12258,7 @@ ${sheetHtml}
     // สำเนาผลคำนวณ EV -- ราคาในใบนี้จะไม่เปลี่ยนตามเมื่อแก้ราคาในงวดภายหลัง
     if (quoEvCalc) data.evCalc = quoEvCalc;
     if (quoProtectCalc) data.protectCalc = quoProtectCalc;
+    if (quoCustomerId) data.customerId = quoCustomerId;
     data.thaiDigits = quoThaiDigits.checked;
     // คำต่อท้ายหน้าที่แก้เอง (key = เลขหน้า) -- ไม่มี = ใช้ค่าอัตโนมัติ
     data.contTexts = { ...quoContOverrides };
@@ -12855,6 +12912,10 @@ ${sheetHtml}
       showError(quotationError, moduleErrorText(err));
     }
     renderQuotationTab();
+    // รายชื่อลูกค้าไว้ให้ช่อง "ลูกค้า (CRM)" เลือก -- ล้มเหลวก็ใช้ใบเสนอราคาได้ตามปกติ
+    if (!crmCustomers.length) {
+      ensureCrm().then(renderQuoCustomerOptions).catch(() => { /* ไม่เป็นไร */ });
+    }
   }
 
   function showQuotationList() {
@@ -16215,6 +16276,8 @@ ${sheetHtml}
   const crmCustomerMode = document.getElementById("crmCustomerMode");
   const crmSiteMode = document.getElementById("crmSiteMode");
   const crmJobMode = document.getElementById("crmJobMode");
+  const crmPipelineModeEl = document.getElementById("crmPipelineMode");
+  const crmOppModeEl = document.getElementById("crmOppMode");
   const crmJobError = document.getElementById("crmJobError");
   const crmError = document.getElementById("crmError");
   const crmCustomerError = document.getElementById("crmCustomerError");
@@ -16260,6 +16323,9 @@ ${sheetHtml}
     if (!(staffRoster || []).length) {
       refreshStaffRoster().catch(() => { /* ไม่เป็นไร */ });
     }
+    // ใบเสนอราคาไว้แสดงในหน้าลูกค้าและผูกกับโอกาสขาย -- โหลดไม่ได้ก็ยังใช้ CRM ได้
+    await ensureCrmQuotations(true);
+
     // ลงที่ "สิ่งที่ต้องทำ" ก่อนเสมอ -- เป็นคำถามที่คนเปิด CRM มาถามก่อน
     // ไม่ใช่ "ลูกค้ามีใครบ้าง"
     setCrmTab("home");
@@ -16421,9 +16487,13 @@ ${sheetHtml}
 
     renderCrmContacts();
     renderCrmSites();
+    renderCrmCustomerOpps();
+    renderCrmCustomerQuotes();
 
     crmListMode.hidden = true;
     crmHomeMode.hidden = true;
+    crmPipelineModeEl.hidden = true;
+    crmOppModeEl.hidden = true;
     crmSiteMode.hidden = true;
     crmJobMode.hidden = true;
     crmCustomerMode.hidden = false;
@@ -16696,6 +16766,8 @@ ${sheetHtml}
 
     crmListMode.hidden = true;
     crmHomeMode.hidden = true;
+    crmPipelineModeEl.hidden = true;
+    crmOppModeEl.hidden = true;
     crmCustomerMode.hidden = true;
     crmJobMode.hidden = true;
     crmSiteMode.hidden = false;
@@ -16904,6 +16976,15 @@ ${sheetHtml}
     crmEvEl.innerHTML = "";
     crmJobEditing = null;
     crmJobSite = null;
+    crmOppEditing = null;
+    crmQuotations = [];
+    quoCustomerId = "";
+    document.getElementById("crmCustomerOpps").innerHTML = "";
+    document.getElementById("crmCustomerQuotes").innerHTML = "";
+    document.getElementById("crmPipelineList").innerHTML = "";
+    document.getElementById("crmPipelineStats").innerHTML = "";
+    if (crmPipelineModeEl) crmPipelineModeEl.hidden = true;
+    if (crmOppModeEl) crmOppModeEl.hidden = true;
     document.getElementById("crmJobs").innerHTML = "";
     ["crmDueList", "crmWarrantyList", "crmQuietList", "crmOfferList"]
       .forEach(id => { document.getElementById(id).innerHTML = ""; });
@@ -17390,15 +17471,13 @@ ${sheetHtml}
     crmCustomerMode.hidden = true;
     crmSiteMode.hidden = true;
     crmJobMode.hidden = true;
-    if (tab === "home") {
-      crmListMode.hidden = true;
-      crmHomeMode.hidden = false;
-      renderCrmHome();
-    } else {
-      crmHomeMode.hidden = true;
-      crmListMode.hidden = false;
-      renderCrmList();
-    }
+    crmOppModeEl.hidden = true;
+    crmHomeMode.hidden = tab !== "home";
+    crmListMode.hidden = tab !== "list";
+    crmPipelineModeEl.hidden = tab !== "pipeline";
+    if (tab === "home") renderCrmHome();
+    else if (tab === "pipeline") renderCrmPipeline();
+    else renderCrmList();
     window.scrollTo(0, 0);
   }
 
@@ -17483,7 +17562,491 @@ ${sheetHtml}
     }
   }
 
+  // ------------------------------------------ โอกาสขาย + ผูกใบเสนอราคากับลูกค้า
+  /**
+   * โอกาสขายคือสิ่งที่ยังไม่เกิดขึ้น ต่างจากประวัติงานบริการที่เป็นงานที่ทำไปแล้ว
+   * จึงเป็นคนละตาราง -- ถ้ายุบรวมกัน "เดือนนี้ทำงานไปกี่งาน" กับ "ตอนนี้มีงานรอ
+   * อยู่กี่งาน" จะแยกกันไม่ออก และรายงานรายได้จะนับเงินที่ยังไม่ได้รับรวมไปด้วย
+   *
+   * ขั้นตอนขายเรียงตามลำดับจริง ไม่ใช่ตามตัวอักษร -- หน้าจอจัดกลุ่มตามลำดับนี้
+   * เพื่อให้อ่านเป็นสายพานว่างานไหลไปถึงไหนแล้ว
+   */
+  const CRM_OPP_STAGES = ["ผู้มุ่งหวัง", "เสนอราคาแล้ว", "ต่อรอง", "ปิดการขาย", "ไม่สำเร็จ"];
+  const CRM_OPP_CLOSED = new Set(["ปิดการขาย", "ไม่สำเร็จ"]);
+
+  const CRM_OPP_TONE = {
+    "ผู้มุ่งหวัง": "warning",
+    "เสนอราคาแล้ว": "info",
+    "ต่อรอง": "info",
+    "ปิดการขาย": "success",
+    "ไม่สำเร็จ": "danger"
+  };
+
+  let crmPipelineMode = null;
+  let crmOppMode = null;
+  let crmOppError = null;
+  let crmOppEditing = null;
+  let crmQuotations = [];      // ใบเสนอราคาทั้งหมด -- ใช้ผูกกับลูกค้าและนับอัตราปิด
+
+  function crmOpps(customer) {
+    return Array.isArray(customer && customer.opportunities) ? customer.opportunities : [];
+  }
+
+  function crmAllOpps() {
+    const out = [];
+    crmCustomers.forEach(customer => {
+      crmOpps(customer).forEach(opp => out.push({ opp, customer }));
+    });
+    return out;
+  }
+
+  /** ใบเสนอราคาที่ผูกกับลูกค้ารายนี้ (data.customerId) ไม่รวมแม่แบบ */
+  function crmQuotesFor(customerId) {
+    return crmQuotations.filter(q =>
+      !(q.data && q.data.isTemplate)
+      && String((q.data && q.data.customerId) || "") === String(customerId));
+  }
+
+  async function ensureCrmQuotations(force) {
+    if (crmQuotations.length && !force) return;
+    try {
+      crmQuotations = await backend.loadWorkItems("quotation");
+    } catch {
+      crmQuotations = [];   // โหลดไม่ได้ก็ยังใช้ CRM ส่วนอื่นได้ตามปกติ
+    }
+  }
+
+  // ------------------------------------------------------------ สายพานขาย
+  function renderCrmPipeline() {
+    const all = crmAllOpps();
+    const open = all.filter(({ opp }) => !CRM_OPP_CLOSED.has(opp.status));
+    const won = all.filter(({ opp }) => opp.status === "ปิดการขาย");
+    const lost = all.filter(({ opp }) => opp.status === "ไม่สำเร็จ");
+
+    const sum = list => list.reduce((s, { opp }) => s + (Number(opp.expectedAmount) || 0), 0);
+    document.getElementById("crmPipelineCount").textContent =
+      "กำลังดำเนินการ " + open.length + " รายการ · มูลค่ารวม " + formatMoney(sum(open)) + " บาท";
+
+    // อัตราปิดการขายนับจากที่ปิดไปแล้วจริงเท่านั้น -- ที่ยังไม่ปิดไม่ควรถูกนับเป็น
+    // ความล้มเหลวล่วงหน้า ถ้ายังไม่เคยปิดอะไรเลยก็ไม่มีอัตราให้แสดง
+    const decided = won.length + lost.length;
+    const stats = [
+      { label: "กำลังดำเนินการ", value: open.length + " รายการ", sub: formatMoney(sum(open)) + " บาท" },
+      { label: "ปิดการขายแล้ว", value: won.length + " รายการ", sub: formatMoney(sum(won)) + " บาท" },
+      { label: "ไม่สำเร็จ", value: lost.length + " รายการ", sub: formatMoney(sum(lost)) + " บาท" },
+      {
+        label: "อัตราปิดการขาย",
+        value: decided ? Math.round((won.length / decided) * 100) + "%" : "-",
+        sub: decided ? "จาก " + decided + " รายการที่ปิดแล้ว" : "ยังไม่มีรายการที่ปิด"
+      }
+    ];
+
+    const statsEl = document.getElementById("crmPipelineStats");
+    statsEl.innerHTML = "";
+    stats.forEach(stat => {
+      const tile = document.createElement("div");
+      tile.className = "crm-stat";
+      const value = document.createElement("strong");
+      value.textContent = stat.value;
+      const label = document.createElement("span");
+      label.textContent = stat.label;
+      const sub = document.createElement("small");
+      sub.textContent = stat.sub;
+      tile.append(value, label, sub);
+      statsEl.appendChild(tile);
+    });
+
+    const host = document.getElementById("crmPipelineList");
+    host.innerHTML = "";
+    if (!all.length) {
+      const empty = document.createElement("div");
+      empty.className = "request-empty";
+      empty.textContent = "ยังไม่มีโอกาสขาย -- กด “+ เพิ่มโอกาสขาย”";
+      host.appendChild(empty);
+      return;
+    }
+
+    CRM_OPP_STAGES.forEach(stage => {
+      const rows = all.filter(({ opp }) => opp.status === stage);
+      if (!rows.length) return;
+
+      const head = document.createElement("h3");
+      head.className = "mywork-section-head";
+      head.textContent = stage + " (" + rows.length + " · "
+        + formatMoney(sum(rows)) + " บาท)";
+      host.appendChild(head);
+
+      rows
+        .sort((a, b) => String(a.opp.expectedCloseDate || "9999")
+          .localeCompare(String(b.opp.expectedCloseDate || "9999")))
+        .forEach(({ opp, customer }) => {
+          host.appendChild(buildCrmOppRow(opp, customer, true));
+        });
+    });
+  }
+
+  function buildCrmOppRow(opp, customer, showCustomer) {
+    const row = document.createElement("button");
+    row.type = "button";
+    row.className = "mywork-attention-row crm-opp-row";
+
+    const main = document.createElement("div");
+    main.className = "mywork-attention-main";
+    const title = document.createElement("div");
+    title.className = "mywork-attention-title";
+    title.textContent = opp.title || "(ไม่มีเรื่อง)";
+    const meta = document.createElement("div");
+    meta.className = "mywork-attention-meta";
+    const bits = [];
+    if (showCustomer) bits.push(customer.name);
+    if (opp.serviceType) bits.push(opp.serviceType);
+    if (opp.expectedCloseDate) {
+      const days = crmDaysUntil(opp.expectedCloseDate);
+      bits.push(CRM_OPP_CLOSED.has(opp.status)
+        ? "ปิดเมื่อ " + formatThaiDate(opp.expectedCloseDate)
+        : days < 0 ? "เลยกำหนดปิดมา " + Math.abs(days) + " วัน"
+        : "คาดปิดอีก " + days + " วัน");
+    }
+    if (opp.ownerName) bits.push(opp.ownerName);
+    if (opp.lostReason) bits.push(opp.lostReason);
+    meta.textContent = bits.join(" · ");
+    main.append(title, meta);
+
+    const status = document.createElement("span");
+    status.className = "request-badge";
+    const tone = CRM_OPP_TONE[opp.status];
+    if (tone) status.classList.add("tone-" + tone);
+    status.textContent = opp.status || "-";
+
+    const amount = document.createElement("span");
+    amount.className = "mywork-reason crm-opp-amount";
+    amount.textContent = Number(opp.expectedAmount) > 0
+      ? formatMoney(opp.expectedAmount) + " บาท" : "-";
+
+    // เลยกำหนดปิดแต่ยังไม่ปิด = ต้องตามแล้ว ไม่ใช่แค่รายการหนึ่งในสายพาน
+    if (!CRM_OPP_CLOSED.has(opp.status)
+        && opp.expectedCloseDate && crmDaysUntil(opp.expectedCloseDate) < 0) {
+      row.classList.add("is-urgent");
+    }
+
+    row.append(main, status, amount);
+    row.addEventListener("click", () => openCrmOpp(opp, customer));
+    return row;
+  }
+
+  // ------------------------------------------------------------ ฟอร์มโอกาสขาย
+  function openCrmOpp(opp, customer) {
+    crmOppEditing = opp || null;
+    hideError(crmOppError);
+
+    const customerSelect = crmField("crmOppCustomer");
+    customerSelect.innerHTML = "";
+    crmCustomers
+      .slice()
+      .sort((a, b) => String(a.name || "").localeCompare(String(b.name || ""), "th"))
+      .forEach(c => {
+        const option = document.createElement("option");
+        option.value = String(c.id);
+        option.textContent = c.name || "(ไม่มีชื่อ)";
+        customerSelect.appendChild(option);
+      });
+    const targetCustomer = customer || crmEditing || crmCustomers[0];
+    customerSelect.value = String((opp && opp.customerId) || (targetCustomer && targetCustomer.id) || "");
+
+    const serviceSelect = crmField("crmOppService");
+    serviceSelect.innerHTML = '<option value="">- ไม่ระบุ -</option>';
+    CRM_SERVICE_TYPES.forEach(type => {
+      const option = document.createElement("option");
+      option.value = type.name;
+      option.textContent = type.name;
+      serviceSelect.appendChild(option);
+    });
+    serviceSelect.value = (opp && opp.serviceType) || "";
+
+    const statusSelect = crmField("crmOppStatus");
+    statusSelect.innerHTML = "";
+    CRM_OPP_STAGES.forEach(stage => {
+      const option = document.createElement("option");
+      option.value = stage;
+      option.textContent = stage;
+      statusSelect.appendChild(option);
+    });
+    statusSelect.value = (opp && opp.status) || "ผู้มุ่งหวัง";
+
+    crmField("crmOppName").value = (opp && opp.title) || "";
+    crmField("crmOppAmount").value = Number(opp && opp.expectedAmount) > 0
+      ? formatMoney(opp.expectedAmount) : "";
+    crmField("crmOppCloseDate").value = (opp && opp.expectedCloseDate) || "";
+    crmField("crmOppLostReason").value = (opp && opp.lostReason) || "";
+    crmField("crmOppCompetitorPrice").value = Number(opp && opp.competitorPrice) > 0
+      ? formatMoney(opp.competitorPrice) : "";
+    crmField("crmOppNote").value = (opp && opp.note) || "";
+
+    renderCrmOppOwnerOptions(opp && opp.ownerEmail);
+    renderCrmOppSiteOptions(opp && opp.siteId);
+    renderCrmOppQuotationOptions(opp && opp.quotationId);
+    syncCrmOppLostFields();
+
+    document.getElementById("crmOppTitle").textContent = opp ? "แก้ไขโอกาสขาย" : "โอกาสขายใหม่";
+    document.getElementById("crmOppSubtitle").textContent = opp
+      ? "แก้ไขล่าสุด: " + (opp.updatedByName || opp.createdByName || "-")
+      : "ยังไม่ได้บันทึก";
+    document.getElementById("crmOppDeleteBtn").hidden = !opp;
+
+    crmListMode.hidden = true;
+    crmHomeMode.hidden = true;
+    crmPipelineMode.hidden = true;
+    crmCustomerMode.hidden = true;
+    crmSiteMode.hidden = true;
+    crmJobMode.hidden = true;
+    crmOppMode.hidden = false;
+    window.scrollTo(0, 0);
+  }
+
+  function renderCrmOppOwnerOptions(selected) {
+    const select = crmField("crmOppOwner");
+    select.innerHTML = '<option value="">- ยังไม่ระบุ -</option>';
+    (staffRoster || []).forEach(person => {
+      const option = document.createElement("option");
+      option.value = person.email || "";
+      option.textContent = person.name || person.email || "";
+      select.appendChild(option);
+    });
+    if (selected && !Array.from(select.options).some(o => o.value === selected)) {
+      const option = document.createElement("option");
+      option.value = selected;
+      option.textContent = selected + " (ไม่อยู่ในรายชื่อแล้ว)";
+      select.appendChild(option);
+    }
+    select.value = selected || (getSession()?.email || "");
+  }
+
+  /** สถานที่ของลูกค้าที่เลือกอยู่เท่านั้น -- เซิร์ฟเวอร์ปฏิเสธการผูกข้ามลูกค้าอยู่แล้ว */
+  function renderCrmOppSiteOptions(selected) {
+    const select = crmField("crmOppSite");
+    select.innerHTML = '<option value="">- ทั้งลูกค้า (ไม่เจาะจงจุด) -</option>';
+    const customer = crmCustomers.find(c => String(c.id) === crmField("crmOppCustomer").value);
+    crmSites(customer || {}).forEach(site => {
+      const option = document.createElement("option");
+      option.value = String(site.id);
+      option.textContent = (site.ca ? "CA " + site.ca + " · " : "") + (site.name || "");
+      select.appendChild(option);
+    });
+    select.value = selected ? String(selected) : "";
+  }
+
+  function renderCrmOppQuotationOptions(selected) {
+    const select = crmField("crmOppQuotation");
+    select.innerHTML = '<option value="">- ยังไม่มี -</option>';
+    const customerId = crmField("crmOppCustomer").value;
+    crmQuotesFor(customerId).forEach(q => {
+      const option = document.createElement("option");
+      option.value = String(q.id);
+      const d = q.data || {};
+      option.textContent = (d.refNo ? d.refNo + " · " : "") + (d.subject || q.title || "(ไม่มีเรื่อง)")
+        + (q.status ? " [" + q.status + "]" : "");
+      select.appendChild(option);
+    });
+    // ใบที่ผูกไว้แต่ยังไม่ได้ระบุลูกค้าในใบนั้น -- ใส่กลับเป็นตัวเลือก ไม่งั้นกดบันทึก
+    // แล้วการผูกจะหลุดเงียบ ๆ
+    if (selected && !Array.from(select.options).some(o => o.value === String(selected))) {
+      const q = crmQuotations.find(item => String(item.id) === String(selected));
+      const option = document.createElement("option");
+      option.value = String(selected);
+      option.textContent = q
+        ? ((q.data && q.data.subject) || q.title || "ใบเสนอราคา") + " (ยังไม่ผูกกับลูกค้ารายนี้)"
+        : "ใบเสนอราคาที่ถูกลบไปแล้ว";
+      select.appendChild(option);
+    }
+    select.value = selected ? String(selected) : "";
+  }
+
+  /** ช่องเหตุผลที่แพ้ขึ้นเฉพาะตอนเลือก "ไม่สำเร็จ" -- ถามตอนที่ยังจำได้ */
+  function syncCrmOppLostFields() {
+    document.getElementById("crmOppLostFields").hidden =
+      crmField("crmOppStatus").value !== "ไม่สำเร็จ";
+  }
+
+  // ------------------------------------------------------- ส่วนในหน้าลูกค้า
+  function renderCrmCustomerOpps() {
+    const host = document.getElementById("crmCustomerOpps");
+    host.innerHTML = "";
+    document.getElementById("crmCustomerAddOppBtn").disabled = !crmEditing;
+    if (!crmEditing) {
+      host.appendChild(crmEmptyBox("บันทึกลูกค้าก่อน แล้วจึงเพิ่มโอกาสขายได้"));
+      return;
+    }
+    const rows = crmOpps(crmEditing);
+    if (!rows.length) {
+      host.appendChild(crmEmptyBox("ยังไม่มีโอกาสขาย"));
+      return;
+    }
+    rows.forEach(opp => host.appendChild(buildCrmOppRow(opp, crmEditing, false)));
+  }
+
+  function renderCrmCustomerQuotes() {
+    const host = document.getElementById("crmCustomerQuotes");
+    host.innerHTML = "";
+    document.getElementById("crmCustomerQuoteBtn").disabled = !crmEditing;
+    if (!crmEditing) {
+      host.appendChild(crmEmptyBox("บันทึกลูกค้าก่อน"));
+      return;
+    }
+    const rows = crmQuotesFor(crmEditing.id);
+    if (!rows.length) {
+      host.appendChild(crmEmptyBox("ยังไม่มีใบเสนอราคาที่ผูกกับลูกค้ารายนี้ -- ผูกได้จากช่อง “ลูกค้า (CRM)” บนใบเสนอราคา"));
+      return;
+    }
+    rows
+      .sort((a, b) => (Number(b.updatedAt || b.createdAt) || 0) - (Number(a.updatedAt || a.createdAt) || 0))
+      .forEach(q => {
+        const row = document.createElement("button");
+        row.type = "button";
+        row.className = "mywork-job-row";
+        const d = q.data || {};
+        const name = document.createElement("span");
+        name.className = "mywork-job-name";
+        name.textContent = (d.refNo ? d.refNo + " · " : "") + (d.subject || q.title || "(ไม่มีเรื่อง)");
+        const status = document.createElement("span");
+        status.className = "mywork-job-age";
+        status.textContent = (q.status || "") + " · " + formatThaiDateTime(q.updatedAt || q.createdAt);
+        row.append(name, status);
+        row.addEventListener("click", () => {
+          openQuotationView().then(() => openQuotationForm(q));
+        });
+        host.appendChild(row);
+      });
+  }
+
+  function crmEmptyBox(text) {
+    const div = document.createElement("div");
+    div.className = "request-empty";
+    div.textContent = text;
+    return div;
+  }
+
+  // ------------------------------------------------------------ ผูกปุ่ม
+  function crmWirePipeline() {
+    crmPipelineMode = document.getElementById("crmPipelineMode");
+    crmOppMode = document.getElementById("crmOppMode");
+    crmOppError = document.getElementById("crmOppError");
+
+    document.getElementById("crmAddOppBtn").addEventListener("click", () => openCrmOpp(null, null));
+    document.getElementById("crmCustomerAddOppBtn").addEventListener("click",
+      () => openCrmOpp(null, crmEditing));
+    document.getElementById("crmOppBackBtn").addEventListener("click", () => {
+      crmOppMode.hidden = true;
+      // กลับไปที่หน้าที่เปิดมา -- มาจากหน้าลูกค้าก็กลับหน้าลูกค้า ไม่เด้งไปสายพาน
+      if (crmEditing) crmCustomerMode.hidden = false;
+      else crmPipelineMode.hidden = false;
+      window.scrollTo(0, 0);
+    });
+
+    crmField("crmOppCustomer").addEventListener("change", () => {
+      renderCrmOppSiteOptions("");
+      renderCrmOppQuotationOptions("");
+    });
+    crmField("crmOppStatus").addEventListener("change", syncCrmOppLostFields);
+
+    document.getElementById("crmOppSaveBtn").addEventListener("click", saveCrmOpp);
+    document.getElementById("crmOppDeleteBtn").addEventListener("click", deleteCrmOpp);
+
+    // สร้างใบเสนอราคาจากโอกาสขาย -- พาไปที่ใบใหม่ที่ผูกลูกค้าไว้ให้แล้ว
+    document.getElementById("crmOppQuoteBtn").addEventListener("click", () => {
+      const customerId = crmField("crmOppCustomer").value;
+      const customer = crmCustomers.find(c => String(c.id) === customerId);
+      if (!customer) { showError(crmOppError, "กรุณาเลือกลูกค้าก่อน"); return; }
+      crmOpenQuotationFor(customer, crmField("crmOppName").value.trim());
+    });
+    document.getElementById("crmCustomerQuoteBtn").addEventListener("click", () => {
+      if (crmEditing) crmOpenQuotationFor(crmEditing, "");
+    });
+  }
+
+  /**
+   * เปิดใบเสนอราคาใหม่ที่เติมลูกค้าให้แล้ว
+   *
+   * เติม "เรียน" กับที่อยู่จากข้อมูลลูกค้า -- เป็นสองช่องที่ต้องพิมพ์ซ้ำทุกใบ
+   * ส่วนช่องอื่นปล่อยว่างไว้ให้กรอกเอง ไม่เดาแทน
+   */
+  async function crmOpenQuotationFor(customer, subject) {
+    await openQuotationView();
+    openQuotationForm(null, {
+      customerId: String(customer.id),
+      recipient: customer.name || "",
+      subject: subject || ""
+    });
+  }
+
+  async function saveCrmOpp() {
+    hideError(crmOppError);
+    const title = crmField("crmOppName").value.trim();
+    if (!title) {
+      showError(crmOppError, "กรุณากรอกเรื่องที่จะเสนอ");
+      crmField("crmOppName").focus();
+      return;
+    }
+    const customerId = crmField("crmOppCustomer").value;
+    if (!customerId) { showError(crmOppError, "กรุณาเลือกลูกค้า"); return; }
+
+    const owner = crmField("crmOppOwner");
+    const btn = document.getElementById("crmOppSaveBtn");
+    setBusy(btn, true, "กำลังบันทึก...");
+    try {
+      await backend.saveCrmOpportunity({
+        id: crmOppEditing ? crmOppEditing.id : newWorkItemId(),
+        customerId,
+        siteId: crmField("crmOppSite").value,
+        title,
+        serviceType: crmField("crmOppService").value,
+        expectedAmount: String(quoParseNumber(crmField("crmOppAmount").value) || ""),
+        status: crmField("crmOppStatus").value,
+        expectedCloseDate: crmField("crmOppCloseDate").value,
+        quotationId: crmField("crmOppQuotation").value,
+        lostReason: crmField("crmOppLostReason").value.trim(),
+        competitorPrice: String(quoParseNumber(crmField("crmOppCompetitorPrice").value) || ""),
+        ownerEmail: owner.value,
+        ownerName: owner.value ? (owner.options[owner.selectedIndex].textContent || "") : "",
+        note: crmField("crmOppNote").value.trim()
+      });
+      await crmReloadInto();
+      crmOppMode.hidden = true;
+      if (crmEditing) {
+        crmCustomerMode.hidden = false;
+        renderCrmCustomerOpps();
+      } else {
+        crmPipelineMode.hidden = false;
+        renderCrmPipeline();
+      }
+      window.scrollTo(0, 0);
+    } catch (err) {
+      showError(crmOppError, moduleErrorText(err));
+    } finally {
+      setBusy(btn, false);
+    }
+  }
+
+  async function deleteCrmOpp() {
+    if (!crmOppEditing) return;
+    if (!confirm("ลบโอกาสขาย “" + (crmOppEditing.title || "") + "” ใช่หรือไม่?")) return;
+    const btn = document.getElementById("crmOppDeleteBtn");
+    setBusy(btn, true, "กำลังลบ...");
+    try {
+      await backend.deleteCrmOpportunity(crmOppEditing.id);
+      await crmReloadInto();
+      crmOppEditing = null;
+      crmOppMode.hidden = true;
+      if (crmEditing) { crmCustomerMode.hidden = false; renderCrmCustomerOpps(); }
+      else { crmPipelineMode.hidden = false; renderCrmPipeline(); }
+    } catch (err) {
+      showError(crmOppError, moduleErrorText(err));
+    } finally {
+      setBusy(btn, false);
+    }
+  }
+
   crmWireHome();
+  crmWirePipeline();
 
   // -------------------------------------------- ระบบรับฟังเสียงของลูกค้า (VOC)
   const vocListMode = document.getElementById("vocListMode");
