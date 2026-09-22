@@ -4965,3 +4965,85 @@ body.quo-print-body {
   background: var(--volt-500);
 }
 .mywork-person-detail { background: var(--paper); }
+
+/* ============================================================ ลูกค้า (CRM) ===
+   สามชั้น: ลูกค้า -> สถานที่ (CA) -> ผู้ติดต่อ ใช้โครงหน้าเดียวกับหน้างานอื่น
+   ส่วนที่เพิ่มคือการ์ดลูกค้า/สถานที่ และตารางที่แก้ในแถวได้ */
+.crm-list { display: flex; flex-direction: column; gap: 10px; }
+
+.crm-card,
+.crm-site-card {
+  display: block;
+  width: 100%;
+  padding: 14px 16px;
+  background: var(--white);
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--volt-300);
+  border-radius: 12px;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.crm-card:hover,
+.crm-site-card:hover { border-color: var(--volt-500); background: var(--volt-50); }
+.crm-site-card { border-left-color: var(--info); margin-bottom: 10px; }
+
+.crm-card-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.crm-card-name { font-weight: 600; color: var(--ink); }
+.crm-card-meta { margin-top: 4px; font-size: 13px; color: var(--ink-soft); }
+
+.crm-form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 14px;
+  margin: 18px 0 8px;
+}
+/* ที่อยู่กับหมายเหตุกินเต็มแถว -- เป็นข้อความหลายบรรทัด ไม่ใช่ช่องสั้น ๆ */
+.crm-field-wide { grid-column: 1 / -1; }
+.crm-solar-grid { margin-top: 12px; }
+
+.crm-section-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 28px 0 8px;
+  padding-top: 20px;
+  border-top: 1px solid var(--border);
+}
+.crm-section-head h3 { margin: 0; font-size: 16px; }
+
+/* ตารางผู้ติดต่อ/หม้อแปลง/EV -- ความกว้างคงที่เหมือนตารางรายการอุปกรณ์ป้องกัน
+   เพื่อไม่ให้ช่องข้อความยาวเบียดช่องอื่นจนอ่านไม่ออก */
+.crm-contact-table,
+.crm-tx-table,
+.crm-ev-table { table-layout: fixed; margin-bottom: 8px; }
+.crm-contact-table .crm-col-sm,
+.crm-tx-table .crm-col-sm,
+.crm-ev-table .crm-col-sm { width: 140px; }
+.crm-contact-table .crm-col-xs,
+.crm-tx-table .crm-col-xs,
+.crm-ev-table .crm-col-xs { width: 84px; }
+.crm-contact-table .price-col-actions,
+.crm-tx-table .price-col-actions,
+.crm-ev-table .price-col-actions { width: 80px; }
+.crm-center { text-align: center; }
+.crm-contact-table select {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 6px 8px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  font: inherit;
+  background: transparent;
+}
+.crm-contact-table select:hover { border-color: var(--border); }
+.crm-contact-table select:focus { border-color: var(--volt-500); background: var(--white); outline: none; }
+
+.crm-sites { margin-top: 4px; }

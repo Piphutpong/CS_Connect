@@ -24,7 +24,7 @@
 <title>CS Connect</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=Sarabun:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=20260922p">
+<link rel="stylesheet" href="style.css?v=20260922q">
 </head>
 <body>
 
@@ -1809,6 +1809,10 @@
         <svg viewBox="0 0 24 24" fill="none"><path d="M7 3h8l4 4v14H7V3Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M15 3v4h4M10 12h5M10 16h5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
         งานเสนอราคา
       </button>
+      <button type="button" class="requests-nav-item" data-side-nav="crm">
+        <svg viewBox="0 0 24 24" fill="none"><circle cx="9" cy="8" r="3.2" stroke="currentColor" stroke-width="1.6"/><path d="M3.5 19c0-3 2.5-4.8 5.5-4.8s5.5 1.8 5.5 4.8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><path d="M16 5.5a3 3 0 0 1 0 5.6M17.5 14.4c2 .6 3.5 2.2 3.5 4.6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+        ลูกค้า (CRM)
+      </button>
       <!-- ลิงก์ออกไป Google Sheet ของแผนก -- href เติมจาก SERVICES.sideBusiness
            ใน app.js ตอนโหลด ไม่ฝัง URL ซ้ำไว้ตรงนี้ให้ต้องแก้สองที่ -->
       <a class="requests-nav-item" data-side-nav="sheet" target="_blank" rel="noopener"
@@ -1905,6 +1909,10 @@
       <button type="button" class="requests-nav-item active" data-side-nav="quotation">
         <svg viewBox="0 0 24 24" fill="none"><path d="M7 3h8l4 4v14H7V3Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M15 3v4h4M10 12h5M10 16h5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
         งานเสนอราคา
+      </button>
+      <button type="button" class="requests-nav-item" data-side-nav="crm">
+        <svg viewBox="0 0 24 24" fill="none"><circle cx="9" cy="8" r="3.2" stroke="currentColor" stroke-width="1.6"/><path d="M3.5 19c0-3 2.5-4.8 5.5-4.8s5.5 1.8 5.5 4.8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><path d="M16 5.5a3 3 0 0 1 0 5.6M17.5 14.4c2 .6 3.5 2.2 3.5 4.6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+        ลูกค้า (CRM)
       </button>
       <!-- ลิงก์ออกไป Google Sheet ของแผนก -- href เติมจาก SERVICES.sideBusiness
            ใน app.js ตอนโหลด ไม่ฝัง URL ซ้ำไว้ตรงนี้ให้ต้องแก้สองที่ -->
@@ -2335,6 +2343,213 @@
   </div>
 </section>
 
+<!-- ===== ลูกค้า (CRM) งานธุรกิจเสริม =====
+     สามชั้น: ลูกค้า (BP) -> สถานที่ใช้ไฟฟ้า (CA) -> ผู้ติดต่อ
+     ลูกค้าหนึ่งรายมีได้หลาย CA จึงแยกชั้นกัน ไม่ยุบเป็นตารางเดียว
+     BP/CA ว่างได้ -- ลูกค้าธุรกิจเสริมจำนวนมากไม่เคยยื่นคำร้องจึงไม่มี BP -->
+<section id="crmView" class="app-view" hidden>
+  <header class="topbar">
+    <div class="topbar-brand">
+      <button id="crmBackBtn" class="btn btn-ghost btn-icon" aria-label="ย้อนกลับ">
+        <svg viewBox="0 0 24 24" fill="none"><path d="M15 18l-6-6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+      <span class="topbar-title">งานธุรกิจเสริม</span>
+    </div>
+    <div class="topbar-user">
+      <span id="userGreeting9" class="user-greeting"></span>
+      <button id="logoutBtn9" class="btn btn-ghost">ออกจากระบบ</button>
+    </div>
+  </header>
+
+  <div class="requests-layout">
+    <nav class="requests-sidebar">
+      <button type="button" class="requests-nav-item" data-side-nav="brochure">
+        <svg viewBox="0 0 24 24" fill="none"><path d="M4 5h7v14H4zM13 5h7v14h-7z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M6.5 8.5h2M15.5 8.5h2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+        โบรชัวร์
+      </button>
+      <button type="button" class="requests-nav-item" data-side-nav="quotation">
+        <svg viewBox="0 0 24 24" fill="none"><path d="M7 3h8l4 4v14H7V3Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M15 3v4h4M10 12h5M10 16h5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+        งานเสนอราคา
+      </button>
+      <button type="button" class="requests-nav-item active" data-side-nav="crm">
+        <svg viewBox="0 0 24 24" fill="none"><circle cx="9" cy="8" r="3.2" stroke="currentColor" stroke-width="1.6"/><path d="M3.5 19c0-3 2.5-4.8 5.5-4.8s5.5 1.8 5.5 4.8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><path d="M16 5.5a3 3 0 0 1 0 5.6M17.5 14.4c2 .6 3.5 2.2 3.5 4.6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+        ลูกค้า (CRM)
+      </button>
+      <a class="requests-nav-item" data-side-nav="sheet" target="_blank" rel="noopener"
+         title="Google Sheet: Check list จ้างเหมา Turnkey">
+        <svg viewBox="0 0 24 24" fill="none"><rect x="4" y="3" width="16" height="18" rx="1.6" stroke="currentColor" stroke-width="1.6"/><path d="M4 9h16M4 15h16M10 3v18" stroke="currentColor" stroke-width="1.6"/></svg>
+        Check list จ้างเหมา Turnkey
+      </a>
+    </nav>
+
+    <main class="requests-content">
+      <p id="crmError" class="form-error" hidden></p>
+
+      <!-- ===== รายชื่อลูกค้า ===== -->
+      <div id="crmListMode">
+        <div class="requests-content-heading">
+          <div class="requests-content-heading-row">
+            <div>
+              <h2>ลูกค้า</h2>
+              <p id="crmCount" class="requests-count"></p>
+            </div>
+            <div class="requests-heading-actions">
+              <button type="button" id="crmAddBtn" class="btn btn-primary">+ เพิ่มลูกค้า</button>
+            </div>
+          </div>
+          <input type="search" id="crmSearch" class="requests-search"
+                 placeholder="ค้นหาด้วย BP, CA, ชื่อลูกค้า หรือเบอร์โทรศัพท์...">
+          <div class="requests-modes" id="crmStatusChips"></div>
+        </div>
+        <div id="crmList" class="crm-list"></div>
+      </div>
+
+      <!-- ===== ลูกค้าหนึ่งราย: ข้อมูล + ผู้ติดต่อ + สถานที่ ===== -->
+      <div id="crmCustomerMode" hidden>
+        <div class="quo-editor-bar">
+          <button type="button" id="crmCustomerBackBtn" class="btn btn-ghost">← กลับรายชื่อ</button>
+          <div class="quo-editor-title">
+            <h2 id="crmCustomerTitle">ลูกค้าใหม่</h2>
+            <p id="crmCustomerSubtitle" class="requests-count"></p>
+          </div>
+          <div class="quo-editor-actions">
+            <button type="button" id="crmCustomerDeleteBtn" class="btn btn-ghost" hidden>ลบลูกค้า</button>
+            <button type="button" id="crmCustomerSaveBtn" class="btn btn-primary">บันทึก</button>
+          </div>
+        </div>
+        <p id="crmCustomerError" class="form-error" hidden></p>
+
+        <div class="crm-form-grid">
+          <label class="field"><span>ชื่อลูกค้า *</span><input type="text" id="crmName" autocomplete="off"></label>
+          <label class="field">
+            <span>BP (ว่างได้ เติมทีหลังได้)</span>
+            <input type="text" id="crmBp" autocomplete="off" inputmode="numeric" placeholder="ยังไม่ทราบ">
+          </label>
+          <label class="field"><span>ประเภทลูกค้า</span>
+            <select id="crmCustomerType">
+              <option value="">- เลือก -</option>
+              <option value="บุคคลธรรมดา">บุคคลธรรมดา</option>
+              <option value="นิติบุคคล">นิติบุคคล</option>
+              <option value="ราชการ">ราชการ</option>
+              <option value="รัฐวิสาหกิจ">รัฐวิสาหกิจ</option>
+            </select>
+          </label>
+          <label class="field"><span>เลขประจำตัวผู้เสียภาษี</span><input type="text" id="crmTaxId" autocomplete="off"></label>
+          <label class="field"><span>สถานะ</span>
+            <select id="crmStatus">
+              <option value="ผู้มุ่งหวัง">ผู้มุ่งหวัง</option>
+              <option value="ลูกค้าปัจจุบัน">ลูกค้าปัจจุบัน</option>
+              <option value="หยุดใช้บริการ">หยุดใช้บริการ</option>
+            </select>
+          </label>
+          <label class="field"><span>เจ้าหน้าที่ผู้ดูแล</span>
+            <select id="crmOwner"><option value="">- ยังไม่ระบุ -</option></select>
+          </label>
+          <label class="field crm-field-wide"><span>ที่อยู่สำหรับออกเอกสาร</span>
+            <textarea id="crmAddress" rows="2"></textarea>
+          </label>
+          <label class="field crm-field-wide"><span>หมายเหตุ</span>
+            <textarea id="crmNote" rows="2"></textarea>
+          </label>
+        </div>
+
+        <div class="crm-section-head">
+          <h3>ผู้ติดต่อ</h3>
+          <button type="button" id="crmAddContactBtn" class="btn btn-ghost">+ เพิ่มผู้ติดต่อ</button>
+        </div>
+        <p class="field-hint">คนอนุมัติกับช่างที่นัดหน้างานมักไม่ใช่คนเดียวกัน เก็บบทบาทไว้จะได้รู้ว่าควรโทรหาใครเรื่องอะไร</p>
+        <table class="price-table crm-contact-table">
+          <thead><tr>
+            <th>ชื่อ</th><th class="crm-col-sm">ตำแหน่ง</th><th class="crm-col-sm">เบอร์โทรศัพท์</th>
+            <th class="crm-col-sm">LINE</th><th class="crm-col-sm">บทบาท</th>
+            <th class="crm-col-xs">หลัก</th><th class="price-col-actions"></th>
+          </tr></thead>
+          <tbody id="crmContacts"></tbody>
+        </table>
+
+        <div class="crm-section-head">
+          <h3>สถานที่ใช้ไฟฟ้า (CA)</h3>
+          <button type="button" id="crmAddSiteBtn" class="btn btn-primary">+ เพิ่มสถานที่</button>
+        </div>
+        <p class="field-hint" id="crmSiteSummary"></p>
+        <div id="crmSites" class="crm-sites"></div>
+      </div>
+
+      <!-- ===== สถานที่หนึ่งจุด ===== -->
+      <div id="crmSiteMode" hidden>
+        <div class="quo-editor-bar">
+          <button type="button" id="crmSiteBackBtn" class="btn btn-ghost">← กลับหน้าลูกค้า</button>
+          <div class="quo-editor-title">
+            <h2 id="crmSiteTitle">สถานที่ใหม่</h2>
+            <p id="crmSiteSubtitle" class="requests-count"></p>
+          </div>
+          <div class="quo-editor-actions">
+            <button type="button" id="crmSiteDeleteBtn" class="btn btn-ghost" hidden>ลบสถานที่</button>
+            <button type="button" id="crmSiteSaveBtn" class="btn btn-primary">บันทึก</button>
+          </div>
+        </div>
+        <p id="crmSiteError" class="form-error" hidden></p>
+
+        <div class="crm-form-grid">
+          <label class="field"><span>ชื่อสถานที่ *</span><input type="text" id="crmSiteName" autocomplete="off" placeholder="เช่น โรงงาน 1 / อาคารสำนักงาน"></label>
+          <label class="field"><span>CA (ว่างได้)</span><input type="text" id="crmSiteCa" autocomplete="off" inputmode="numeric"></label>
+          <label class="field"><span>ประเภทผู้ใช้ไฟ</span><input type="text" id="crmSiteUserType" autocomplete="off" placeholder="เช่น กิจการขนาดกลาง"></label>
+          <label class="field"><span>ระบบไฟฟ้า</span><input type="text" id="crmSiteVoltage" autocomplete="off" placeholder="เช่น แรงสูง 22 kV / แรงต่ำ 3 เฟส"></label>
+          <label class="field crm-field-wide"><span>ที่อยู่สถานที่</span><textarea id="crmSiteAddress" rows="2"></textarea></label>
+          <label class="field"><span>พิกัด (ละติจูด, ลองจิจูด)</span>
+            <input type="text" id="crmSiteCoord" autocomplete="off" placeholder="18.710625, 98.909944">
+          </label>
+          <label class="field"><span>รอบบำรุงรักษา (เดือน)</span>
+            <input type="text" id="crmSiteInterval" inputmode="numeric" placeholder="ระบบตั้งให้ตามประเภทบริการ">
+          </label>
+        </div>
+
+        <div class="crm-section-head">
+          <h3>หม้อแปลง</h3>
+          <button type="button" id="crmAddTransformerBtn" class="btn btn-ghost">+ เพิ่มหม้อแปลง</button>
+        </div>
+        <table class="price-table crm-tx-table">
+          <thead><tr>
+            <th class="crm-col-sm">ขนาด (kVA)</th><th class="crm-col-sm">ยี่ห้อ</th>
+            <th class="crm-col-sm">หมายเลขเครื่อง</th><th class="crm-col-xs">ปีที่ติดตั้ง</th>
+            <th class="crm-col-sm">ชนิด</th><th class="price-col-actions"></th>
+          </tr></thead>
+          <tbody id="crmTransformers"></tbody>
+        </table>
+        <p class="field-hint">รวมทั้งหมด <strong id="crmTotalKva">0</strong> kVA</p>
+
+        <div class="crm-form-grid crm-solar-grid">
+          <label class="field"><span>Solar Roof Top (kWp)</span><input type="text" id="crmSolarKwp" inputmode="decimal" placeholder="ไม่มี = เว้นว่าง"></label>
+          <label class="field"><span>ชนิดระบบ</span>
+            <select id="crmSolarType">
+              <option value="">- ไม่มี -</option>
+              <option value="On-Grid">On-Grid</option>
+              <option value="Hybrid">Hybrid</option>
+              <option value="Off-Grid">Off-Grid</option>
+            </select>
+          </label>
+          <label class="field"><span>วันที่ COD / ติดตั้ง</span><input type="date" id="crmSolarCod"></label>
+          <label class="field"><span>Inverter</span><input type="text" id="crmSolarInverter" autocomplete="off"></label>
+        </div>
+
+        <div class="crm-section-head">
+          <h3>เครื่องอัดประจุ EV</h3>
+          <button type="button" id="crmAddEvBtn" class="btn btn-ghost">+ เพิ่มเครื่อง</button>
+        </div>
+        <table class="price-table crm-ev-table">
+          <thead><tr>
+            <th class="crm-col-xs">จำนวน</th><th class="crm-col-sm">ขนาด (kW)</th>
+            <th class="crm-col-sm">ยี่ห้อ/รุ่น</th><th>หมายเหตุ</th><th class="price-col-actions"></th>
+          </tr></thead>
+          <tbody id="crmEvChargers"></tbody>
+        </table>
+
+        <label class="field crm-field-wide"><span>หมายเหตุสถานที่</span><textarea id="crmSiteNote" rows="2"></textarea></label>
+      </div>
+    </main>
+  </div>
+</section>
+
 <!-- ===== ระบบรับฟังเสียงของลูกค้า (PEA-VOC) ===== -->
 <section id="vocView" class="app-view" hidden>
   <header class="topbar">
@@ -2503,6 +2718,6 @@
      **ต้องเปลี่ยนเลขนี้ทุกครั้งที่แก้ app.js / style.css / track.js / qr.js**
      ไม่งั้นผู้ใช้บางคนจะยังได้ไฟล์เก่าไปอีกพักใหญ่ -->
 <script src="vendor/supabase.js?v=2.116.0"></script>
-<script src="app.js?v=20260922p"></script>
+<script src="app.js?v=20260922q"></script>
 </body>
 </html>

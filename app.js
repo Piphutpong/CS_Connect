@@ -1204,7 +1204,8 @@
     brochure: document.getElementById("brochureView"),
     quotation: document.getElementById("quotationView"),
     voc: document.getElementById("vocView"),
-    mywork: document.getElementById("myWorkView")
+    mywork: document.getElementById("myWorkView"),
+    crm: document.getElementById("crmView")
   };
 
   function showView(name) {
@@ -2921,6 +2922,7 @@
     // การ์ดงานธุรกิจเสริมมีสองโมดูลย่อย -- จำว่าอยู่หน้าไหนตอนรีเฟรช
     if (nav.module === "brochure") { openBrochureView(); return; }
     if (nav.module === "quotation") { openQuotationView(); return; }
+    if (nav.module === "crm") { openCrmView(); return; }
 
     if (nav.card === "requests" && nav.filter) {
       const tab = Array.from(requestsNavItems).find(item => item.dataset.filter === nav.filter);
@@ -16166,6 +16168,721 @@ ${sheetHtml}
     return found ? found.email || "" : "";
   }
 
+  // ============================================================ ลูกค้า (CRM)
+  /**
+   * สามชั้น: ลูกค้า (BP) -> สถานที่ใช้ไฟฟ้า (CA) -> ผู้ติดต่อ
+   *
+   * ลูกค้าหนึ่งรายมีได้หลาย CA (โรงงานมีหลายมิเตอร์ คอนโดมีส่วนกลางกับห้องชุด)
+   * จึงแยกชั้นกันแทนที่จะยุบเป็นตารางเดียว -- ถ้ายุบ ชื่อกับเบอร์จะซ้ำทุกแถว
+   * แก้เบอร์ต้องไล่แก้หลายที่ และตอบไม่ได้ว่า "ลูกค้ารายนี้มีกี่จุด รวมกี่ kVA"
+   *
+   * BP และ CA ว่างได้ -- ลูกค้าธุรกิจเสริมจำนวนมากไม่เคยยื่นคำร้องจึงไม่มี BP
+   * บันทึกด้วยชื่อ+เบอร์ไปก่อนแล้วเติมทีหลังได้ ส่วนเลขที่กรอกแล้วต้องไม่ซ้ำ
+   * ซึ่ง save_crm_customer/save_crm_site ตรวจให้ที่เซิร์ฟเวอร์ (เบราว์เซอร์ตรวจ
+   * เองอย่างเดียวไม่พอ -- สองคนบันทึกพร้อมกันได้)
+   *
+   * โหลดทั้งชุดมาครั้งเดียวแล้วค้นในเครื่อง เหมือน requestsCache -- แผนกหนึ่งมี
+   * ลูกค้าหลักร้อย ไม่ใช่หลักแสน การถามเซิร์ฟเวอร์ทุกครั้งที่พิมพ์จะช้ากว่า
+   */
+  const CRM_STATUSES = ["ผู้มุ่งหวัง", "ลูกค้าปัจจุบัน", "หยุดใช้บริการ"];
+
+  let crmCustomers = [];
+  let crmLoaded = false;
+  let crmQuery = "";
+  let crmStatusFilter = "";
+  let crmEditing = null;        // ลูกค้าที่เปิดอยู่ (null = ลูกค้าใหม่)
+  let crmContactDraft = [];
+  let crmSiteEditing = null;    // สถานที่ที่เปิดอยู่
+  let crmTransformerDraft = [];
+  let crmEvDraft = [];
+
+  const crmListMode = document.getElementById("crmListMode");
+  const crmCustomerMode = document.getElementById("crmCustomerMode");
+  const crmSiteMode = document.getElementById("crmSiteMode");
+  const crmError = document.getElementById("crmError");
+  const crmCustomerError = document.getElementById("crmCustomerError");
+  const crmSiteError = document.getElementById("crmSiteError");
+  const crmSearch = document.getElementById("crmSearch");
+  const crmListEl = document.getElementById("crmList");
+  const crmContactsEl = document.getElementById("crmContacts");
+  const crmSitesEl = document.getElementById("crmSites");
+  const crmTransformersEl = document.getElementById("crmTransformers");
+  const crmEvEl = document.getElementById("crmEvChargers");
+
+  function crmField(id) {
+    return document.getElementById(id);
+  }
+
+  async function ensureCrm(force) {
+    if (crmLoaded && !force) return;
+    const data = await backend.loadCrm();
+    crmCustomers = (data && data.customers) || [];
+    crmLoaded = true;
+  }
+
+  async function openCrmView() {
+    showView("crm");
+    hideError(crmError);
+    crmListMode.hidden = false;
+    crmCustomerMode.hidden = true;
+    crmSiteMode.hidden = true;
+    crmQuery = "";
+    crmStatusFilter = "";
+    crmSearch.value = "";
+    crmListEl.innerHTML = '<div class="request-empty">กำลังโหลด...</div>';
+    saveNavState({ card: "sideBusiness", module: "crm" });
+    window.scrollTo(0, 0);
+
+    try {
+      await ensureCrm(true);
+    } catch (err) {
+      crmCustomers = [];
+      showError(crmError, moduleErrorText(err));
+    }
+    // รายชื่อเจ้าหน้าที่ไว้ให้เลือกผู้ดูแล -- โหลดไม่ได้ก็ยังบันทึกลูกค้าได้ตามปกติ
+    if (!(staffRoster || []).length) {
+      refreshStaffRoster().catch(() => { /* ไม่เป็นไร */ });
+    }
+    renderCrmList();
+  }
+
+  // ------------------------------------------------------------ รายชื่อลูกค้า
+  function crmSites(customer) {
+    return Array.isArray(customer.sites) ? customer.sites : [];
+  }
+
+  function crmContacts(customer) {
+    return Array.isArray(customer.contacts) ? customer.contacts : [];
+  }
+
+  function crmPrimaryContact(customer) {
+    const list = crmContacts(customer);
+    return list.find(c => c.isPrimary) || list[0] || null;
+  }
+
+  function crmTotalKva(customer) {
+    return crmSites(customer).reduce((sum, s) => sum + (Number(s.transformerTotalKva) || 0), 0);
+  }
+
+  function crmTotalKwp(customer) {
+    return crmSites(customer).reduce((sum, s) => sum + (Number(s.solarKwp) || 0), 0);
+  }
+
+  /** ค้นด้วย BP, CA, ชื่อ หรือเบอร์ -- เบอร์เทียบแบบตัวเลขล้วนทั้งสองฝั่ง */
+  function crmMatches(customer, query) {
+    if (!query) return true;
+    const digits = query.replace(/[^0-9]/g, "");
+    const haystack = [customer.bp, customer.name, customer.taxId, customer.note]
+      .concat(crmContacts(customer).map(c => c.name))
+      .concat(crmSites(customer).map(s => s.ca))
+      .concat(crmSites(customer).map(s => s.name))
+      .concat(crmSites(customer).map(s => s.address));
+    if (haystack.some(v => String(v || "").toLowerCase().includes(query))) return true;
+    if (digits) {
+      return crmContacts(customer).some(c => String(c.phone || "").includes(digits));
+    }
+    return false;
+  }
+
+  function renderCrmList() {
+    const query = crmQuery.trim().toLowerCase();
+    const rows = crmCustomers
+      .filter(c => !crmStatusFilter || c.status === crmStatusFilter)
+      .filter(c => crmMatches(c, query))
+      .sort((a, b) => String(a.name || "").localeCompare(String(b.name || ""), "th"));
+
+    document.getElementById("crmCount").textContent =
+      "ทั้งหมด " + crmCustomers.length + " ราย"
+      + (rows.length !== crmCustomers.length ? " · แสดง " + rows.length + " ราย" : "");
+
+    // ชิปกรองสถานะ -- นับจำนวนให้เห็นว่ามีผู้มุ่งหวังค้างอยู่เท่าไหร่
+    const chips = document.getElementById("crmStatusChips");
+    chips.innerHTML = "";
+    const chipDefs = [{ value: "", label: "ทั้งหมด", count: crmCustomers.length }]
+      .concat(CRM_STATUSES.map(st => ({
+        value: st, label: st, count: crmCustomers.filter(c => c.status === st).length
+      })));
+    chipDefs.forEach(def => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "requests-mode-btn";
+      if (crmStatusFilter === def.value) btn.classList.add("active");
+      btn.textContent = def.label + " (" + def.count + ")";
+      btn.addEventListener("click", () => {
+        crmStatusFilter = def.value;
+        renderCrmList();
+      });
+      chips.appendChild(btn);
+    });
+
+    crmListEl.innerHTML = "";
+    if (!rows.length) {
+      const empty = document.createElement("div");
+      empty.className = "request-empty";
+      empty.textContent = crmCustomers.length
+        ? "ไม่พบลูกค้าที่ค้นหา"
+        : "ยังไม่มีลูกค้า -- กด “+ เพิ่มลูกค้า”";
+      crmListEl.appendChild(empty);
+      return;
+    }
+
+    rows.forEach(customer => {
+      const card = document.createElement("button");
+      card.type = "button";
+      card.className = "crm-card";
+
+      const head = document.createElement("div");
+      head.className = "crm-card-head";
+      const name = document.createElement("span");
+      name.className = "crm-card-name";
+      name.textContent = customer.name || "(ไม่มีชื่อ)";
+      const status = document.createElement("span");
+      status.className = "request-badge";
+      status.classList.add(customer.status === "ลูกค้าปัจจุบัน" ? "tone-success"
+        : customer.status === "หยุดใช้บริการ" ? "tone-danger" : "tone-warning");
+      status.textContent = customer.status || "-";
+      head.append(name, status);
+
+      const meta = document.createElement("div");
+      meta.className = "crm-card-meta";
+      const bits = [];
+      if (customer.bp) bits.push("BP " + customer.bp);
+      const contact = crmPrimaryContact(customer);
+      if (contact && contact.phone) bits.push(contact.name ? contact.name + " " + contact.phone : contact.phone);
+      const sites = crmSites(customer);
+      if (sites.length) bits.push(sites.length + " สถานที่");
+      const kva = crmTotalKva(customer);
+      if (kva > 0) bits.push("รวม " + formatMoney(kva) + " kVA");
+      const kwp = crmTotalKwp(customer);
+      if (kwp > 0) bits.push("Solar " + formatMoney(kwp) + " kWp");
+      if (customer.ownerName) bits.push("ดูแลโดย " + customer.ownerName);
+      meta.textContent = bits.join(" · ") || "ยังไม่มีข้อมูลติดต่อ";
+
+      card.append(head, meta);
+      card.addEventListener("click", () => openCrmCustomer(customer));
+      crmListEl.appendChild(card);
+    });
+  }
+
+  crmSearch.addEventListener("input", () => {
+    crmQuery = crmSearch.value;
+    renderCrmList();
+  });
+
+  document.getElementById("crmAddBtn").addEventListener("click", () => openCrmCustomer(null));
+  document.getElementById("crmBackBtn").addEventListener("click", enterApp);
+  document.getElementById("crmCustomerBackBtn").addEventListener("click", () => {
+    crmCustomerMode.hidden = true;
+    crmListMode.hidden = false;
+    renderCrmList();
+    window.scrollTo(0, 0);
+  });
+
+  // ------------------------------------------------------- ลูกค้าหนึ่งราย
+  function openCrmCustomer(customer) {
+    crmEditing = customer || null;
+    crmContactDraft = crmContacts(customer || {}).map(c => ({ ...c }));
+    if (!crmContactDraft.length) crmContactDraft.push(crmBlankContact());
+    hideError(crmCustomerError);
+
+    crmField("crmName").value = (customer && customer.name) || "";
+    crmField("crmBp").value = (customer && customer.bp) || "";
+    crmField("crmCustomerType").value = (customer && customer.customerType) || "";
+    crmField("crmTaxId").value = (customer && customer.taxId) || "";
+    crmField("crmStatus").value = (customer && customer.status) || "ผู้มุ่งหวัง";
+    crmField("crmAddress").value = (customer && customer.address) || "";
+    crmField("crmNote").value = (customer && customer.note) || "";
+
+    renderCrmOwnerOptions(customer && customer.ownerEmail);
+    document.getElementById("crmCustomerTitle").textContent = customer ? "แก้ไขลูกค้า" : "ลูกค้าใหม่";
+    document.getElementById("crmCustomerSubtitle").textContent = customer
+      ? "แก้ไขล่าสุด: " + (customer.updatedByName || customer.createdByName || "-")
+      : "ยังไม่ได้บันทึก";
+    document.getElementById("crmCustomerDeleteBtn").hidden = !customer;
+
+    renderCrmContacts();
+    renderCrmSites();
+
+    crmListMode.hidden = true;
+    crmSiteMode.hidden = true;
+    crmCustomerMode.hidden = false;
+    window.scrollTo(0, 0);
+  }
+
+  function renderCrmOwnerOptions(selected) {
+    const select = crmField("crmOwner");
+    select.innerHTML = '<option value="">- ยังไม่ระบุ -</option>';
+    (staffRoster || []).forEach(person => {
+      const option = document.createElement("option");
+      option.value = person.email || "";
+      option.textContent = person.name || person.email || "";
+      select.appendChild(option);
+    });
+    // ผู้ดูแลที่ลาออกไปแล้วจะไม่อยู่ในรายชื่อ -- ใส่กลับเป็นตัวเลือกไว้ ไม่งั้น
+    // เปิดลูกค้ารายนี้แล้วกดบันทึก ผู้ดูแลเดิมจะหายไปเงียบ ๆ
+    if (selected && !Array.from(select.options).some(o => o.value === selected)) {
+      const option = document.createElement("option");
+      option.value = selected;
+      option.textContent = selected + " (ไม่อยู่ในรายชื่อแล้ว)";
+      select.appendChild(option);
+    }
+    select.value = selected || "";
+  }
+
+  function crmBlankContact() {
+    return { name: "", position: "", phone: "", lineId: "", email: "", role: "", isPrimary: false, note: "" };
+  }
+
+  function renderCrmContacts() {
+    crmContactsEl.innerHTML = "";
+    crmContactDraft.forEach((contact, index) => {
+      const tr = document.createElement("tr");
+      const text = (key, cls, placeholder) => {
+        const td = document.createElement("td");
+        if (cls) td.className = cls;
+        const input = document.createElement("input");
+        input.type = "text";
+        input.value = contact[key] || "";
+        if (placeholder) input.placeholder = placeholder;
+        input.addEventListener("input", () => { contact[key] = input.value; });
+        td.appendChild(input);
+        return td;
+      };
+
+      const tdRole = document.createElement("td");
+      tdRole.className = "crm-col-sm";
+      const role = document.createElement("select");
+      ["", "ผู้ตัดสินใจ", "ช่างประจำอาคาร", "จัดซื้อ", "บัญชี/การเงิน", "อื่น ๆ"].forEach(value => {
+        const option = document.createElement("option");
+        option.value = value;
+        option.textContent = value || "- เลือก -";
+        role.appendChild(option);
+      });
+      role.value = contact.role || "";
+      role.addEventListener("change", () => { contact.role = role.value; });
+      tdRole.appendChild(role);
+
+      const tdPrimary = document.createElement("td");
+      tdPrimary.className = "crm-col-xs crm-center";
+      const primary = document.createElement("input");
+      primary.type = "radio";
+      primary.name = "crmPrimaryContact";
+      primary.checked = Boolean(contact.isPrimary);
+      primary.addEventListener("change", () => {
+        // ผู้ติดต่อหลักมีได้คนเดียว -- ติ๊กคนใหม่แล้วคนเก่าหลุดเอง
+        crmContactDraft.forEach(c => { c.isPrimary = false; });
+        contact.isPrimary = true;
+      });
+      tdPrimary.appendChild(primary);
+
+      const tdDel = document.createElement("td");
+      tdDel.className = "price-col-actions";
+      const del = document.createElement("button");
+      del.type = "button";
+      del.className = "btn btn-ghost";
+      del.textContent = "ลบ";
+      del.addEventListener("click", () => {
+        crmContactDraft.splice(index, 1);
+        if (!crmContactDraft.length) crmContactDraft.push(crmBlankContact());
+        renderCrmContacts();
+      });
+      tdDel.appendChild(del);
+
+      tr.append(
+        text("name", "", "ชื่อผู้ติดต่อ"),
+        text("position", "crm-col-sm", "ตำแหน่ง"),
+        text("phone", "crm-col-sm", "08x-xxx-xxxx"),
+        text("lineId", "crm-col-sm", "LINE ID"),
+        tdRole, tdPrimary, tdDel
+      );
+      crmContactsEl.appendChild(tr);
+    });
+  }
+
+  document.getElementById("crmAddContactBtn").addEventListener("click", () => {
+    crmContactDraft.push(crmBlankContact());
+    renderCrmContacts();
+  });
+
+  function renderCrmSites() {
+    crmSitesEl.innerHTML = "";
+    const sites = crmEditing ? crmSites(crmEditing) : [];
+    const summary = document.getElementById("crmSiteSummary");
+
+    if (!crmEditing) {
+      summary.textContent = "บันทึกลูกค้าก่อน แล้วจึงเพิ่มสถานที่ได้";
+      document.getElementById("crmAddSiteBtn").disabled = true;
+      return;
+    }
+    document.getElementById("crmAddSiteBtn").disabled = false;
+
+    const kva = crmTotalKva(crmEditing);
+    const kwp = crmTotalKwp(crmEditing);
+    summary.textContent = sites.length
+      ? sites.length + " สถานที่ · หม้อแปลงรวม " + formatMoney(kva) + " kVA"
+        + (kwp > 0 ? " · Solar รวม " + formatMoney(kwp) + " kWp" : "")
+      : "ยังไม่มีสถานที่";
+
+    if (!sites.length) {
+      const empty = document.createElement("div");
+      empty.className = "request-empty";
+      empty.textContent = "ยังไม่มีสถานที่ -- กด “+ เพิ่มสถานที่”";
+      crmSitesEl.appendChild(empty);
+      return;
+    }
+
+    sites.forEach(site => {
+      const card = document.createElement("button");
+      card.type = "button";
+      card.className = "crm-site-card";
+
+      const head = document.createElement("div");
+      head.className = "crm-card-head";
+      const name = document.createElement("span");
+      name.className = "crm-card-name";
+      name.textContent = site.name || "(ไม่มีชื่อสถานที่)";
+      head.appendChild(name);
+      if (site.ca) {
+        const ca = document.createElement("span");
+        ca.className = "request-badge request-badge-id";
+        ca.textContent = "CA " + site.ca;
+        head.appendChild(ca);
+      }
+
+      const meta = document.createElement("div");
+      meta.className = "crm-card-meta";
+      const bits = [];
+      if (site.address) bits.push(site.address);
+      if (Number(site.transformerTotalKva) > 0) {
+        const count = Array.isArray(site.transformers) ? site.transformers.length : 0;
+        bits.push("หม้อแปลง " + count + " ลูก รวม " + formatMoney(site.transformerTotalKva) + " kVA");
+      }
+      if (Number(site.solarKwp) > 0) bits.push("Solar " + formatMoney(site.solarKwp) + " kWp");
+      const ev = Array.isArray(site.evChargers) ? site.evChargers : [];
+      if (ev.length) {
+        const qty = ev.reduce((sum, e) => sum + (Number(e.qty) || 0), 0);
+        bits.push("EV Charger " + (qty || ev.length) + " เครื่อง");
+      }
+      if (site.serviceIntervalMonths) bits.push("รอบบำรุงรักษา " + site.serviceIntervalMonths + " เดือน");
+      meta.textContent = bits.join(" · ") || "ยังไม่มีรายละเอียด";
+
+      card.append(head, meta);
+      card.addEventListener("click", () => openCrmSite(site));
+      crmSitesEl.appendChild(card);
+    });
+  }
+
+  document.getElementById("crmCustomerSaveBtn").addEventListener("click", async () => {
+    hideError(crmCustomerError);
+    const name = crmField("crmName").value.trim();
+    if (!name) { showError(crmCustomerError, "กรุณากรอกชื่อลูกค้า"); crmField("crmName").focus(); return; }
+
+    // เตือนเรื่องชื่อซ้ำ แต่ไม่ห้าม -- ชื่อเดียวกันเป็นคนละรายได้จริง (ร้านสาขา,
+    // ชื่อสามัญ) ต่างจาก BP/CA ที่เป็นเลขของ กฟภ. ซึ่งซ้ำไม่ได้และเซิร์ฟเวอร์ห้ามให้
+    const dup = crmCustomers.find(c =>
+      String(c.id) !== String(crmEditing && crmEditing.id)
+      && String(c.name || "").trim() === name);
+    if (dup && !confirm("มีลูกค้าชื่อ “" + name + "” อยู่แล้ว บันทึกเป็นอีกรายใช่หรือไม่?")) return;
+
+    const owner = crmField("crmOwner");
+    const btn = document.getElementById("crmCustomerSaveBtn");
+    setBusy(btn, true, "กำลังบันทึก...");
+    try {
+      const saved = await backend.saveCrmCustomer({
+        id: crmEditing ? crmEditing.id : newWorkItemId(),
+        bp: crmField("crmBp").value.trim(),
+        name,
+        customerType: crmField("crmCustomerType").value,
+        taxId: crmField("crmTaxId").value.trim(),
+        address: crmField("crmAddress").value.trim(),
+        ownerEmail: owner.value,
+        ownerName: owner.value ? (owner.options[owner.selectedIndex].textContent || "") : "",
+        status: crmField("crmStatus").value,
+        note: crmField("crmNote").value.trim(),
+        contacts: crmContactDraft
+          .filter(c => String(c.name || "").trim() || String(c.phone || "").trim())
+          .map((c, index) => ({ ...c, sortOrder: index }))
+      });
+      const index = crmCustomers.findIndex(c => String(c.id) === String(saved.id));
+      if (index === -1) crmCustomers.push(saved);
+      else crmCustomers[index] = saved;
+      crmEditing = saved;
+      openCrmCustomer(saved);
+      showError(crmCustomerError, "");
+      hideError(crmCustomerError);
+    } catch (err) {
+      showError(crmCustomerError, moduleErrorText(err));
+    } finally {
+      setBusy(btn, false);
+    }
+  });
+
+  document.getElementById("crmCustomerDeleteBtn").addEventListener("click", async () => {
+    if (!crmEditing) return;
+    const sites = crmSites(crmEditing).length;
+    if (!confirm("ลบลูกค้า “" + crmEditing.name + "” ใช่หรือไม่?"
+      + (sites ? "\nสถานที่ " + sites + " แห่งของลูกค้ารายนี้จะถูกลบไปด้วย" : ""))) return;
+    const btn = document.getElementById("crmCustomerDeleteBtn");
+    setBusy(btn, true, "กำลังลบ...");
+    try {
+      await backend.deleteCrmCustomer(crmEditing.id);
+      crmCustomers = crmCustomers.filter(c => String(c.id) !== String(crmEditing.id));
+      crmEditing = null;
+      crmCustomerMode.hidden = true;
+      crmListMode.hidden = false;
+      renderCrmList();
+    } catch (err) {
+      showError(crmCustomerError, moduleErrorText(err));
+    } finally {
+      setBusy(btn, false);
+    }
+  });
+
+  // ------------------------------------------------------- สถานที่หนึ่งจุด
+  function openCrmSite(site) {
+    if (!crmEditing) return;
+    crmSiteEditing = site || null;
+    hideError(crmSiteError);
+
+    crmField("crmSiteName").value = (site && site.name) || "";
+    crmField("crmSiteCa").value = (site && site.ca) || "";
+    crmField("crmSiteUserType").value = (site && site.userType) || "";
+    crmField("crmSiteVoltage").value = (site && site.voltageSystem) || "";
+    crmField("crmSiteAddress").value = (site && site.address) || "";
+    crmField("crmSiteCoord").value = site && site.lat && site.lng
+      ? formatCoordText(site.lat, site.lng) : "";
+    crmField("crmSiteInterval").value = (site && site.serviceIntervalMonths) || "";
+    crmField("crmSiteNote").value = (site && site.note) || "";
+
+    const solar = (site && site.solar) || {};
+    crmField("crmSolarKwp").value = Number(solar.kwp) > 0 ? String(solar.kwp) : "";
+    crmField("crmSolarType").value = solar.systemType || "";
+    crmField("crmSolarCod").value = solar.codDate || "";
+    crmField("crmSolarInverter").value = solar.inverter || "";
+
+    crmTransformerDraft = (site && Array.isArray(site.transformers) ? site.transformers : [])
+      .map(t => ({ ...t }));
+    crmEvDraft = (site && Array.isArray(site.evChargers) ? site.evChargers : [])
+      .map(e => ({ ...e }));
+
+    document.getElementById("crmSiteTitle").textContent = site ? "แก้ไขสถานที่" : "สถานที่ใหม่";
+    document.getElementById("crmSiteSubtitle").textContent = "ลูกค้า: " + (crmEditing.name || "-");
+    document.getElementById("crmSiteDeleteBtn").hidden = !site;
+
+    renderCrmTransformers();
+    renderCrmEv();
+
+    crmListMode.hidden = true;
+    crmCustomerMode.hidden = true;
+    crmSiteMode.hidden = false;
+    window.scrollTo(0, 0);
+  }
+
+  function renderCrmTransformers() {
+    crmTransformersEl.innerHTML = "";
+    crmTransformerDraft.forEach((tx, index) => {
+      const tr = document.createElement("tr");
+      const cell = (key, cls, placeholder, numeric) => {
+        const td = document.createElement("td");
+        if (cls) td.className = cls;
+        const input = document.createElement("input");
+        input.type = "text";
+        if (numeric) input.inputMode = "decimal";
+        input.value = tx[key] === undefined || tx[key] === null ? "" : String(tx[key]);
+        if (placeholder) input.placeholder = placeholder;
+        input.addEventListener("input", () => {
+          tx[key] = numeric ? (quoParseNumber(input.value) || 0) : input.value;
+          if (numeric) updateCrmTotalKva();
+        });
+        td.appendChild(input);
+        return td;
+      };
+
+      const tdDel = document.createElement("td");
+      tdDel.className = "price-col-actions";
+      const del = document.createElement("button");
+      del.type = "button";
+      del.className = "btn btn-ghost";
+      del.textContent = "ลบ";
+      del.addEventListener("click", () => {
+        crmTransformerDraft.splice(index, 1);
+        renderCrmTransformers();
+      });
+      tdDel.appendChild(del);
+
+      tr.append(
+        cell("kva", "crm-col-sm", "250", true),
+        cell("brand", "crm-col-sm", "ยี่ห้อ"),
+        cell("serial", "crm-col-sm", "หมายเลขเครื่อง"),
+        cell("year", "crm-col-xs", "ปี พ.ศ."),
+        cell("type", "crm-col-sm", "เช่น 3 เฟส"),
+        tdDel
+      );
+      crmTransformersEl.appendChild(tr);
+    });
+    updateCrmTotalKva();
+  }
+
+  function updateCrmTotalKva() {
+    const total = crmTransformerDraft.reduce((sum, t) => sum + (Number(t.kva) || 0), 0);
+    document.getElementById("crmTotalKva").textContent = formatMoney(total);
+  }
+
+  function renderCrmEv() {
+    crmEvEl.innerHTML = "";
+    crmEvDraft.forEach((ev, index) => {
+      const tr = document.createElement("tr");
+      const cell = (key, cls, placeholder, numeric) => {
+        const td = document.createElement("td");
+        if (cls) td.className = cls;
+        const input = document.createElement("input");
+        input.type = "text";
+        if (numeric) input.inputMode = "decimal";
+        input.value = ev[key] === undefined || ev[key] === null ? "" : String(ev[key]);
+        if (placeholder) input.placeholder = placeholder;
+        input.addEventListener("input", () => {
+          ev[key] = numeric ? (quoParseNumber(input.value) || 0) : input.value;
+        });
+        td.appendChild(input);
+        return td;
+      };
+
+      const tdDel = document.createElement("td");
+      tdDel.className = "price-col-actions";
+      const del = document.createElement("button");
+      del.type = "button";
+      del.className = "btn btn-ghost";
+      del.textContent = "ลบ";
+      del.addEventListener("click", () => {
+        crmEvDraft.splice(index, 1);
+        renderCrmEv();
+      });
+      tdDel.appendChild(del);
+
+      tr.append(
+        cell("qty", "crm-col-xs", "1", true),
+        cell("kw", "crm-col-sm", "7.4", true),
+        cell("brand", "crm-col-sm", "ยี่ห้อ/รุ่น"),
+        cell("note", "", "หมายเหตุ"),
+        tdDel
+      );
+      crmEvEl.appendChild(tr);
+    });
+  }
+
+  document.getElementById("crmAddSiteBtn").addEventListener("click", () => openCrmSite(null));
+  document.getElementById("crmAddTransformerBtn").addEventListener("click", () => {
+    crmTransformerDraft.push({ kva: 0, brand: "", serial: "", year: "", type: "" });
+    renderCrmTransformers();
+  });
+  document.getElementById("crmAddEvBtn").addEventListener("click", () => {
+    crmEvDraft.push({ qty: 1, kw: 0, brand: "", note: "" });
+    renderCrmEv();
+  });
+  document.getElementById("crmSiteBackBtn").addEventListener("click", () => {
+    crmSiteMode.hidden = true;
+    crmCustomerMode.hidden = false;
+    window.scrollTo(0, 0);
+  });
+
+  document.getElementById("crmSiteSaveBtn").addEventListener("click", async () => {
+    hideError(crmSiteError);
+    if (!crmEditing) return;
+    const name = crmField("crmSiteName").value.trim();
+    if (!name) { showError(crmSiteError, "กรุณากรอกชื่อสถานที่"); crmField("crmSiteName").focus(); return; }
+
+    // พิกัดใช้ตัวอ่านเดียวกับฟอร์มคำร้อง -- รับทั้งคั่นด้วยจุลภาคและเว้นวรรค และ
+    // เก็บเป็นข้อความตามที่พิมพ์ ไม่แปลงเป็นตัวเลขแล้วแปลงกลับ (ทศนิยมท้ายจะเพี้ยน)
+    const coord = readCoordField(crmField("crmSiteCoord"));
+    if (coord.error) { showError(crmSiteError, coord.error); crmField("crmSiteCoord").focus(); return; }
+
+    const btn = document.getElementById("crmSiteSaveBtn");
+    setBusy(btn, true, "กำลังบันทึก...");
+    try {
+      await backend.saveCrmSite({
+        id: crmSiteEditing ? crmSiteEditing.id : newWorkItemId(),
+        customerId: crmEditing.id,
+        ca: crmField("crmSiteCa").value.trim(),
+        name,
+        address: crmField("crmSiteAddress").value.trim(),
+        lat: coord.lat || "",
+        lng: coord.lng || "",
+        userType: crmField("crmSiteUserType").value.trim(),
+        voltageSystem: crmField("crmSiteVoltage").value.trim(),
+        transformers: crmTransformerDraft.filter(t => Number(t.kva) > 0 || String(t.brand || "").trim()),
+        solar: crmSolarPayload(),
+        evChargers: crmEvDraft.filter(e => Number(e.qty) > 0 || Number(e.kw) > 0 || String(e.brand || "").trim()),
+        serviceIntervalMonths: crmField("crmSiteInterval").value.trim(),
+        note: crmField("crmSiteNote").value.trim()
+      });
+      // โหลดลูกค้าใหม่ทั้งชุด -- ผลรวม kVA คำนวณฝั่งเซิร์ฟเวอร์ ต้องอ่านค่าที่
+      // เซิร์ฟเวอร์คิดกลับมา ไม่ใช่เดาเองในเครื่อง
+      await ensureCrm(true);
+      const fresh = crmCustomers.find(c => String(c.id) === String(crmEditing.id));
+      crmEditing = fresh || crmEditing;
+      crmSiteMode.hidden = true;
+      crmCustomerMode.hidden = false;
+      renderCrmSites();
+      window.scrollTo(0, 0);
+    } catch (err) {
+      showError(crmSiteError, moduleErrorText(err));
+    } finally {
+      setBusy(btn, false);
+    }
+  });
+
+  function crmSolarPayload() {
+    const kwp = quoParseNumber(crmField("crmSolarKwp").value) || 0;
+    const type = crmField("crmSolarType").value;
+    const cod = crmField("crmSolarCod").value;
+    const inverter = crmField("crmSolarInverter").value.trim();
+    if (!(kwp > 0) && !type && !cod && !inverter) return {};
+    return { kwp, systemType: type, codDate: cod, inverter };
+  }
+
+  document.getElementById("crmSiteDeleteBtn").addEventListener("click", async () => {
+    if (!crmSiteEditing) return;
+    if (!confirm("ลบสถานที่ “" + crmSiteEditing.name + "” ใช่หรือไม่?")) return;
+    const btn = document.getElementById("crmSiteDeleteBtn");
+    setBusy(btn, true, "กำลังลบ...");
+    try {
+      await backend.deleteCrmSite(crmSiteEditing.id);
+      await ensureCrm(true);
+      const fresh = crmCustomers.find(c => String(c.id) === String(crmEditing.id));
+      crmEditing = fresh || crmEditing;
+      crmSiteEditing = null;
+      crmSiteMode.hidden = true;
+      crmCustomerMode.hidden = false;
+      renderCrmSites();
+    } catch (err) {
+      showError(crmSiteError, moduleErrorText(err));
+    } finally {
+      setBusy(btn, false);
+    }
+  });
+
+  /** ล้างหน้าลูกค้าตอนออกจากระบบ -- เป็นข้อมูลส่วนบุคคลของลูกค้าทั้งหน้า */
+  function clearCrmScreens() {
+    crmCustomers = [];
+    crmLoaded = false;
+    crmEditing = null;
+    crmSiteEditing = null;
+    crmContactDraft = [];
+    crmTransformerDraft = [];
+    crmEvDraft = [];
+    crmQuery = "";
+    crmStatusFilter = "";
+    crmSearch.value = "";
+    crmListEl.innerHTML = "";
+    crmContactsEl.innerHTML = "";
+    crmSitesEl.innerHTML = "";
+    crmTransformersEl.innerHTML = "";
+    crmEvEl.innerHTML = "";
+    crmListMode.hidden = false;
+    crmCustomerMode.hidden = true;
+    crmSiteMode.hidden = true;
+  }
+
   // -------------------------------------------- ระบบรับฟังเสียงของลูกค้า (VOC)
   const vocListMode = document.getElementById("vocListMode");
   const vocFormMode = document.getElementById("vocFormMode");
@@ -16455,6 +17172,7 @@ ${sheetHtml}
       saveNavState({ card: "sideBusiness", module: key });
       if (key === "brochure") openBrochureView();
       if (key === "quotation") openQuotationView();
+      if (key === "crm") openCrmView();
     });
   });
 
@@ -16498,6 +17216,7 @@ ${sheetHtml}
     vocForm.reset();
     clearQuotationScreens();
     clearMyWorkScreens();
+    clearCrmScreens();
     closeBrochureEditor();
     closeBrochureViewer();
   }
