@@ -396,6 +396,12 @@
     async deleteCrmSite() {
       throw new Error("โหมดออฟไลน์ไม่รองรับโมดูลงานใหม่");
     },
+    async saveCrmJob() {
+      throw new Error("โหมดออฟไลน์ไม่รองรับโมดูลงานใหม่");
+    },
+    async deleteCrmJob() {
+      throw new Error("โหมดออฟไลน์ไม่รองรับโมดูลงานใหม่");
+    },
 
     async uploadBrochureImage() {
       throw new Error("โหมดออฟไลน์ไม่รองรับการอัปโหลดรูป");
@@ -911,6 +917,15 @@
 
       async deleteCrmSite(id) {
         return callAsUser(() => rpc("delete_crm_site", { p_id: id }));
+      },
+
+      async saveCrmJob(job) {
+        const data = await callAsUser(() => rpc("save_crm_job", { p_job: job }));
+        return data.job;
+      },
+
+      async deleteCrmJob(id) {
+        return callAsUser(() => rpc("delete_crm_job", { p_id: id }));
       },
 
       /**
@@ -16199,6 +16214,8 @@ ${sheetHtml}
   const crmListMode = document.getElementById("crmListMode");
   const crmCustomerMode = document.getElementById("crmCustomerMode");
   const crmSiteMode = document.getElementById("crmSiteMode");
+  const crmJobMode = document.getElementById("crmJobMode");
+  const crmJobError = document.getElementById("crmJobError");
   const crmError = document.getElementById("crmError");
   const crmCustomerError = document.getElementById("crmCustomerError");
   const crmSiteError = document.getElementById("crmSiteError");
@@ -16223,9 +16240,9 @@ ${sheetHtml}
   async function openCrmView() {
     showView("crm");
     hideError(crmError);
-    crmListMode.hidden = false;
     crmCustomerMode.hidden = true;
     crmSiteMode.hidden = true;
+    crmJobMode.hidden = true;
     crmQuery = "";
     crmStatusFilter = "";
     crmSearch.value = "";
@@ -16243,7 +16260,9 @@ ${sheetHtml}
     if (!(staffRoster || []).length) {
       refreshStaffRoster().catch(() => { /* ไม่เป็นไร */ });
     }
-    renderCrmList();
+    // ลงที่ "สิ่งที่ต้องทำ" ก่อนเสมอ -- เป็นคำถามที่คนเปิด CRM มาถามก่อน
+    // ไม่ใช่ "ลูกค้ามีใครบ้าง"
+    setCrmTab("home");
   }
 
   // ------------------------------------------------------------ รายชื่อลูกค้า
@@ -16404,7 +16423,9 @@ ${sheetHtml}
     renderCrmSites();
 
     crmListMode.hidden = true;
+    crmHomeMode.hidden = true;
     crmSiteMode.hidden = true;
+    crmJobMode.hidden = true;
     crmCustomerMode.hidden = false;
     window.scrollTo(0, 0);
   }
@@ -16671,9 +16692,12 @@ ${sheetHtml}
 
     renderCrmTransformers();
     renderCrmEv();
+    renderCrmJobs();
 
     crmListMode.hidden = true;
+    crmHomeMode.hidden = true;
     crmCustomerMode.hidden = true;
+    crmJobMode.hidden = true;
     crmSiteMode.hidden = false;
     window.scrollTo(0, 0);
   }
@@ -16878,10 +16902,588 @@ ${sheetHtml}
     crmSitesEl.innerHTML = "";
     crmTransformersEl.innerHTML = "";
     crmEvEl.innerHTML = "";
-    crmListMode.hidden = false;
+    crmJobEditing = null;
+    crmJobSite = null;
+    document.getElementById("crmJobs").innerHTML = "";
+    ["crmDueList", "crmWarrantyList", "crmQuietList", "crmOfferList"]
+      .forEach(id => { document.getElementById(id).innerHTML = ""; });
+    crmListMode.hidden = true;
+    if (crmHomeMode) crmHomeMode.hidden = false;
     crmCustomerMode.hidden = true;
     crmSiteMode.hidden = true;
+    crmJobMode.hidden = true;
   }
+
+  // ----------------------------------------- งานบริการ / ประกัน / รอบบำรุงรักษา
+  /**
+   * ประเภทบริการ พร้อมรอบบำรุงรักษาและระยะประกันตั้งต้น
+   *
+   * "ระบบตั้งอัตโนมัติตามประเภทบริการ โดยสามารถแก้ไขได้" ตามที่เจ้าของระบบกำหนด --
+   * ค่าที่นี่เป็นแค่ค่าตั้งต้นที่เติมให้ในฟอร์ม ทุกงานแก้วันครบรอบและระยะประกันเองได้
+   * เสมอ เพราะงานจริงมีข้อตกลงเฉพาะราย (เช่นประกันถึงสิ้นปีงบ ไม่ลงตัวเป็นเดือน)
+   *
+   * intervalMonths = null แปลว่างานประเภทนี้ไม่มีรอบถัดไป (ติดตั้งครั้งเดียวจบ)
+   * ไม่ใช่ว่ายังไม่ได้ตั้งค่า -- ต่างกันตรงที่ null จะไม่เติมวันครบรอบให้เลย
+   */
+  const CRM_SERVICE_TYPES = [
+    { name: "ตรวจสอบและบำรุงรักษาหม้อแปลงไฟฟ้า", intervalMonths: 12, warrantyMonths: 6 },
+    { name: "ตรวจสอบและบำรุงรักษาระบบไฟฟ้าแบบครบวงจร (PACKAGE)", intervalMonths: 12, warrantyMonths: 6 },
+    { name: "ตรวจจุดร้อนด้วยกล้องอินฟราเรด", intervalMonths: 12, warrantyMonths: 0 },
+    { name: "บำรุงรักษาระบบ Solar Roof Top", intervalMonths: 12, warrantyMonths: 6 },
+    { name: "ติดตั้ง EV Charger", intervalMonths: null, warrantyMonths: 12 },
+    { name: "ติดตั้งอุปกรณ์ป้องกัน", intervalMonths: null, warrantyMonths: 12 },
+    { name: "รื้อถอนอุปกรณ์ป้องกัน", intervalMonths: null, warrantyMonths: 0 },
+    { name: "ติดตั้ง Solar Roof Top", intervalMonths: 12, warrantyMonths: 12 },
+    { name: "งานอื่น ๆ", intervalMonths: null, warrantyMonths: 0 }
+  ];
+
+  const CRM_JOB_STATUSES = ["เสร็จสิ้น", "กำลังดำเนินการ", "ยกเลิก"];
+
+  // ช่วงเวลาที่หน้าแรก CRM ถือว่า "ใกล้ถึง" -- ตัวเลขเดียวใช้ทั้งรอบบำรุงรักษาและ
+  // ประกัน เพื่อให้คนอ่านไม่ต้องจำสองเกณฑ์
+  const CRM_DUE_WINDOW_DAYS = 60;
+  // ไม่มีงานบริการมานานเท่านี้ถือว่าลูกค้าเงียบไป -- หนึ่งปีคือรอบบำรุงรักษาปกติ
+  // ลูกค้าที่เลยรอบไปแล้วยังไม่กลับมาคือลูกค้าที่กำลังจะหลุดมือ
+  const CRM_QUIET_DAYS = 365;
+
+  let crmHomeMode = null;   // ตั้งค่าใน crmWireHome()
+  let crmJobEditing = null;
+  let crmJobSite = null;    // สถานที่ของงานที่กำลังแก้
+
+  function crmServiceType(name) {
+    return CRM_SERVICE_TYPES.find(t => t.name === name) || null;
+  }
+
+  function crmJobs(site) {
+    return Array.isArray(site && site.jobs) ? site.jobs : [];
+  }
+
+  /** งานทุกชิ้นของทุกลูกค้า พร้อมอ้างกลับไปยังลูกค้าและสถานที่ต้นทาง */
+  function crmAllJobs() {
+    const out = [];
+    crmCustomers.forEach(customer => {
+      crmSites(customer).forEach(site => {
+        crmJobs(site).forEach(job => out.push({ job, site, customer }));
+      });
+    });
+    return out;
+  }
+
+  function crmDaysUntil(dateText) {
+    if (!dateText) return null;
+    const ms = Date.parse(dateText);
+    if (Number.isNaN(ms)) return null;
+    // เทียบเป็น "วัน" จากเที่ยงคืนวันนี้ ไม่ใช่จากเวลาปัจจุบัน -- ไม่งั้นงานที่ครบ
+    // กำหนดวันนี้จะกลายเป็น -1 วันตอนบ่าย
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return Math.round((ms - today.getTime()) / 86400000);
+  }
+
+  function crmAddMonths(dateText, months) {
+    if (!dateText || !(Number(months) > 0)) return "";
+    const base = new Date(dateText + "T00:00:00");
+    if (Number.isNaN(base.getTime())) return "";
+    const day = base.getDate();
+    base.setMonth(base.getMonth() + Number(months));
+    // เดือนปลายทางสั้นกว่าวันที่ตั้งต้น (31 ม.ค. + 1 เดือน) -- JS จะล้นไปเดือนถัดไป
+    // ดึงกลับมาเป็นวันสุดท้ายของเดือนที่ตั้งใจแทน
+    if (base.getDate() < day) base.setDate(0);
+    const pad = n => String(n).padStart(2, "0");
+    return base.getFullYear() + "-" + pad(base.getMonth() + 1) + "-" + pad(base.getDate());
+  }
+
+  // ------------------------------------------------------------ รายการงานในสถานที่
+  function renderCrmJobs() {
+    const host = document.getElementById("crmJobs");
+    host.innerHTML = "";
+    if (!crmSiteEditing) {
+      document.getElementById("crmJobSummary").textContent = "บันทึกสถานที่ก่อน แล้วจึงเพิ่มงานบริการได้";
+      document.getElementById("crmAddJobBtn").disabled = true;
+      return;
+    }
+    document.getElementById("crmAddJobBtn").disabled = false;
+
+    const jobs = crmJobs(crmSiteEditing);
+    const next = jobs
+      .map(j => j.nextServiceDate)
+      .filter(Boolean)
+      .sort()[0];
+    document.getElementById("crmJobSummary").textContent = jobs.length
+      ? jobs.length + " งาน" + (next ? " · ครบรอบถัดไป " + formatThaiDate(next) : "")
+      : "ยังไม่มีประวัติงานบริการ";
+
+    if (!jobs.length) {
+      const empty = document.createElement("div");
+      empty.className = "request-empty";
+      empty.textContent = "ยังไม่มีงานบริการ -- กด “+ เพิ่มงานบริการ”";
+      host.appendChild(empty);
+      return;
+    }
+
+    jobs.forEach(job => {
+      const card = document.createElement("button");
+      card.type = "button";
+      card.className = "crm-job-card";
+
+      const head = document.createElement("div");
+      head.className = "crm-card-head";
+      const name = document.createElement("span");
+      name.className = "crm-card-name";
+      name.textContent = job.serviceType || "(ไม่ระบุบริการ)";
+      head.appendChild(name);
+
+      const status = document.createElement("span");
+      status.className = "request-badge";
+      status.classList.add(job.status === "เสร็จสิ้น" ? "tone-success"
+        : job.status === "ยกเลิก" ? "tone-danger" : "tone-warning");
+      status.textContent = job.status || "-";
+      head.appendChild(status);
+
+      // ประกันที่ยังมีผลคือสิ่งที่ต้องเห็นทันทีเวลาลูกค้าโทรมาเคลม
+      const warrantyDays = crmDaysUntil(job.warrantyEnd);
+      if (job.warrantyEnd) {
+        const wb = document.createElement("span");
+        wb.className = "request-badge";
+        wb.classList.add(warrantyDays >= 0 ? "tone-info" : "tone-danger");
+        wb.textContent = warrantyDays >= 0
+          ? "ประกันถึง " + formatThaiDate(job.warrantyEnd)
+          : "ประกันหมดแล้ว";
+        head.appendChild(wb);
+      }
+
+      const meta = document.createElement("div");
+      meta.className = "crm-card-meta";
+      const bits = [];
+      if (job.serviceDate) bits.push(formatThaiDate(job.serviceDate));
+      if (job.staffNames) bits.push(job.staffNames);
+      if (Number(job.amount) > 0) bits.push(formatMoney(job.amount) + " บาท");
+      if (job.nextServiceDate) {
+        const days = crmDaysUntil(job.nextServiceDate);
+        bits.push(days < 0
+          ? "เลยรอบมา " + Math.abs(days) + " วัน"
+          : "ครบรอบอีก " + days + " วัน");
+      }
+      meta.textContent = bits.join(" · ") || "ยังไม่มีรายละเอียด";
+
+      card.append(head, meta);
+      if (job.findings) {
+        const findings = document.createElement("div");
+        findings.className = "crm-job-findings";
+        findings.textContent = job.findings;
+        card.appendChild(findings);
+      }
+      card.addEventListener("click", () => openCrmJob(job));
+      host.appendChild(card);
+    });
+  }
+
+  function openCrmJob(job) {
+    if (!crmSiteEditing) return;
+    crmJobEditing = job || null;
+    crmJobSite = crmSiteEditing;
+    hideError(crmJobError);
+
+    const select = crmField("crmJobType");
+    select.innerHTML = '<option value="">- เลือกประเภทบริการ -</option>';
+    CRM_SERVICE_TYPES.forEach(type => {
+      const option = document.createElement("option");
+      option.value = type.name;
+      option.textContent = type.name;
+      select.appendChild(option);
+    });
+    // ประเภทที่เคยบันทึกไว้แต่ถูกถอดออกจากรายการแล้ว -- ใส่กลับเป็นตัวเลือก
+    // ไม่งั้นเปิดงานเก่ามาแล้วกดบันทึก ประเภทเดิมจะหายไปเงียบ ๆ
+    if (job && job.serviceType && !crmServiceType(job.serviceType)) {
+      const option = document.createElement("option");
+      option.value = job.serviceType;
+      option.textContent = job.serviceType + " (ไม่อยู่ในรายการแล้ว)";
+      select.appendChild(option);
+    }
+    select.value = (job && job.serviceType) || "";
+
+    const statusSelect = crmField("crmJobStatus");
+    statusSelect.innerHTML = "";
+    CRM_JOB_STATUSES.forEach(st => {
+      const option = document.createElement("option");
+      option.value = st;
+      option.textContent = st;
+      statusSelect.appendChild(option);
+    });
+    statusSelect.value = (job && job.status) || "เสร็จสิ้น";
+
+    crmField("crmJobDate").value = (job && job.serviceDate) || todayDateString();
+    crmField("crmJobStaff").value = (job && job.staffNames) || (getSession()?.name || "");
+    crmField("crmJobAmount").value = Number(job && job.amount) > 0 ? formatMoney(job.amount) : "";
+    crmField("crmJobFindings").value = (job && job.findings) || "";
+    crmField("crmJobNote").value = (job && job.note) || "";
+    crmField("crmJobWarrantyMonths").value = job && job.warrantyMonths !== undefined && job.warrantyMonths !== null
+      ? String(job.warrantyMonths) : "";
+    crmField("crmJobWarrantyStart").value = (job && job.warrantyStart) || "";
+    crmField("crmJobWarrantyEnd").value = (job && job.warrantyEnd) || "";
+    crmField("crmJobWarrantyTerms").value = (job && job.warrantyTerms) || "";
+    crmField("crmJobNextDate").value = (job && job.nextServiceDate) || "";
+
+    document.getElementById("crmJobTitle").textContent = job ? "แก้ไขงานบริการ" : "งานบริการใหม่";
+    document.getElementById("crmJobSubtitle").textContent =
+      (crmEditing ? crmEditing.name + " · " : "") + (crmSiteEditing.name || "");
+    document.getElementById("crmJobDeleteBtn").hidden = !job;
+
+    crmListMode.hidden = true;
+    crmHomeMode.hidden = true;
+    crmCustomerMode.hidden = true;
+    crmSiteMode.hidden = true;
+    crmJobMode.hidden = false;
+    window.scrollTo(0, 0);
+  }
+
+  /**
+   * เติมวันครบรอบและวันสิ้นสุดประกันให้ตามประเภทบริการ
+   *
+   * เติมเฉพาะช่องที่ยังว่าง -- ค่าที่คนกรอกเองแล้วต้องไม่ถูกเขียนทับเมื่อเปลี่ยน
+   * ประเภทบริการ (หลักเดียวกับ wireFeeAutofill ของฟอร์มคำร้อง)
+   */
+  function crmFillJobDefaults() {
+    const type = crmServiceType(crmField("crmJobType").value);
+    const serviceDate = crmField("crmJobDate").value;
+    if (!type || !serviceDate) return;
+
+    const monthsEl = crmField("crmJobWarrantyMonths");
+    if (!monthsEl.value.trim() && Number(type.warrantyMonths) > 0) {
+      monthsEl.value = String(type.warrantyMonths);
+    }
+    const startEl = crmField("crmJobWarrantyStart");
+    if (!startEl.value && Number(monthsEl.value) > 0) startEl.value = serviceDate;
+    const endEl = crmField("crmJobWarrantyEnd");
+    if (!endEl.value && startEl.value && Number(monthsEl.value) > 0) {
+      endEl.value = crmAddMonths(startEl.value, Number(monthsEl.value));
+    }
+    const nextEl = crmField("crmJobNextDate");
+    if (!nextEl.value && Number(type.intervalMonths) > 0) {
+      nextEl.value = crmAddMonths(serviceDate, type.intervalMonths);
+    }
+  }
+
+  // ------------------------------------------------------------ หน้าแรก CRM
+  /**
+   * สิ่งที่ต้องทำวันนี้ -- สี่กองที่คิดจากข้อมูลที่มีอยู่แล้ว ไม่ต้องให้ใครมาป้อน
+   *   ครบกำหนดบำรุงรักษา / ประกันใกล้หมด / ลูกค้าเงียบไป / ข้อเสนอที่ควรยื่น
+   * กองสุดท้ายคือส่วนที่ทำให้ระบบนี้เป็น CRM ไม่ใช่แค่สมุดบันทึกลูกค้า
+   */
+  function crmDueItems() {
+    const out = [];
+
+    crmAllJobs().forEach(({ job, site, customer }) => {
+      if (job.status === "ยกเลิก") return;
+      const days = crmDaysUntil(job.nextServiceDate);
+      if (days === null || days > CRM_DUE_WINDOW_DAYS) return;
+      out.push({
+        kind: "service",
+        customer, site, job,
+        title: customer.name + " · " + (site.name || ""),
+        detail: job.serviceType,
+        reason: days < 0 ? "เลยรอบมา " + Math.abs(days) + " วัน"
+          : days === 0 ? "ครบรอบวันนี้" : "ครบรอบอีก " + days + " วัน",
+        days,
+        urgent: days <= 0
+      });
+    });
+
+    return out.sort((a, b) => a.days - b.days);
+  }
+
+  function crmWarrantyItems() {
+    const out = [];
+    crmAllJobs().forEach(({ job, site, customer }) => {
+      if (job.status === "ยกเลิก") return;
+      const days = crmDaysUntil(job.warrantyEnd);
+      // ประกันที่หมดไปแล้วเกินหน้าต่างนี้ไม่ต้องรบกวนอีก -- ขึ้นเฉพาะช่วงที่ยัง
+      // เสนอต่อสัญญาได้ทัน
+      if (days === null || days > CRM_DUE_WINDOW_DAYS || days < -CRM_DUE_WINDOW_DAYS) return;
+      out.push({
+        kind: "warranty",
+        customer, site, job,
+        title: customer.name + " · " + (site.name || ""),
+        detail: job.serviceType,
+        reason: days < 0 ? "ประกันหมดมาแล้ว " + Math.abs(days) + " วัน"
+          : days === 0 ? "ประกันหมดวันนี้" : "ประกันหมดอีก " + days + " วัน",
+        days,
+        urgent: days <= 0
+      });
+    });
+    return out.sort((a, b) => a.days - b.days);
+  }
+
+  function crmQuietCustomers() {
+    const out = [];
+    crmCustomers.forEach(customer => {
+      if (customer.status === "หยุดใช้บริการ") return;
+      const dates = [];
+      crmSites(customer).forEach(site => {
+        crmJobs(site).forEach(job => { if (job.serviceDate) dates.push(job.serviceDate); });
+      });
+      if (!dates.length) return;   // ยังไม่เคยมีงาน -- ไปอยู่ในกอง "ข้อเสนอที่ควรยื่น" แทน
+      const latest = dates.sort().slice(-1)[0];
+      const days = -crmDaysUntil(latest);
+      if (days < CRM_QUIET_DAYS) return;
+      out.push({
+        kind: "quiet",
+        customer,
+        title: customer.name,
+        detail: "ใช้บริการล่าสุด " + formatThaiDate(latest),
+        reason: "เงียบมา " + Math.round(days / 30) + " เดือน",
+        days,
+        urgent: false
+      });
+    });
+    return out.sort((a, b) => b.days - a.days);
+  }
+
+  /**
+   * ข้อเสนอที่ควรยื่น -- คิดจากอุปกรณ์ที่ติดตั้งจริงเทียบกับงานที่เคยทำให้
+   * เป็นการชี้เป้าเท่านั้น ไม่ได้สร้างอะไรให้อัตโนมัติ
+   */
+  function crmOpportunities() {
+    const out = [];
+    crmCustomers.forEach(customer => {
+      if (customer.status === "หยุดใช้บริการ") return;
+      crmSites(customer).forEach(site => {
+        const jobs = crmJobs(site).filter(j => j.status !== "ยกเลิก");
+        const types = jobs.map(j => String(j.serviceType || ""));
+        const has = keyword => types.some(t => t.includes(keyword));
+        const kva = Number(site.transformerTotalKva) || 0;
+        const kwp = Number(site.solarKwp) || 0;
+
+        if (kva > 0 && !has("บำรุงรักษา")) {
+          out.push({
+            kind: "offer", customer, site,
+            title: customer.name + " · " + (site.name || ""),
+            detail: "มีหม้อแปลงรวม " + formatMoney(kva) + " kVA แต่ยังไม่เคยใช้บริการบำรุงรักษา",
+            reason: kva <= 250 ? "เสนอ PACKAGE 3" : kva <= 500 ? "เสนอ PACKAGE 2" : "เสนอ PACKAGE 1"
+          });
+        }
+        if (kva > 0 && !has("อุปกรณ์ป้องกัน")) {
+          out.push({
+            kind: "offer", customer, site,
+            title: customer.name + " · " + (site.name || ""),
+            detail: "มีหม้อแปลงแต่ยังไม่เคยติดตั้งอุปกรณ์ป้องกัน",
+            reason: "เสนออุปกรณ์ป้องกัน"
+          });
+        }
+        if (kwp > 0 && !has("Solar")) {
+          out.push({
+            kind: "offer", customer, site,
+            title: customer.name + " · " + (site.name || ""),
+            detail: "มี Solar Roof Top " + formatMoney(kwp) + " kWp แต่ยังไม่มีสัญญาดูแล",
+            reason: "เสนอบำรุงรักษา Solar"
+          });
+        }
+      });
+    });
+    return out;
+  }
+
+  function renderCrmHome() {
+    const groups = [
+      { id: "crmDueList", items: crmDueItems(), head: "ครบกำหนดบำรุงรักษา", empty: "ไม่มีงานที่ถึงรอบใน " + CRM_DUE_WINDOW_DAYS + " วัน" },
+      { id: "crmWarrantyList", items: crmWarrantyItems(), head: "ประกันใกล้หมดอายุ", empty: "ไม่มีประกันที่ใกล้หมดอายุ" },
+      { id: "crmQuietList", items: crmQuietCustomers(), head: "ลูกค้าที่เงียบไป", empty: "ไม่มีลูกค้าที่เงียบเกิน 1 ปี" },
+      { id: "crmOfferList", items: crmOpportunities(), head: "ข้อเสนอที่ควรยื่น", empty: "ยังไม่มีข้อเสนอที่ระบบชี้เป้าได้" }
+    ];
+
+    groups.forEach(group => {
+      const host = document.getElementById(group.id);
+      host.innerHTML = "";
+      const head = document.createElement("h3");
+      head.className = "mywork-section-head";
+      head.textContent = group.head + (group.items.length ? " (" + group.items.length + ")" : "");
+      host.appendChild(head);
+
+      if (!group.items.length) {
+        const empty = document.createElement("div");
+        empty.className = "request-empty";
+        empty.textContent = group.empty;
+        host.appendChild(empty);
+        return;
+      }
+
+      group.items.slice(0, 15).forEach(item => {
+        const row = document.createElement("button");
+        row.type = "button";
+        row.className = "mywork-attention-row";
+        if (item.urgent) row.classList.add("is-urgent");
+
+        const main = document.createElement("div");
+        main.className = "mywork-attention-main";
+        const title = document.createElement("div");
+        title.className = "mywork-attention-title";
+        title.textContent = item.title;
+        const detail = document.createElement("div");
+        detail.className = "mywork-attention-meta";
+        detail.textContent = item.detail;
+        main.append(title, detail);
+
+        const reason = document.createElement("span");
+        reason.className = "mywork-reason";
+        reason.textContent = item.reason;
+
+        row.append(main, reason);
+        row.addEventListener("click", () => {
+          openCrmCustomer(item.customer);
+          if (item.site) {
+            const fresh = crmSites(item.customer).find(s => String(s.id) === String(item.site.id));
+            if (fresh) openCrmSite(fresh);
+          }
+        });
+        host.appendChild(row);
+      });
+
+      if (group.items.length > 15) {
+        const more = document.createElement("div");
+        more.className = "request-empty";
+        more.textContent = "และอีก " + (group.items.length - 15) + " รายการ";
+        host.appendChild(more);
+      }
+    });
+
+    const due = crmDueItems().filter(i => i.urgent).length;
+    const badge = document.getElementById("crmHomeCount");
+    badge.textContent = due
+      ? "มีงานที่ถึงรอบหรือเลยรอบแล้ว " + due + " รายการ"
+      : "ไม่มีงานที่เลยรอบ";
+  }
+
+  // ------------------------------------------------------------ ผูกปุ่มทั้งหมด
+  function crmWireHome() {
+    crmHomeMode = document.getElementById("crmHomeMode");
+
+    document.querySelectorAll("[data-crm-tab]").forEach(btn => {
+      btn.addEventListener("click", () => setCrmTab(btn.dataset.crmTab));
+    });
+
+    document.getElementById("crmAddJobBtn").addEventListener("click", () => openCrmJob(null));
+    document.getElementById("crmJobBackBtn").addEventListener("click", () => {
+      crmJobMode.hidden = true;
+      crmSiteMode.hidden = false;
+      window.scrollTo(0, 0);
+    });
+    crmField("crmJobType").addEventListener("change", crmFillJobDefaults);
+    crmField("crmJobDate").addEventListener("change", crmFillJobDefaults);
+    crmField("crmJobWarrantyMonths").addEventListener("change", () => {
+      // แก้จำนวนเดือนแล้วคิดวันสิ้นสุดให้ใหม่ -- ช่องนี้คนแก้เพื่อเปลี่ยนวันหมดประกัน
+      // ไม่ใช่เพื่อเก็บตัวเลขไว้เฉย ๆ
+      const start = crmField("crmJobWarrantyStart").value || crmField("crmJobDate").value;
+      const months = Number(crmField("crmJobWarrantyMonths").value);
+      if (start && months > 0) {
+        crmField("crmJobWarrantyStart").value = start;
+        crmField("crmJobWarrantyEnd").value = crmAddMonths(start, months);
+      }
+    });
+
+    document.getElementById("crmJobSaveBtn").addEventListener("click", saveCrmJob);
+    document.getElementById("crmJobDeleteBtn").addEventListener("click", deleteCrmJob);
+  }
+
+  function setCrmTab(tab) {
+    document.querySelectorAll("[data-crm-tab]").forEach(btn =>
+      btn.classList.toggle("active", btn.dataset.crmTab === tab));
+    crmCustomerMode.hidden = true;
+    crmSiteMode.hidden = true;
+    crmJobMode.hidden = true;
+    if (tab === "home") {
+      crmListMode.hidden = true;
+      crmHomeMode.hidden = false;
+      renderCrmHome();
+    } else {
+      crmHomeMode.hidden = true;
+      crmListMode.hidden = false;
+      renderCrmList();
+    }
+    window.scrollTo(0, 0);
+  }
+
+  async function saveCrmJob() {
+    hideError(crmJobError);
+    if (!crmJobSite) return;
+    const serviceType = crmField("crmJobType").value;
+    if (!serviceType) {
+      showError(crmJobError, "กรุณาเลือกประเภทบริการ");
+      crmField("crmJobType").focus();
+      return;
+    }
+
+    const btn = document.getElementById("crmJobSaveBtn");
+    setBusy(btn, true, "กำลังบันทึก...");
+    try {
+      await backend.saveCrmJob({
+        id: crmJobEditing ? crmJobEditing.id : newWorkItemId(),
+        siteId: crmJobSite.id,
+        serviceType,
+        serviceDate: crmField("crmJobDate").value,
+        staffNames: crmField("crmJobStaff").value.trim(),
+        amount: String(quoParseNumber(crmField("crmJobAmount").value) || ""),
+        findings: crmField("crmJobFindings").value.trim(),
+        note: crmField("crmJobNote").value.trim(),
+        warrantyMonths: crmField("crmJobWarrantyMonths").value.trim(),
+        warrantyStart: crmField("crmJobWarrantyStart").value,
+        warrantyEnd: crmField("crmJobWarrantyEnd").value,
+        warrantyTerms: crmField("crmJobWarrantyTerms").value.trim(),
+        nextServiceDate: crmField("crmJobNextDate").value,
+        status: crmField("crmJobStatus").value
+      });
+      await crmReloadInto();
+      crmJobMode.hidden = true;
+      crmSiteMode.hidden = false;
+      renderCrmJobs();
+      window.scrollTo(0, 0);
+    } catch (err) {
+      showError(crmJobError, moduleErrorText(err));
+    } finally {
+      setBusy(btn, false);
+    }
+  }
+
+  async function deleteCrmJob() {
+    if (!crmJobEditing) return;
+    if (!confirm("ลบงานบริการ “" + (crmJobEditing.serviceType || "") + "” ใช่หรือไม่?")) return;
+    const btn = document.getElementById("crmJobDeleteBtn");
+    setBusy(btn, true, "กำลังลบ...");
+    try {
+      await backend.deleteCrmJob(crmJobEditing.id);
+      await crmReloadInto();
+      crmJobEditing = null;
+      crmJobMode.hidden = true;
+      crmSiteMode.hidden = false;
+      renderCrmJobs();
+    } catch (err) {
+      showError(crmJobError, moduleErrorText(err));
+    } finally {
+      setBusy(btn, false);
+    }
+  }
+
+  /**
+   * โหลด CRM ใหม่ทั้งชุดแล้วชี้ crmEditing/crmSiteEditing ไปที่แถวใหม่
+   *
+   * ต้องโหลดใหม่ ไม่ใช่แก้ในเครื่อง เพราะผลรวม kVA และ customer_id ของงานถูก
+   * คำนวณ/เติมที่เซิร์ฟเวอร์ -- และต้องชี้ตัวแปรใหม่ด้วย ไม่งั้นหน้าจอจะยังถือ
+   * ออบเจ็กต์เก่าที่ไม่มีงานที่เพิ่งบันทึกอยู่ข้างใน
+   */
+  async function crmReloadInto() {
+    await ensureCrm(true);
+    if (crmEditing) {
+      const customer = crmCustomers.find(c => String(c.id) === String(crmEditing.id));
+      if (customer) {
+        crmEditing = customer;
+        if (crmSiteEditing) {
+          const site = crmSites(customer).find(s => String(s.id) === String(crmSiteEditing.id));
+          if (site) { crmSiteEditing = site; crmJobSite = site; }
+        }
+      }
+    }
+  }
+
+  crmWireHome();
 
   // -------------------------------------------- ระบบรับฟังเสียงของลูกค้า (VOC)
   const vocListMode = document.getElementById("vocListMode");

@@ -5047,3 +5047,31 @@ body.quo-print-body {
 .crm-contact-table select:focus { border-color: var(--volt-500); background: var(--white); outline: none; }
 
 .crm-sites { margin-top: 4px; }
+
+/* ------------------------------- CRM เฟส 2: งานบริการ / ประกัน / รอบบำรุงรักษา */
+.crm-tabs { margin-bottom: 4px; }
+.crm-jobs { margin-top: 4px; }
+
+.crm-job-card {
+  display: block;
+  width: 100%;
+  margin-bottom: 10px;
+  padding: 14px 16px;
+  background: var(--white);
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--success);
+  border-radius: 12px;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.crm-job-card:hover { border-color: var(--volt-500); background: var(--volt-50); }
+/* ผลการตรวจคือสิ่งที่คนอ่านย้อนหลังจริง ๆ -- ให้เห็นบนการ์ดเลยโดยไม่ต้องเปิดเข้าไป */
+.crm-job-findings {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--border);
+  font-size: 13px;
+  color: var(--ink-soft);
+  white-space: pre-wrap;
+}

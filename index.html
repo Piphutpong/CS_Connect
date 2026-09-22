@@ -24,7 +24,7 @@
 <title>CS Connect</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=Sarabun:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=20260922q">
+<link rel="stylesheet" href="style.css?v=20260922r">
 </head>
 <body>
 
@@ -2385,8 +2385,32 @@
     <main class="requests-content">
       <p id="crmError" class="form-error" hidden></p>
 
+      <div class="requests-modes crm-tabs">
+        <button type="button" class="requests-mode-btn active" data-crm-tab="home">สิ่งที่ต้องทำ</button>
+        <button type="button" class="requests-mode-btn" data-crm-tab="list">รายชื่อลูกค้า</button>
+      </div>
+
+      <!-- ===== หน้าแรก CRM: สี่กองที่ระบบคิดให้เองจากข้อมูลที่มีอยู่ =====
+           ครบกำหนดบำรุงรักษา / ประกันใกล้หมด / ลูกค้าที่เงียบไป / ข้อเสนอที่ควรยื่น
+           กองสุดท้ายคิดจากอุปกรณ์ที่ติดตั้งจริงเทียบกับงานที่เคยทำให้ -- เป็นส่วนที่
+           ทำให้ระบบนี้เป็น CRM ไม่ใช่แค่สมุดบันทึกลูกค้า -->
+      <div id="crmHomeMode">
+        <div class="requests-content-heading">
+          <div class="requests-content-heading-row">
+            <div>
+              <h2>สิ่งที่ต้องทำ</h2>
+              <p id="crmHomeCount" class="requests-count"></p>
+            </div>
+          </div>
+        </div>
+        <div id="crmDueList"></div>
+        <div id="crmWarrantyList"></div>
+        <div id="crmQuietList"></div>
+        <div id="crmOfferList"></div>
+      </div>
+
       <!-- ===== รายชื่อลูกค้า ===== -->
-      <div id="crmListMode">
+      <div id="crmListMode" hidden>
         <div class="requests-content-heading">
           <div class="requests-content-heading-row">
             <div>
@@ -2545,6 +2569,52 @@
         </table>
 
         <label class="field crm-field-wide"><span>หมายเหตุสถานที่</span><textarea id="crmSiteNote" rows="2"></textarea></label>
+
+        <div class="crm-section-head">
+          <h3>ประวัติงานบริการ</h3>
+          <button type="button" id="crmAddJobBtn" class="btn btn-primary">+ เพิ่มงานบริการ</button>
+        </div>
+        <p class="field-hint" id="crmJobSummary"></p>
+        <div id="crmJobs" class="crm-jobs"></div>
+      </div>
+
+      <!-- ===== งานบริการหนึ่งงาน ===== -->
+      <div id="crmJobMode" hidden>
+        <div class="quo-editor-bar">
+          <button type="button" id="crmJobBackBtn" class="btn btn-ghost">← กลับหน้าสถานที่</button>
+          <div class="quo-editor-title">
+            <h2 id="crmJobTitle">งานบริการใหม่</h2>
+            <p id="crmJobSubtitle" class="requests-count"></p>
+          </div>
+          <div class="quo-editor-actions">
+            <button type="button" id="crmJobDeleteBtn" class="btn btn-ghost" hidden>ลบงานนี้</button>
+            <button type="button" id="crmJobSaveBtn" class="btn btn-primary">บันทึก</button>
+          </div>
+        </div>
+        <p id="crmJobError" class="form-error" hidden></p>
+
+        <div class="crm-form-grid">
+          <label class="field"><span>ประเภทบริการ *</span><select id="crmJobType"></select></label>
+          <label class="field"><span>วันที่ให้บริการ</span><input type="date" id="crmJobDate"></label>
+          <label class="field"><span>ผู้ปฏิบัติงาน</span><input type="text" id="crmJobStaff" autocomplete="off"></label>
+          <label class="field"><span>มูลค่างาน (บาท)</span><input type="text" id="crmJobAmount" inputmode="decimal" placeholder="0.00"></label>
+          <label class="field"><span>สถานะ</span><select id="crmJobStatus"></select></label>
+          <label class="field">
+            <span>ครบรอบบำรุงรักษาถัดไป</span>
+            <input type="date" id="crmJobNextDate">
+          </label>
+          <label class="field crm-field-wide"><span>ผลการตรวจ / สิ่งที่พบ</span><textarea id="crmJobFindings" rows="3"></textarea></label>
+        </div>
+
+        <div class="crm-section-head"><h3>การรับประกัน</h3></div>
+        <p class="field-hint">ระบบเติมให้ตามประเภทบริการ แก้ได้ทุกช่อง -- งานจริงมีข้อตกลงเฉพาะรายที่ไม่ลงตัวเป็นเดือน</p>
+        <div class="crm-form-grid">
+          <label class="field"><span>ระยะประกัน (เดือน)</span><input type="text" id="crmJobWarrantyMonths" inputmode="numeric" placeholder="ไม่มีประกัน = เว้นว่าง"></label>
+          <label class="field"><span>เริ่มประกัน</span><input type="date" id="crmJobWarrantyStart"></label>
+          <label class="field"><span>สิ้นสุดประกัน</span><input type="date" id="crmJobWarrantyEnd"></label>
+          <label class="field crm-field-wide"><span>เงื่อนไขการรับประกัน</span><textarea id="crmJobWarrantyTerms" rows="2"></textarea></label>
+          <label class="field crm-field-wide"><span>หมายเหตุ</span><textarea id="crmJobNote" rows="2"></textarea></label>
+        </div>
       </div>
     </main>
   </div>
@@ -2718,6 +2788,6 @@
      **ต้องเปลี่ยนเลขนี้ทุกครั้งที่แก้ app.js / style.css / track.js / qr.js**
      ไม่งั้นผู้ใช้บางคนจะยังได้ไฟล์เก่าไปอีกพักใหญ่ -->
 <script src="vendor/supabase.js?v=2.116.0"></script>
-<script src="app.js?v=20260922q"></script>
+<script src="app.js?v=20260922r"></script>
 </body>
 </html>
