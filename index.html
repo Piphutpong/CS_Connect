@@ -24,7 +24,7 @@
 <title>CS Connect</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=Sarabun:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=20260922u">
+<link rel="stylesheet" href="style.css?v=20260922v">
 </head>
 <body>
 
@@ -348,6 +348,14 @@
         </span>
         <span class="service-title">ระบบรับฟังเสียงของลูกค้า (PEA-VOC)</span>
         <span class="service-desc">รับเรื่องร้องเรียน ข้อเสนอแนะ และคำชมจากลูกค้า พร้อมติดตามการแก้ไข</span>
+      </button>
+
+      <button class="service-card" data-service="assignment">
+        <span class="service-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none"><path d="M8 4h8a2 2 0 0 1 2 2v14l-6-3-6 3V6a2 2 0 0 1 2-2Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M9.5 9h5M9.5 12.5h3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+        </span>
+        <span class="service-title">งานมอบหมายอื่น ๆ</span>
+        <span class="service-desc">หนังสือราชการ คำร้องทั่วไป และงานที่ ผจก. แทงลงมา พร้อมจ่ายงานและติดตามสถานะ</span>
       </button>
 
       <!-- ลิงก์ออกไปยัง Google Sheet ของแผนก ไม่มีข้อมูลของตัวเองในระบบนี้เลย --
@@ -2347,6 +2355,158 @@
   </div>
 </section>
 
+<!-- ===== งานมอบหมายอื่น ๆ =====
+     เรื่องที่ ผจก. แทงลงมาให้แผนก แล้วหัวหน้าจ่ายต่อให้พนักงาน
+     เป็นตารางของตัวเอง ไม่ใช่ประเภทใหม่ในตารางคำร้อง เพราะไม่มีลูกค้าและไม่ควรมี
+     เลขที่ให้เปิดดูจากหน้าติดตามสถานะสาธารณะ
+     "จ่ายงาน" ตรวจสิทธิ์หัวหน้าที่เซิร์ฟเวอร์ (assign_assignment) -- ปุ่มที่ซ่อน
+     ไว้เป็นแค่การจัดหน้าจอ ไม่ใช่กำแพง -->
+<section id="assignmentView" class="app-view" hidden>
+  <header class="topbar">
+    <div class="topbar-brand">
+      <button id="assignBackBtn" class="btn btn-ghost btn-icon" aria-label="ย้อนกลับ">
+        <svg viewBox="0 0 24 24" fill="none"><path d="M15 18l-6-6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+      <span class="topbar-title">งานมอบหมายอื่น ๆ</span>
+    </div>
+    <div class="topbar-user">
+      <span id="userGreeting10" class="user-greeting"></span>
+      <button id="logoutBtn10" class="btn btn-ghost">ออกจากระบบ</button>
+    </div>
+  </header>
+
+  <div class="requests-layout">
+    <nav class="requests-sidebar">
+      <button type="button" class="requests-nav-item active" data-assign-tab="all">
+        <svg viewBox="0 0 24 24" fill="none"><path d="M4 6h16M4 12h16M4 18h10" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+        งานทั้งหมด
+      </button>
+      <button type="button" class="requests-nav-item" data-assign-tab="mine">
+        <svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="8" r="3.4" stroke="currentColor" stroke-width="1.6"/><path d="M5 19c0-3.2 3-5.2 7-5.2s7 2 7 5.2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+        งานของฉัน
+        <span class="nav-badge" data-assign-badge="mine" hidden>0</span>
+      </button>
+      <button type="button" class="requests-nav-item" data-assign-tab="unassigned">
+        <svg viewBox="0 0 24 24" fill="none"><path d="M12 3v9m0 0 3.5-3.5M12 12 8.5 8.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 15v4h16v-4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+        รอจ่ายงาน
+        <span class="nav-badge" data-assign-badge="unassigned" hidden>0</span>
+      </button>
+      <button type="button" class="requests-nav-item" data-assign-tab="people" hidden>
+        <svg viewBox="0 0 24 24" fill="none"><circle cx="9" cy="8" r="3.2" stroke="currentColor" stroke-width="1.6"/><path d="M3.5 19c0-3 2.5-4.8 5.5-4.8s5.5 1.8 5.5 4.8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><path d="M16 5.5a3 3 0 0 1 0 5.6M17.5 14.4c2 .6 3.5 2.2 3.5 4.6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+        งานในมือแต่ละคน
+      </button>
+    </nav>
+
+    <main class="requests-content">
+      <p id="assignError" class="form-error" hidden></p>
+
+      <!-- ===== รายการงาน ===== -->
+      <div id="assignListMode">
+        <div class="requests-content-heading">
+          <div class="requests-content-heading-row">
+            <div>
+              <h2 id="assignListTitle">งานทั้งหมด</h2>
+              <p id="assignCount" class="requests-count"></p>
+            </div>
+            <div class="requests-heading-actions">
+              <button type="button" id="assignAddBtn" class="btn btn-primary">+ รับเรื่องใหม่</button>
+            </div>
+          </div>
+          <input type="search" id="assignSearch" class="requests-search"
+                 placeholder="ค้นหาด้วยเรื่อง, เลขที่หนังสือ, หน่วยงาน หรือผู้รับผิดชอบ...">
+          <div class="requests-modes" id="assignStatusChips"></div>
+        </div>
+        <div id="assignList"></div>
+      </div>
+
+      <!-- ===== งานในมือแต่ละคน (หัวหน้า) ===== -->
+      <div id="assignPeopleMode" hidden></div>
+
+      <!-- ===== ฟอร์มงานหนึ่งเรื่อง ===== -->
+      <div id="assignFormMode" hidden>
+        <div class="quo-editor-bar">
+          <button type="button" id="assignFormBackBtn" class="btn btn-ghost">← กลับรายการ</button>
+          <div class="quo-editor-title">
+            <h2 id="assignFormTitle">รับเรื่องใหม่</h2>
+            <p id="assignFormSubtitle" class="requests-count"></p>
+          </div>
+          <div class="quo-editor-actions">
+            <button type="button" id="assignDeleteBtn" class="btn btn-ghost" hidden>ลบ</button>
+            <button type="button" id="assignSaveBtn" class="btn btn-primary">บันทึก</button>
+          </div>
+        </div>
+        <p id="assignFormError" class="form-error" hidden></p>
+
+        <div class="assign-layout">
+          <div class="assign-main">
+            <div class="crm-form-grid">
+              <label class="field crm-field-wide"><span>เรื่อง *</span>
+                <input type="text" id="assignSubject" autocomplete="off" placeholder="เรื่องตามหนังสือหรือที่ ผจก. สั่งการ">
+              </label>
+              <label class="field"><span>ประเภทงาน</span>
+                <select id="assignDocType">
+                  <option value="หนังสือราชการ">หนังสือราชการ</option>
+                  <option value="คำร้องทั่วไป">คำร้องทั่วไป</option>
+                  <option value="อื่น ๆ">อื่น ๆ</option>
+                </select>
+              </label>
+              <label class="field"><span>เลขที่หนังสือ</span><input type="text" id="assignDocNo" autocomplete="off"></label>
+              <label class="field"><span>ลงวันที่</span><input type="date" id="assignDocDate"></label>
+              <label class="field"><span>วันที่รับเรื่อง</span><input type="date" id="assignReceivedDate"></label>
+              <label class="field"><span>จากหน่วยงาน</span><input type="text" id="assignFromUnit" autocomplete="off" placeholder="เช่น กฟจ. / ผบส. / ลูกค้า"></label>
+              <label class="field"><span>ผจก. ผู้แทงเรื่อง</span><input type="text" id="assignAssignerName" autocomplete="off"></label>
+              <label class="field"><span>ชั้นความเร็ว</span>
+                <select id="assignPriority">
+                  <option value="ปกติ">ปกติ</option>
+                  <option value="ด่วน">ด่วน</option>
+                  <option value="ด่วนมาก">ด่วนมาก</option>
+                  <option value="ด่วนที่สุด">ด่วนที่สุด</option>
+                </select>
+              </label>
+              <label class="field"><span>กำหนดแล้วเสร็จ</span><input type="date" id="assignDueDate"></label>
+              <label class="field"><span>สถานะ</span><select id="assignStatus"></select></label>
+              <label class="field"><span>วันที่ทำเสร็จ</span><input type="date" id="assignCompletedDate"></label>
+              <label class="field crm-field-wide"><span>ข้อสั่งการของ ผจก.</span>
+                <textarea id="assignAssignerNote" rows="3" placeholder="ข้อความที่ ผจก. เขียนแทงลงมา"></textarea>
+              </label>
+              <label class="field crm-field-wide"><span>ผลการดำเนินงาน</span>
+                <textarea id="assignResult" rows="3"></textarea>
+              </label>
+            </div>
+          </div>
+
+          <!-- แผงขวา: ผู้รับผิดชอบ / ประวัติสถานะ / บันทึกการทำงาน -->
+          <aside class="assign-side">
+            <div class="assign-panel">
+              <h3>ผู้รับผิดชอบ</h3>
+              <p id="assignAssigneeText" class="assign-assignee"></p>
+              <!-- จ่ายงานเป็นคำสั่งแยกที่ตรวจสิทธิ์หัวหน้าที่เซิร์ฟเวอร์ --
+                   ช่องนี้จึงซ่อนจากคนอื่น และบันทึกทั่วไปไม่แตะค่านี้เลย -->
+              <div id="assignAssignBox" hidden>
+                <label class="field"><span>จ่ายงานให้</span><select id="assignAssignee"></select></label>
+                <button type="button" id="assignAssignBtn" class="btn btn-primary">จ่ายงาน</button>
+              </div>
+              <p id="assignAssignError" class="form-error" hidden></p>
+            </div>
+
+            <div class="assign-panel">
+              <h3>ประวัติสถานะ</h3>
+              <div id="assignHistory"></div>
+            </div>
+
+            <div class="assign-panel">
+              <h3>บันทึกการทำงาน</h3>
+              <div id="assignComments"></div>
+              <textarea id="assignCommentText" rows="2" placeholder="บันทึกความคืบหน้า..."></textarea>
+              <button type="button" id="assignCommentBtn" class="btn btn-ghost">เพิ่มบันทึก</button>
+            </div>
+          </aside>
+        </div>
+      </div>
+    </main>
+  </div>
+</section>
+
 <!-- ===== ลูกค้า (CRM) งานธุรกิจเสริม =====
      สามชั้น: ลูกค้า (BP) -> สถานที่ใช้ไฟฟ้า (CA) -> ผู้ติดต่อ
      ลูกค้าหนึ่งรายมีได้หลาย CA จึงแยกชั้นกัน ไม่ยุบเป็นตารางเดียว
@@ -2968,6 +3128,6 @@
      **ต้องเปลี่ยนเลขนี้ทุกครั้งที่แก้ app.js / style.css / track.js / qr.js**
      ไม่งั้นผู้ใช้บางคนจะยังได้ไฟล์เก่าไปอีกพักใหญ่ -->
 <script src="vendor/supabase.js?v=2.116.0"></script>
-<script src="app.js?v=20260922u"></script>
+<script src="app.js?v=20260922v"></script>
 </body>
 </html>

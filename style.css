@@ -5170,3 +5170,81 @@ body.quo-print-body {
 
 .crm-report-table { margin-bottom: 8px; }
 .crm-report-table td:first-child { overflow-wrap: break-word; }
+
+/* ======================================================= งานมอบหมายอื่น ๆ ===
+   เรื่องที่ ผจก. แทงลงมา แล้วหัวหน้าจ่ายต่อ -- ใช้โครงหน้าเดียวกับหน้างานอื่น
+   (.requests-layout / .requests-sidebar) ส่วนที่เพิ่มคือการ์ดงานกับแผงขวา */
+.assign-card {
+  display: block;
+  width: 100%;
+  margin-bottom: 10px;
+  padding: 14px 16px;
+  background: var(--white);
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--volt-300);
+  border-radius: 12px;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.assign-card:hover { border-color: var(--volt-500); background: var(--volt-50); }
+/* เลยกำหนดแล้วต้องเห็นจากการไล่สายตา ไม่ต้องอ่านวันที่ทุกใบ */
+.assign-card.is-overdue { border-left-color: var(--danger); }
+.assign-card-note {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--border);
+  font-size: 13px;
+  color: var(--ink-soft);
+  white-space: pre-wrap;
+}
+
+/* ฟอร์มสองคอลัมน์: เนื้อเรื่องซ้าย / ผู้รับผิดชอบ-ประวัติ-บันทึก ขวา
+   แผงขวาไม่ sticky เพราะสูงเท่าฟอร์มอยู่แล้ว (ดูเหตุผลเดียวกันที่ .form-side
+   ของฟอร์มคำร้อง -- element ที่สูงเท่าคอนเทนเนอร์ไม่มีระยะให้ stick) */
+.assign-layout {
+  display: flex;
+  align-items: flex-start;
+  gap: 24px;
+  margin-top: 16px;
+}
+.assign-main { flex: 1; min-width: 0; }
+.assign-side {
+  flex: none;
+  width: 340px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+@media (max-width: 1100px) {
+  .assign-layout { flex-direction: column; }
+  .assign-side { width: 100%; }
+}
+
+.assign-panel {
+  padding: 14px 16px;
+  background: var(--white);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+.assign-panel h3 { margin: 0 0 10px; font-size: 15px; }
+.assign-panel textarea {
+  width: 100%;
+  box-sizing: border-box;
+  margin-top: 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font: inherit;
+  resize: vertical;
+}
+.assign-panel .btn { margin-top: 8px; }
+.assign-assignee { margin: 0 0 8px; font-weight: 600; color: var(--ink); }
+
+.assign-comment {
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 14px;
+  white-space: pre-wrap;
+}
+.assign-comment:last-child { border-bottom: none; }

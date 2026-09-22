@@ -408,6 +408,21 @@
     async deleteCrmOpportunity() {
       throw new Error("โหมดออฟไลน์ไม่รองรับโมดูลงานใหม่");
     },
+    async loadAssignments() {
+      return { assignments: [] };
+    },
+    async saveAssignment() {
+      throw new Error("โหมดออฟไลน์ไม่รองรับโมดูลงานใหม่");
+    },
+    async assignAssignment() {
+      throw new Error("โหมดออฟไลน์ไม่รองรับโมดูลงานใหม่");
+    },
+    async commentAssignment() {
+      throw new Error("โหมดออฟไลน์ไม่รองรับโมดูลงานใหม่");
+    },
+    async deleteAssignment() {
+      throw new Error("โหมดออฟไลน์ไม่รองรับโมดูลงานใหม่");
+    },
     async saveCrmActivity() {
       throw new Error("โหมดออฟไลน์ไม่รองรับโมดูลงานใหม่");
     },
@@ -949,6 +964,31 @@
         return callAsUser(() => rpc("delete_crm_opportunity", { p_id: id }));
       },
 
+      // งานมอบหมายอื่น ๆ -- จ่ายงานเป็นคำสั่งแยกที่ตรวจสิทธิ์หัวหน้าที่เซิร์ฟเวอร์
+      // ส่วน saveAssignment เขียนช่องผู้รับผิดชอบไม่ได้เลย
+      async loadAssignments() {
+        return callAsUser(() => rpc("load_assignments", {}));
+      },
+
+      async saveAssignment(item) {
+        const data = await callAsUser(() => rpc("save_assignment", { p_item: item }));
+        return data.assignment;
+      },
+
+      async assignAssignment(id, email) {
+        const data = await callAsUser(() => rpc("assign_assignment", { p_id: id, p_email: email }));
+        return data.assignment;
+      },
+
+      async commentAssignment(id, text) {
+        const data = await callAsUser(() => rpc("comment_assignment", { p_id: id, p_text: text }));
+        return data.assignment;
+      },
+
+      async deleteAssignment(id) {
+        return callAsUser(() => rpc("delete_assignment", { p_id: id }));
+      },
+
       async saveCrmActivity(act) {
         const data = await callAsUser(() => rpc("save_crm_activity", { p_act: act }));
         return data.activity;
@@ -1250,7 +1290,8 @@
     quotation: document.getElementById("quotationView"),
     voc: document.getElementById("vocView"),
     mywork: document.getElementById("myWorkView"),
-    crm: document.getElementById("crmView")
+    crm: document.getElementById("crmView"),
+    assignment: document.getElementById("assignmentView")
   };
 
   function showView(name) {
@@ -3739,6 +3780,11 @@
       // รอสำรวจบนการ์ดคือสิ่งที่หน้าคิวเดิมมีแล้วหน้านี้ไม่มี จึงยกมาไว้ที่นี่แทน
       // (หน้ารายละเอียดของโมดูลงาน -- แท็บแผนผัง/ภาพหน้างาน/ประมาณการ -- ยังอยู่
       // เหมือนเดิม เปิดได้จากการกดการ์ดคำร้องขยายเขตฯ ใบใดก็ได้)
+      if (key === "assignment") {
+        openAssignmentView();
+        return;
+      }
+
       if (key === "mywork") {
         saveNavState({ card: "mywork" });
         openMyWorkView();
@@ -15621,6 +15667,7 @@ ${sheetHtml}
   let myWorkQuotations = [];
   let myWorkVocCases = [];
   let myWorkCrmCustomers = [];
+  let myWorkAssignments = [];
   let myWorkTeamPerson = "";     // อีเมลของคนที่หัวหน้ากดดูอยู่
 
   const myWorkView = document.getElementById("myWorkView");
@@ -15705,6 +15752,13 @@ ${sheetHtml}
     return myWorkCrmCustomers.filter(c => sameEmail(c.ownerEmail));
   }
 
+  /** งานมอบหมายที่หัวหน้าจ่ายให้ฉันและยังไม่ปิด */
+  function myAssignments() {
+    return myWorkAssignments.filter(a =>
+      sameEmail(a.assigneeEmail)
+      && a.status !== "เสร็จสิ้น" && a.status !== "ยกเลิก");
+  }
+
   /** งานที่ต้องสะกิด -- สถานะที่รอเราอยู่ หรือค้างไม่คืบหน้าเกินจำนวนวันที่ตั้งไว้ */
   function myAttentionItems() {
     const out = [];
@@ -15739,6 +15793,22 @@ ${sheetHtml}
         reason: late === 0 ? "ครบกำหนดวันนี้" : "เลยกำหนด " + late + " วัน",
         days: late,
         urgent: true
+      });
+    });
+
+    myAssignments().forEach(a => {
+      const days = a.dueDate ? crmDaysUntil(a.dueDate) : null;
+      if (days === null || days > 3) return;
+      out.push({
+        kind: "assignment",
+        record: a,
+        title: a.subject || "(ไม่มีเรื่อง)",
+        meta: "งานมอบหมาย · " + (a.docType || "") + (a.docNo ? " · " + a.docNo : ""),
+        status: a.status || "",
+        reason: days < 0 ? "เลยกำหนดมา " + Math.abs(days) + " วัน"
+          : days === 0 ? "ครบกำหนดวันนี้" : "เหลืออีก " + days + " วัน",
+        days: -days,
+        urgent: days <= 0
       });
     });
 
@@ -15787,7 +15857,8 @@ ${sheetHtml}
     await Promise.allSettled([
       backend.loadWorkItems("quotation").then(list => { myWorkQuotations = list || []; }),
       backend.loadWorkItems("voc").then(list => { myWorkVocCases = list || []; }),
-      backend.loadCrm().then(data => { myWorkCrmCustomers = (data && data.customers) || []; })
+      backend.loadCrm().then(data => { myWorkCrmCustomers = (data && data.customers) || []; }),
+      backend.loadAssignments().then(data => { myWorkAssignments = (data && data.assignments) || []; })
     ]);
     renderMyWork();
   }
@@ -15818,7 +15889,8 @@ ${sheetHtml}
 
     const assigned = myAssignedRequests();
     const badge = document.querySelector('[data-mywork-badge="jobs"]');
-    const total = assigned.length + myVocCases().length + myCrmCustomers().length + myQuotations().length;
+    const total = assigned.length + myVocCases().length + myCrmCustomers().length
+      + myQuotations().length + myAssignments().length;
     badge.textContent = String(total);
     badge.hidden = total === 0;
 
@@ -15913,6 +15985,9 @@ ${sheetHtml}
     });
     // หน้าลูกค้า (CRM) ยังทำไม่เสร็จ -- การ์ดจะขึ้นเองเมื่อหน้านั้นมีจริง
     // ไม่โชว์ปุ่มที่กดแล้วไม่มีอะไรเกิดขึ้น
+    if (myAssignments().length) tileDefs.push({
+      label: "งานมอบหมาย", count: myAssignments().length, go: () => openAssignmentView()
+    });
     if (views.crm && myCrmCustomers().length) tileDefs.push({
       label: "ลูกค้าที่ดูแล", count: myCrmCustomers().length, go: () => openCrmView()
     });
@@ -15969,6 +16044,7 @@ ${sheetHtml}
       openRequestForm(item.record.type, item.record, { returnTo: "mywork" });
       return;
     }
+    if (item.kind === "assignment") { openAssignmentView(); return; }
     if (item.kind === "quotation") { openQuotationView(); return; }
     if (item.kind === "voc") { openVocView(); return; }
   }
@@ -16231,6 +16307,7 @@ ${sheetHtml}
     myWorkQuotations = [];
     myWorkVocCases = [];
     myWorkCrmCustomers = [];
+    myWorkAssignments = [];
     myWorkTeamPerson = "";
     myWorkPane = "overview";
     document.getElementById("myWorkAttention").innerHTML = "";
@@ -16257,6 +16334,628 @@ ${sheetHtml}
     if (!target) return "";
     const found = (staffRoster || []).find(p => String(p.name || "").trim() === target);
     return found ? found.email || "" : "";
+  }
+
+  // ==================================================== งานมอบหมายอื่น ๆ
+  /**
+   * เรื่องที่ ผจก. แทงลงมาให้แผนก แล้วหัวหน้าจ่ายต่อให้พนักงาน
+   *
+   * ลำดับงานจริง: ผจก. แทงเรื่อง -> หัวหน้าบันทึกเข้าระบบและจ่ายงาน ->
+   * พนักงานทำและอัปเดตสถานะ -> ปิดงาน
+   *
+   * เป็นตารางของตัวเอง ไม่ใช่ประเภทใหม่ในตารางคำร้อง เพราะไม่มีลูกค้าและไม่ควรมี
+   * เลขที่ให้เปิดดูจากหน้าติดตามสถานะสาธารณะได้
+   *
+   * "จ่ายงาน" เป็นคำสั่งแยก (assign_assignment) ที่ตรวจสิทธิ์หัวหน้าที่เซิร์ฟเวอร์
+   * และ save_assignment ไม่แตะช่องผู้รับผิดชอบเลย -- การซ่อนกล่องจ่ายงานจากคนที่
+   * ไม่ใช่หัวหน้าเป็นแค่การจัดหน้าจอ ด่านจริงอยู่ฝั่งเซิร์ฟเวอร์
+   */
+  const ASSIGN_STATUSES = ["รอจ่ายงาน", "กำลังดำเนินการ", "รอตรวจ", "เสร็จสิ้น", "ยกเลิก"];
+  const ASSIGN_CLOSED = new Set(["เสร็จสิ้น", "ยกเลิก"]);
+
+  const ASSIGN_STATUS_TONE = {
+    "รอจ่ายงาน": "warning",
+    "กำลังดำเนินการ": "info",
+    "รอตรวจ": "info",
+    "เสร็จสิ้น": "success",
+    "ยกเลิก": "danger"
+  };
+
+  const ASSIGN_PRIORITY_TONE = {
+    "ด่วน": "warning", "ด่วนมาก": "danger", "ด่วนที่สุด": "danger"
+  };
+
+  let assignments = [];
+  let assignLoaded = false;
+  let assignTab = "all";
+  let assignQuery = "";
+  let assignStatusFilter = "";
+  let assignEditing = null;
+
+  const assignmentView = document.getElementById("assignmentView");
+  const assignListMode = document.getElementById("assignListMode");
+  const assignFormMode = document.getElementById("assignFormMode");
+  const assignPeopleMode = document.getElementById("assignPeopleMode");
+  const assignError = document.getElementById("assignError");
+  const assignFormError = document.getElementById("assignFormError");
+  const assignAssignError = document.getElementById("assignAssignError");
+  const assignSearch = document.getElementById("assignSearch");
+  const assignListEl = document.getElementById("assignList");
+  const assignNavItems = document.querySelectorAll("[data-assign-tab]");
+
+  function assignField(id) {
+    return document.getElementById(id);
+  }
+
+  function assignIsSupervisor() {
+    return Boolean(getSession()?.isSupervisor || getSession()?.isAdmin);
+  }
+
+  async function ensureAssignments(force) {
+    if (assignLoaded && !force) return;
+    const data = await backend.loadAssignments();
+    assignments = (data && data.assignments) || [];
+    assignLoaded = true;
+  }
+
+  async function openAssignmentView() {
+    showView("assignment");
+    hideError(assignError);
+    assignTab = "all";
+    assignQuery = "";
+    assignStatusFilter = "";
+    assignSearch.value = "";
+    assignListMode.hidden = false;
+    assignFormMode.hidden = true;
+    assignPeopleMode.hidden = true;
+    assignListEl.innerHTML = '<div class="request-empty">กำลังโหลด...</div>';
+    saveNavState({ card: "assignment" });
+    window.scrollTo(0, 0);
+
+    // แท็บ "งานในมือแต่ละคน" เป็นของหัวหน้า -- ซ่อนจากคนอื่นเพื่อความเรียบร้อย
+    // ของหน้าจอ ไม่ใช่กำแพง (ข้อมูลงานถูกส่งมาทั้งชุดอยู่แล้ว) ด่านจริงคือการ
+    // จ่ายงานซึ่งตรวจสิทธิ์ที่เซิร์ฟเวอร์
+    const supervisor = assignIsSupervisor();
+    assignNavItems.forEach(item => {
+      if (item.dataset.assignTab === "people") item.hidden = !supervisor;
+    });
+
+    try {
+      await ensureAssignments(true);
+    } catch (err) {
+      assignments = [];
+      showError(assignError, moduleErrorText(err));
+    }
+    if (!(staffRoster || []).length) {
+      refreshStaffRoster().catch(() => { /* ไม่เป็นไร */ });
+    }
+    renderAssignList();
+  }
+
+  // ------------------------------------------------------------ รายการงาน
+  function assignVisible() {
+    const me = String(getSession()?.email || "").toLowerCase();
+    if (assignTab === "mine") {
+      return assignments.filter(a =>
+        String(a.assigneeEmail || "").toLowerCase() === me && !ASSIGN_CLOSED.has(a.status));
+    }
+    if (assignTab === "unassigned") {
+      return assignments.filter(a => !a.assigneeEmail && !ASSIGN_CLOSED.has(a.status));
+    }
+    return assignments;
+  }
+
+  function assignMatches(item, query) {
+    if (!query) return true;
+    return [item.subject, item.docNo, item.fromUnit, item.assignerName,
+            item.assigneeName, item.docType, item.assignerNote, item.result]
+      .some(v => String(v || "").toLowerCase().includes(query));
+  }
+
+  function assignDaysLeft(item) {
+    if (!item.dueDate || ASSIGN_CLOSED.has(item.status)) return null;
+    return crmDaysUntil(item.dueDate);
+  }
+
+  function renderAssignList() {
+    assignNavItems.forEach(item =>
+      item.classList.toggle("active", item.dataset.assignTab === assignTab));
+
+    // ป้ายนับบนแถบซ้าย -- งานของฉันกับงานที่ยังไม่มีเจ้าของคือสองอย่างที่คนเปิด
+    // หน้านี้มาดู ไม่ใช่ยอดรวมทั้งหมด
+    const me = String(getSession()?.email || "").toLowerCase();
+    const mineCount = assignments.filter(a =>
+      String(a.assigneeEmail || "").toLowerCase() === me && !ASSIGN_CLOSED.has(a.status)).length;
+    const unassignedCount = assignments.filter(a =>
+      !a.assigneeEmail && !ASSIGN_CLOSED.has(a.status)).length;
+    const setBadge = (key, count) => {
+      const badge = document.querySelector('[data-assign-badge="' + key + '"]');
+      if (!badge) return;
+      badge.textContent = String(count);
+      badge.hidden = count === 0;
+    };
+    setBadge("mine", mineCount);
+    setBadge("unassigned", unassignedCount);
+
+    if (assignTab === "people") {
+      assignListMode.hidden = true;
+      assignPeopleMode.hidden = false;
+      renderAssignPeople();
+      return;
+    }
+    assignPeopleMode.hidden = true;
+    assignListMode.hidden = false;
+
+    const titles = { all: "งานทั้งหมด", mine: "งานของฉัน", unassigned: "รอจ่ายงาน" };
+    document.getElementById("assignListTitle").textContent = titles[assignTab] || "งานทั้งหมด";
+
+    const query = assignQuery.trim().toLowerCase();
+    const scope = assignVisible();
+    const rows = scope
+      .filter(a => !assignStatusFilter || a.status === assignStatusFilter)
+      .filter(a => assignMatches(a, query));
+
+    document.getElementById("assignCount").textContent =
+      "ทั้งหมด " + scope.length + " เรื่อง"
+      + (rows.length !== scope.length ? " · แสดง " + rows.length + " เรื่อง" : "");
+
+    // ชิปกรองสถานะ -- นับจากขอบเขตของแท็บที่เปิดอยู่ ไม่ใช่จากทั้งระบบ
+    // ไม่งั้นตัวเลขบนชิปจะไม่ตรงกับจำนวนที่กดแล้วเห็น
+    const chips = document.getElementById("assignStatusChips");
+    chips.innerHTML = "";
+    [{ value: "", label: "ทั้งหมด" }]
+      .concat(ASSIGN_STATUSES.map(st => ({ value: st, label: st })))
+      .forEach(def => {
+        const count = def.value ? scope.filter(a => a.status === def.value).length : scope.length;
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "requests-mode-btn";
+        if (assignStatusFilter === def.value) btn.classList.add("active");
+        btn.textContent = def.label + " (" + count + ")";
+        btn.addEventListener("click", () => {
+          assignStatusFilter = def.value;
+          renderAssignList();
+        });
+        chips.appendChild(btn);
+      });
+
+    assignListEl.innerHTML = "";
+    if (!rows.length) {
+      const empty = document.createElement("div");
+      empty.className = "request-empty";
+      empty.textContent = assignments.length
+        ? "ไม่พบงานที่ค้นหา"
+        : "ยังไม่มีงานมอบหมาย -- กด “+ รับเรื่องใหม่”";
+      assignListEl.appendChild(empty);
+      return;
+    }
+
+    rows.forEach(item => assignListEl.appendChild(buildAssignCard(item)));
+  }
+
+  function buildAssignCard(item) {
+    const card = document.createElement("button");
+    card.type = "button";
+    card.className = "assign-card";
+    const days = assignDaysLeft(item);
+    // เลยกำหนดแล้วต้องเห็นจากการไล่สายตา ไม่ต้องอ่านวันที่ทุกใบ
+    if (days !== null && days < 0) card.classList.add("is-overdue");
+
+    const head = document.createElement("div");
+    head.className = "crm-card-head";
+
+    const subject = document.createElement("span");
+    subject.className = "crm-card-name";
+    subject.textContent = item.subject || "(ไม่มีเรื่อง)";
+    head.appendChild(subject);
+
+    const status = document.createElement("span");
+    status.className = "request-badge";
+    const tone = ASSIGN_STATUS_TONE[item.status];
+    if (tone) status.classList.add("tone-" + tone);
+    status.textContent = item.status || "-";
+    head.appendChild(status);
+
+    if (item.priority && item.priority !== "ปกติ") {
+      const pri = document.createElement("span");
+      pri.className = "request-badge";
+      const ptone = ASSIGN_PRIORITY_TONE[item.priority];
+      if (ptone) pri.classList.add("tone-" + ptone);
+      pri.textContent = item.priority;
+      head.appendChild(pri);
+    }
+
+    if (item.docType) {
+      const type = document.createElement("span");
+      type.className = "request-badge request-badge-purpose";
+      type.textContent = item.docType;
+      head.appendChild(type);
+    }
+
+    const meta = document.createElement("div");
+    meta.className = "crm-card-meta";
+    const bits = [];
+    if (item.docNo) bits.push(item.docNo);
+    if (item.fromUnit) bits.push("จาก " + item.fromUnit);
+    if (item.receivedDate) bits.push("รับเรื่อง " + formatThaiDate(item.receivedDate));
+    bits.push(item.assigneeName ? "ผู้รับผิดชอบ: " + item.assigneeName : "ยังไม่ได้จ่ายงาน");
+    if (item.dueDate) {
+      bits.push(days === null ? "กำหนด " + formatThaiDate(item.dueDate)
+        : days < 0 ? "เลยกำหนดมา " + Math.abs(days) + " วัน"
+        : days === 0 ? "ครบกำหนดวันนี้" : "เหลืออีก " + days + " วัน");
+    }
+    meta.textContent = bits.join(" · ");
+
+    card.append(head, meta);
+    if (item.assignerNote) {
+      const note = document.createElement("div");
+      note.className = "assign-card-note";
+      note.textContent = "ข้อสั่งการ: " + item.assignerNote;
+      card.appendChild(note);
+    }
+
+    card.addEventListener("click", () => openAssignForm(item));
+    return card;
+  }
+
+  /** งานในมือแต่ละคน -- หัวหน้าใช้ดูว่าควรจ่ายงานต่อให้ใคร */
+  function renderAssignPeople() {
+    const host = assignPeopleMode;
+    host.innerHTML = "";
+
+    const open = assignments.filter(a => !ASSIGN_CLOSED.has(a.status));
+    const people = new Map();
+    open.forEach(item => {
+      const key = String(item.assigneeEmail || "").toLowerCase();
+      if (!people.has(key)) {
+        people.set(key, { email: key, name: item.assigneeName || "", total: 0, overdue: 0, urgent: 0 });
+      }
+      const row = people.get(key);
+      if (!row.name && item.assigneeName) row.name = item.assigneeName;
+      row.total += 1;
+      const days = assignDaysLeft(item);
+      if (days !== null && days < 0) row.overdue += 1;
+      if (item.priority && item.priority !== "ปกติ") row.urgent += 1;
+    });
+
+    const rows = Array.from(people.values()).sort((a, b) => {
+      if (!a.email) return 1;         // ยังไม่ได้จ่ายงาน -> ล่างสุดเสมอ
+      if (!b.email) return -1;
+      return b.total - a.total;
+    });
+
+    const heading = document.createElement("div");
+    heading.className = "requests-content-heading";
+    const h2 = document.createElement("h2");
+    h2.textContent = "งานในมือแต่ละคน";
+    const sub = document.createElement("p");
+    sub.className = "requests-count";
+    sub.textContent = "งานที่ยังไม่ปิด " + open.length + " เรื่อง";
+    heading.append(h2, sub);
+    host.appendChild(heading);
+
+    if (!rows.length) {
+      const empty = document.createElement("div");
+      empty.className = "request-empty";
+      empty.textContent = "ยังไม่มีงานที่ต้องจ่าย";
+      host.appendChild(empty);
+      return;
+    }
+
+    const table = document.createElement("table");
+    table.className = "price-table mywork-team-table";
+    table.innerHTML = `
+      <thead><tr>
+        <th>เจ้าหน้าที่</th>
+        <th class="mywork-num">งานในมือ</th>
+        <th class="mywork-num">ด่วน</th>
+        <th class="mywork-num">เลยกำหนด</th>
+      </tr></thead>`;
+    const tbody = document.createElement("tbody");
+    const max = rows.reduce((m, r) => (r.email ? Math.max(m, r.total) : m), 0);
+
+    rows.forEach(person => {
+      const tr = document.createElement("tr");
+      tr.className = "mywork-team-row";
+      if (!person.email) tr.classList.add("is-unassigned");
+
+      const tdName = document.createElement("td");
+      tdName.textContent = person.email ? (person.name || person.email) : "ยังไม่ได้จ่ายงาน";
+      if (person.email && max > 0) {
+        const bar = document.createElement("div");
+        bar.className = "mywork-load-bar";
+        const fill = document.createElement("span");
+        fill.style.width = Math.round((person.total / max) * 100) + "%";
+        bar.appendChild(fill);
+        tdName.appendChild(bar);
+      }
+
+      const num = (value, cls) => {
+        const td = document.createElement("td");
+        td.className = "mywork-num" + (cls ? " " + cls : "");
+        td.textContent = value > 0 ? String(value) : "-";
+        return td;
+      };
+
+      tr.append(tdName, num(person.total, "mywork-total"), num(person.urgent),
+        num(person.overdue, person.overdue > 0 ? "mywork-stale" : ""));
+      tbody.appendChild(tr);
+    });
+
+    table.appendChild(tbody);
+    host.appendChild(table);
+  }
+
+  // ------------------------------------------------------------ ฟอร์ม
+  function openAssignForm(item) {
+    assignEditing = item || null;
+    hideError(assignFormError);
+    hideError(assignAssignError);
+
+    const statusSelect = assignField("assignStatus");
+    statusSelect.innerHTML = "";
+    ASSIGN_STATUSES.forEach(st => {
+      const option = document.createElement("option");
+      option.value = st;
+      option.textContent = st;
+      statusSelect.appendChild(option);
+    });
+    statusSelect.value = (item && item.status) || "รอจ่ายงาน";
+
+    assignField("assignSubject").value = (item && item.subject) || "";
+    assignField("assignDocType").value = (item && item.docType) || "หนังสือราชการ";
+    assignField("assignDocNo").value = (item && item.docNo) || "";
+    assignField("assignDocDate").value = (item && item.docDate) || "";
+    assignField("assignReceivedDate").value = (item && item.receivedDate) || todayDateString();
+    assignField("assignFromUnit").value = (item && item.fromUnit) || "";
+    assignField("assignAssignerName").value = (item && item.assignerName) || "";
+    assignField("assignAssignerNote").value = (item && item.assignerNote) || "";
+    assignField("assignPriority").value = (item && item.priority) || "ปกติ";
+    assignField("assignDueDate").value = (item && item.dueDate) || "";
+    assignField("assignResult").value = (item && item.result) || "";
+    assignField("assignCompletedDate").value = (item && item.completedDate) || "";
+
+    document.getElementById("assignFormTitle").textContent = item ? "แก้ไขงาน" : "รับเรื่องใหม่";
+    document.getElementById("assignFormSubtitle").textContent = item
+      ? "แก้ไขล่าสุด: " + (item.updatedByName || item.createdByName || "-")
+      : "ยังไม่ได้บันทึก";
+    document.getElementById("assignDeleteBtn").hidden = !item || !assignIsSupervisor();
+
+    renderAssignAssignee();
+    renderAssignHistory();
+    renderAssignComments();
+
+    assignListMode.hidden = true;
+    assignPeopleMode.hidden = true;
+    assignFormMode.hidden = false;
+    window.scrollTo(0, 0);
+  }
+
+  function renderAssignAssignee() {
+    const text = document.getElementById("assignAssigneeText");
+    const box = document.getElementById("assignAssignBox");
+
+    if (!assignEditing) {
+      text.textContent = "บันทึกเรื่องก่อน แล้วหัวหน้าจึงจ่ายงานได้";
+      box.hidden = true;
+      return;
+    }
+    text.textContent = assignEditing.assigneeName
+      ? assignEditing.assigneeName
+        + (assignEditing.assignedAt ? " · จ่ายเมื่อ " + formatThaiDateTime(assignEditing.assignedAt) : "")
+        + (assignEditing.assignedByName ? " · โดย " + assignEditing.assignedByName : "")
+      : "ยังไม่ได้จ่ายงาน";
+
+    box.hidden = !assignIsSupervisor();
+    if (box.hidden) return;
+
+    const select = assignField("assignAssignee");
+    select.innerHTML = '<option value="">- เลือกผู้รับงาน -</option>';
+    (staffRoster || []).forEach(person => {
+      const option = document.createElement("option");
+      option.value = person.email || "";
+      option.textContent = person.name || person.email || "";
+      select.appendChild(option);
+    });
+    select.value = assignEditing.assigneeEmail || "";
+  }
+
+  function renderAssignHistory() {
+    const host = document.getElementById("assignHistory");
+    host.innerHTML = "";
+    const rows = assignEditing && Array.isArray(assignEditing.statusHistory)
+      ? assignEditing.statusHistory : [];
+    if (!rows.length) {
+      host.appendChild(crmEmptyBox("ยังไม่มีประวัติ"));
+      return;
+    }
+    // เก่าไปใหม่ -- แถวล่างสุดคือสถานะปัจจุบัน อ่านเป็นเส้นเวลาได้ตรง ๆ
+    rows.forEach(entry => {
+      const row = document.createElement("div");
+      row.className = "status-stamp";
+      const badge = document.createElement("span");
+      badge.className = "request-badge request-badge-status";
+      const tone = ASSIGN_STATUS_TONE[entry.status];
+      if (tone) badge.classList.add("tone-" + tone);
+      badge.textContent = entry.status || "-";
+      const by = document.createElement("span");
+      by.className = "status-stamp-by";
+      by.textContent = (entry.byName || "-") + (entry.at ? " · " + formatThaiDateTime(entry.at) : "");
+      row.append(badge, by);
+      host.appendChild(row);
+    });
+  }
+
+  function renderAssignComments() {
+    const host = document.getElementById("assignComments");
+    host.innerHTML = "";
+    const rows = assignEditing && Array.isArray(assignEditing.comments)
+      ? assignEditing.comments : [];
+    if (!rows.length) {
+      host.appendChild(crmEmptyBox("ยังไม่มีบันทึก"));
+      return;
+    }
+    rows.forEach(entry => {
+      const row = document.createElement("div");
+      row.className = "assign-comment";
+      const text = document.createElement("div");
+      text.textContent = entry.text || "";
+      const by = document.createElement("div");
+      by.className = "crm-act-by";
+      by.textContent = (entry.byName || "-") + (entry.at ? " · " + formatThaiDateTime(entry.at) : "");
+      row.append(text, by);
+      host.appendChild(row);
+    });
+  }
+
+  // ------------------------------------------------------------ ผูกปุ่ม
+  assignNavItems.forEach(item => {
+    item.addEventListener("click", () => {
+      assignTab = item.dataset.assignTab;
+      assignStatusFilter = "";
+      assignQuery = "";
+      assignSearch.value = "";
+      assignFormMode.hidden = true;
+      renderAssignList();
+      window.scrollTo(0, 0);
+    });
+  });
+
+  assignSearch.addEventListener("input", () => {
+    assignQuery = assignSearch.value;
+    renderAssignList();
+  });
+
+  document.getElementById("assignBackBtn").addEventListener("click", enterApp);
+  document.getElementById("assignAddBtn").addEventListener("click", () => openAssignForm(null));
+  document.getElementById("assignFormBackBtn").addEventListener("click", () => {
+    assignFormMode.hidden = true;
+    renderAssignList();
+    window.scrollTo(0, 0);
+  });
+
+  document.getElementById("assignSaveBtn").addEventListener("click", async () => {
+    hideError(assignFormError);
+    const subject = assignField("assignSubject").value.trim();
+    if (!subject) {
+      showError(assignFormError, "กรุณากรอกเรื่อง");
+      assignField("assignSubject").focus();
+      return;
+    }
+
+    const btn = document.getElementById("assignSaveBtn");
+    setBusy(btn, true, "กำลังบันทึก...");
+    try {
+      // ไม่ส่งช่องผู้รับผิดชอบไปเลย -- เซิร์ฟเวอร์ก็ไม่รับอยู่แล้ว แต่ไม่ส่งตั้งแต่
+      // ต้นทางทำให้อ่านโค้ดแล้วเห็นชัดว่าเส้นทางนี้เขียนค่านั้นไม่ได้
+      const saved = await backend.saveAssignment({
+        id: assignEditing ? assignEditing.id : newWorkItemId(),
+        docType: assignField("assignDocType").value,
+        docNo: assignField("assignDocNo").value.trim(),
+        docDate: assignField("assignDocDate").value,
+        receivedDate: assignField("assignReceivedDate").value,
+        subject,
+        fromUnit: assignField("assignFromUnit").value.trim(),
+        assignerName: assignField("assignAssignerName").value.trim(),
+        assignerNote: assignField("assignAssignerNote").value.trim(),
+        priority: assignField("assignPriority").value,
+        dueDate: assignField("assignDueDate").value,
+        status: assignField("assignStatus").value,
+        result: assignField("assignResult").value.trim(),
+        completedDate: assignField("assignCompletedDate").value
+      });
+      upsertAssignment(saved);
+      assignEditing = saved;
+      openAssignForm(saved);
+    } catch (err) {
+      showError(assignFormError, moduleErrorText(err));
+    } finally {
+      setBusy(btn, false);
+    }
+  });
+
+  document.getElementById("assignAssignBtn").addEventListener("click", async () => {
+    hideError(assignAssignError);
+    if (!assignEditing) return;
+    const email = assignField("assignAssignee").value;
+    if (!email) { showError(assignAssignError, "กรุณาเลือกผู้รับงาน"); return; }
+
+    const btn = document.getElementById("assignAssignBtn");
+    setBusy(btn, true, "กำลังจ่ายงาน...");
+    try {
+      const saved = await backend.assignAssignment(assignEditing.id, email);
+      upsertAssignment(saved);
+      assignEditing = saved;
+      openAssignForm(saved);
+    } catch (err) {
+      showError(assignAssignError, moduleErrorText(err));
+    } finally {
+      setBusy(btn, false);
+    }
+  });
+
+  document.getElementById("assignCommentBtn").addEventListener("click", async () => {
+    if (!assignEditing) return;
+    const box = assignField("assignCommentText");
+    const text = box.value.trim();
+    if (!text) return;
+
+    const btn = document.getElementById("assignCommentBtn");
+    setBusy(btn, true, "กำลังบันทึก...");
+    try {
+      const saved = await backend.commentAssignment(assignEditing.id, text);
+      upsertAssignment(saved);
+      assignEditing = saved;
+      box.value = "";
+      renderAssignComments();
+    } catch (err) {
+      showError(assignFormError, moduleErrorText(err));
+    } finally {
+      setBusy(btn, false);
+    }
+  });
+
+  document.getElementById("assignDeleteBtn").addEventListener("click", async () => {
+    if (!assignEditing) return;
+    if (!confirm("ลบงาน “" + (assignEditing.subject || "") + "” ใช่หรือไม่?")) return;
+    const btn = document.getElementById("assignDeleteBtn");
+    setBusy(btn, true, "กำลังลบ...");
+    try {
+      await backend.deleteAssignment(assignEditing.id);
+      assignments = assignments.filter(a => String(a.id) !== String(assignEditing.id));
+      assignEditing = null;
+      assignFormMode.hidden = true;
+      renderAssignList();
+    } catch (err) {
+      showError(assignFormError, moduleErrorText(err));
+    } finally {
+      setBusy(btn, false);
+    }
+  });
+
+  function upsertAssignment(saved) {
+    const index = assignments.findIndex(a => String(a.id) === String(saved.id));
+    if (index === -1) assignments.unshift(saved);
+    else assignments[index] = saved;
+  }
+
+  /** ล้างหน้างานมอบหมายตอนออกจากระบบ */
+  function clearAssignmentScreens() {
+    assignments = [];
+    assignLoaded = false;
+    assignEditing = null;
+    assignTab = "all";
+    assignQuery = "";
+    assignStatusFilter = "";
+    assignSearch.value = "";
+    assignListEl.innerHTML = "";
+    assignPeopleMode.innerHTML = "";
+    document.getElementById("assignHistory").innerHTML = "";
+    document.getElementById("assignComments").innerHTML = "";
+    assignField("assignCommentText").value = "";
+    assignListMode.hidden = false;
+    assignFormMode.hidden = true;
+    assignPeopleMode.hidden = true;
   }
 
   // ============================================================ ลูกค้า (CRM)
@@ -18997,6 +19696,7 @@ ${sheetHtml}
     clearQuotationScreens();
     clearMyWorkScreens();
     clearCrmScreens();
+    clearAssignmentScreens();
     closeBrochureEditor();
     closeBrochureViewer();
   }
