@@ -14484,6 +14484,12 @@ ${sheetHtml}
     const survey = protectLatestSurvey(item);
     const surveyPrice = survey ? quoRound2(survey.price) : 0;
 
+    // รายการที่ไม่มีรหัสพัสดุจะไม่มีอยู่ในโปรแกรมประมาณการของ กฟภ. เลย จึงไม่มี
+    // ราคาประมาณการให้เทียบ มีแค่ราคาสืบ -- เป็นเรื่องปกติของงานนี้ ไม่ใช่ข้อมูลขาด
+    // แยกสองกรณีนี้ออกจากกันเพื่อให้หน้าจอไม่แสดง 0.00 ให้เข้าใจผิดว่าราคาเป็นศูนย์
+    const hasEstimate = Boolean(est) && (Number(est.materialCost) > 0 || Number(est.labourCost) > 0);
+    const hasPrice = hasEstimate || surveyPrice > 0;
+
     // ใช้ราคาที่สูงกว่าเสมอ -- ถ้ายังไม่มีราคาสืบก็ใช้ราคาประมาณการไปก่อน
     const usedSurvey = surveyPrice > breakdown.net;
     const realCost = usedSurvey ? surveyPrice : breakdown.net;
@@ -14504,6 +14510,8 @@ ${sheetHtml}
       workKind,
       period: est ? est.period : "",
       ...breakdown,
+      hasEstimate,
+      hasPrice,
       surveyPrice,
       surveyCompany: survey ? survey.company || "" : "",
       surveyDate: survey ? survey.date || "" : "",
@@ -14707,21 +14715,26 @@ ${sheetHtml}
         meta.className = "ev-item-brand";
         const bits = [];
         if (calc.code) bits.push(calc.code);
-        bits.push("EST. " + formatMoney(calc.net));
+        if (calc.hasEstimate) bits.push("EST. " + formatMoney(calc.net));
+        else bits.push("ไม่มีในโปรแกรมประมาณการ");
         if (calc.surveyPrice > 0) {
           bits.push("สืบ " + formatMoney(calc.surveyPrice)
             + (calc.surveyDate ? " (" + formatThaiDate(calc.surveyDate) + ")" : ""));
         }
+        if (!calc.hasPrice) bits.push("ยังไม่มีราคา -- ใส่ราคาสืบก่อน");
         meta.textContent = bits.join(" · ");
         name.appendChild(meta);
 
         const price = document.createElement("div");
         price.className = "ev-item-price";
-        price.textContent = formatMoney(calc.service);
+        price.textContent = calc.hasPrice ? formatMoney(calc.service) : "-";
         const which = document.createElement("span");
         which.className = "protect-src";
-        which.textContent = calc.usedSurvey ? "ใช้ราคาสืบ" : "ใช้ราคาประมาณการ";
+        which.textContent = !calc.hasPrice
+          ? "ไม่มีราคา"
+          : (calc.usedSurvey ? "ใช้ราคาสืบ" : "ใช้ราคาประมาณการ");
         price.appendChild(which);
+        if (!calc.hasPrice) row.classList.add("protect-no-price");
 
         const qtyWrap = document.createElement("div");
         qtyWrap.className = "ev-item-qty";
@@ -14738,6 +14751,10 @@ ${sheetHtml}
         qty.value = current > 0 ? String(current) : "";
         qty.placeholder = "0";
         qty.setAttribute("aria-label", "จำนวน " + calc.name);
+        if (!calc.hasPrice) {
+          [minus, qty, plus].forEach(el => { el.disabled = true; });
+          qty.title = "รายการนี้ยังไม่มีราคา -- ใส่ราคาสืบที่หน้าจัดการรายการก่อน";
+        }
         const plus = document.createElement("button");
         plus.type = "button";
         plus.className = "ev-step";
@@ -14880,6 +14897,14 @@ ${sheetHtml}
       showError(protectError, "ยังไม่ได้เลือกรายการ -- ใส่จำนวนอย่างน้อยหนึ่งรายการก่อน");
       return;
     }
+    // รายการที่ไม่มีทั้งราคาประมาณการและราคาสืบจะคิดได้ 0 บาท -- ถ้าปล่อยผ่าน
+    // ใบเสนอราคาจะมีบรรทัดราคาศูนย์ที่ไม่มีใครทันสังเกตจนส่งถึงลูกค้า
+    const noPrice = calc.lines.find(l => !l.hasPrice);
+    if (noPrice) {
+      showError(protectError, "\u201c" + noPrice.name
+        + "\u201d ยังไม่มีราคา -- ใส่ราคาสืบที่หน้า \u201cจัดการรายการ/ราคา\u201d ก่อน");
+      return;
+    }
     calc.calculatedAt = Date.now();
 
     protectCalcMode.hidden = true;
@@ -15006,7 +15031,9 @@ ${sheetHtml}
       input.type = "text";
       input.inputMode = "decimal";
       input.value = Number(value) > 0 ? formatMoney(value) : "";
-      input.placeholder = "0.00";
+      // ขีดแทน 0.00 -- ช่องว่างที่โชว์ 0.00 อ่านเหมือนราคาเป็นศูนย์ ทั้งที่ความจริงคือ
+      // รายการนี้ไม่มีอยู่ในโปรแกรมประมาณการ (ไม่มีรหัสพัสดุ) จึงไม่มีราคาให้กรอก
+      input.placeholder = "-";
       input.addEventListener("input", markDirty);
       input.addEventListener("blur", () => {
         if (!input.value.trim()) return;
@@ -15027,9 +15054,12 @@ ${sheetHtml}
     const netCell = document.createElement("td");
     netCell.className = "price-col-price protect-net";
     const refreshNet = () => {
-      const breakdown = protectEstimateBreakdown(
-        workKind, quoParseNumber(material.value) || 0, quoParseNumber(labour.value) || 0);
-      netCell.textContent = formatMoney(breakdown.net);
+      const mat = quoParseNumber(material.value) || 0;
+      const lab = quoParseNumber(labour.value) || 0;
+      const breakdown = protectEstimateBreakdown(workKind, mat, lab);
+      const blank = !(mat > 0) && !(lab > 0);
+      netCell.textContent = blank ? "-" : formatMoney(breakdown.net);
+      netCell.title = blank ? "ไม่มีราคาจากโปรแกรมประมาณการ -- ใช้ราคาสืบแทน" : "";
     };
     refreshNet();
 

@@ -4764,6 +4764,10 @@ body.quo-print-body {
 }
 .ev-item.is-picked .protect-src { color: var(--volt-700); }
 
+/* แถวที่ยังไม่มีทั้งราคาประมาณการและราคาสืบ -- ใส่จำนวนไม่ได้จนกว่าจะมีราคา */
+.ev-item.protect-no-price { opacity: 0.6; }
+.ev-item.protect-no-price .protect-src { color: var(--danger); }
+
 .protect-period-pick {
   padding: 7px 10px;
   border: 1px solid var(--border);
