@@ -4264,6 +4264,25 @@ span.qf { display: inline-block; vertical-align: top; }
 .price-table input:hover { border-color: var(--border); }
 .price-table input:focus { border-color: var(--volt-500); background: var(--white); outline: none; }
 .price-table .price-col-price input { text-align: right; font-variant-numeric: tabular-nums; }
+
+/* ชื่อรายการ -- <textarea> ขยายสูงอัตโนมัติแทน <input> บรรทัดเดียว (ดู
+   autosizeTextarea() ใน app.js) เพราะชื่อรายการยาวเดิมถูกตัด เห็นแค่ต้นบรรทัด
+   resize ปิดไว้เพราะความสูงคุมโดยสคริปต์อยู่แล้ว ลากเองจะขัดกัน */
+.price-table textarea.price-name-input {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 6px 8px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  font: inherit;
+  line-height: 1.35;
+  background: transparent;
+  resize: none;
+  overflow: hidden;
+}
+.price-table textarea.price-name-input:hover { border-color: var(--border); }
+.price-table textarea.price-name-input:focus { border-color: var(--volt-500); background: var(--white); outline: none; }
 .price-table .price-col-cat { width: 20%; }
 .price-table .price-col-price { width: 15%; }
 .price-table .price-col-actions { width: 150px; white-space: nowrap; text-align: right; }

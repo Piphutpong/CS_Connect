@@ -12962,6 +12962,17 @@ ${sheetHtml}
       .some(v => String(v || "").toLowerCase().includes(query));
   }
 
+  /**
+   * ขยายความสูง <textarea> ให้พอดีกับข้อความ -- แก้ปัญหาชื่อรายการยาวถูกตัดใน
+   * ตารางรายการราคา (<input> แสดงได้บรรทัดเดียวเท่านั้น ยาวแค่ไหนก็เห็นแค่ส่วน
+   * ต้นบรรทัด) ต้องเรียกหลัง element ต่อเข้า DOM จริงแล้วเท่านั้น เพราะ
+   * scrollHeight ของ element ที่ยังลอยอยู่นอก DOM จะได้ค่า 0 เสมอ
+   */
+  function autosizeTextarea(el) {
+    el.style.height = "auto";
+    el.style.height = el.scrollHeight + "px";
+  }
+
   function renderPriceItems() {
     const query = quotationQuery.trim().toLowerCase();
     const rows = sortedPriceItems(priceItems).filter(item => item.isNew || priceMatches(item, query));
@@ -13002,6 +13013,8 @@ ${sheetHtml}
     rows.forEach(item => tbody.appendChild(buildPriceRow(item)));
     table.appendChild(tbody);
     quotationList.appendChild(table);
+    // ต่อเข้า DOM แล้วเท่านั้นถึงจะขยายความสูงได้ถูกต้อง (ดู autosizeTextarea)
+    table.querySelectorAll("textarea.price-name-input").forEach(autosizeTextarea);
 
     // หมวดที่เคยใช้ -- ให้พิมพ์หมวดซ้ำได้ตรงตัว ไม่งั้นหมวดเดียวกันสะกดสองแบบ
     // จะกลายเป็นสองกลุ่มในหน้าต่างเลือก
@@ -13032,7 +13045,16 @@ ${sheetHtml}
     };
 
     const cat = makeInput(d.category || "", { list: "priceCategoryOptions", placeholder: "หมวด" });
-    const name = makeInput(item.title || "", { placeholder: "ชื่อรายการ" });
+    const name = document.createElement("textarea");
+    name.className = "price-name-input";
+    name.rows = 1;
+    name.placeholder = "ชื่อรายการ";
+    name.value = item.title || "";
+    name.addEventListener("input", () => {
+      tr.classList.add("price-row-dirty");
+      saveBtn.disabled = false;
+      autosizeTextarea(name);
+    });
     const price = makeInput(item.isNew ? "" : formatMoney(d.unitPrice), { inputmode: "decimal", placeholder: "0.00" });
     price.addEventListener("blur", () => {
       const value = quoParseNumber(price.value);
@@ -13801,15 +13823,18 @@ ${sheetHtml}
       : (opts.copy ? "คัดลอกราคาทั้งหมดจาก “" + book.title + "” มาแก้ต่อ" : "ยังไม่ได้บันทึก");
     document.getElementById("bookDeleteBtn").hidden = !bookEditing;
 
-    renderBookLabour();
-    renderBookTiers();
-    renderBookItems();
-    setBookDirty(false);
-
+    // แสดงหน้าก่อนวาดตาราง -- renderBookItems() ต้องขยายความสูง <textarea> ตาม
+    // เนื้อหา (autosizeTextarea) ซึ่งอ่าน scrollHeight ไม่ได้ถ้า element ยังซ่อน
+    // อยู่ด้วย [hidden] (มีค่าเป็น 0 เสมอ)
     quotationListMode.hidden = true;
     quotationFormMode.hidden = true;
     evCalcMode.hidden = true;
     priceBookMode.hidden = false;
+
+    renderBookLabour();
+    renderBookTiers();
+    renderBookItems();
+    setBookDirty(false);
     window.scrollTo(0, 0);
   }
 
@@ -13925,13 +13950,28 @@ ${sheetHtml}
         td.appendChild(input);
         return td;
       };
+      // "ชื่อรายการ" เป็น <textarea> ขยายสูงอัตโนมัติแทน <input> บรรทัดเดียว --
+      // ชื่ออุปกรณ์ในงวดมักยาว (ระบุขนาด/มาตรฐาน) เห็นแค่ต้นบรรทัดจะเลือกผิดง่าย
+      const nameCell = document.createElement("td");
+      const nameInput = document.createElement("textarea");
+      nameInput.className = "price-name-input";
+      nameInput.rows = 1;
+      nameInput.placeholder = "ชื่อรายการ";
+      nameInput.value = item.name || "";
+      nameInput.addEventListener("input", () => {
+        item.name = nameInput.value;
+        setBookDirty(true);
+        autosizeTextarea(nameInput);
+      });
+      nameCell.appendChild(nameInput);
+
       const tdPrice = document.createElement("td");
       tdPrice.className = "price-col-price";
       tdPrice.appendChild(bookNumberInput(item.price, v => { item.price = v; }));
 
       tr.append(
         textCell("group", "price-col-cat", "หมวด"),
-        textCell("name", "", "ชื่อรายการ"),
+        nameCell,
         textCell("unit", "book-col-unit", "หน่วย"),
         textCell("brand", "book-col-brand", "ยี่ห้อ"),
         tdPrice,
@@ -13942,6 +13982,8 @@ ${sheetHtml}
         })
       );
       bookItemsEl.appendChild(tr);
+      // ต่อเข้า DOM แล้วเท่านั้นถึงจะขยายความสูงได้ถูกต้อง (ดู autosizeTextarea)
+      autosizeTextarea(nameInput);
     });
   }
 
