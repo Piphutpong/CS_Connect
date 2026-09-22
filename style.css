@@ -3770,19 +3770,6 @@ span.estimate-crumb {
    ทั้งสามใช้โครงหน้าเดียวกับหน้ารายการคำร้อง (.work-main / .request-card /
    .status-chip) ส่วนที่เพิ่มตรงนี้คือชิ้นที่ไม่มีของเดิมให้ใช้จริง ๆ เท่านั้น */
 
-/* ปุ่มเข้าโมดูลย่อยบนการ์ดบริการ (งานธุรกิจเสริม) */
-.service-modules {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 12px;
-  margin: 20px 0 8px;
-}
-
-/* toggle ด้วย hidden -- ต้องมี override ตาม Gotcha ใน CLAUDE.md ไม่งั้น
-   display: flex ข้างบนจะชนะ [hidden] ของเบราว์เซอร์แล้วซ่อนไม่ลง */
-.service-modules[hidden] { display: none; }
-
 /* ---------------------------------------------------------------- โบรชัวร์ */
 .brochure-grid {
   display: grid;

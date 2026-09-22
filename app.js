@@ -3658,6 +3658,14 @@
         return;
       }
 
+      // งานธุรกิจเสริมมีเมนูซ้ายของตัวเอง (โบรชัวร์ / งานเสนอราคา / Google Sheet)
+      // เปิดมาที่โบรชัวร์เป็นค่าเริ่มต้น ไม่ต้องผ่านการ์ดกลางอีก
+      if (key === "sideBusiness") {
+        saveNavState({ card: "sideBusiness", module: "brochure" });
+        openBrochureView();
+        return;
+      }
+
       const service = SERVICES[key];
       if (!service) return;
 
@@ -3671,9 +3679,6 @@
       // พวกนี้ -- เช็คด้วยว่ามี service.links จริงไหม ไม่ใช่แค่ตรวจว่ามี key
       // เพราะการ์ดอย่าง Solar ยังไม่มีอะไรจริงให้เปิดเลย เป็น array ไว้ตั้งแต่แรก
       // เพราะบางการ์ดจะมีมากกว่าหนึ่งลิงก์ในอนาคต
-      // ปุ่มเข้าโมดูลย่อย (โบรชัวร์/งานเสนอราคา) -- เฉพาะการ์ดที่มีจริง
-      document.getElementById("serviceModules").hidden = !SERVICE_MODULES[key];
-
       const linksEl = document.getElementById("serviceLinks");
       const noteEl = document.getElementById("serviceNote");
       linksEl.innerHTML = "";
@@ -11289,9 +11294,6 @@ ${sheetHtml}
   // รูปร่างข้อมูลของแต่ละ kind อยู่ใน item.data (jsonb) ส่วน title/status/sortOrder
   // เป็นคอลัมน์จริงเพราะทุกหน้าจอเรียง/ค้น/กรองด้วยสามฟิลด์นี้
 
-  /** การ์ดบริการใบไหนมีปุ่มเข้าโมดูลย่อย (ปุ่มใน #serviceModules) */
-  const SERVICE_MODULES = { sideBusiness: true };
-
   function newWorkItemId() {
     return newRequestId();
   }
@@ -14546,28 +14548,40 @@ ${sheetHtml}
     }
   });
 
-  // ทางเข้า/ทางออกของสามโมดูล
-  document.querySelectorAll("[data-service-module]").forEach(btn => {
-    btn.addEventListener("click", () => {
-      const key = btn.dataset.serviceModule;
-      if (key === "brochure") { saveNavState({ card: "sideBusiness", module: "brochure" }); openBrochureView(); }
-      if (key === "quotation") { saveNavState({ card: "sideBusiness", module: "quotation" }); openQuotationView(); }
+  /**
+   * เมนูซ้ายของงานธุรกิจเสริม -- สำเนาเดียวกันอยู่ทั้งหน้าโบรชัวร์และหน้าเสนอราคา
+   * เมนูจึงไม่หายไปตอนสลับหน้า เหมือนงานประเภทอื่น ปุ่มที่กำลังเปิดอยู่ใส่ active
+   * ไว้ใน markup ของหน้านั้นแล้ว ที่นี่จึงมีแต่การสลับหน้า
+   */
+  document.querySelectorAll("[data-side-nav]").forEach(item => {
+    const key = item.dataset.sideNav;
+    if (key === "sheet") {
+      // URL อยู่ที่ SERVICES ที่เดียว ไม่ฝังซ้ำใน index.html ให้ต้องแก้สองที่
+      const link = (SERVICES.sideBusiness.links || [])[0];
+      if (link) item.href = link.url;
+      else item.hidden = true;
+      return;
+    }
+    item.addEventListener("click", () => {
+      saveNavState({ card: "sideBusiness", module: key });
+      if (key === "brochure") openBrochureView();
+      if (key === "quotation") openQuotationView();
     });
   });
 
-  // โบรชัวร์/เสนอราคาเปิดมาจากการ์ดงานธุรกิจเสริม จึงกลับไปที่การ์ดนั้น ไม่ใช่หน้าแรก
-  document.getElementById("brochureBackBtn").addEventListener("click", () => {
-    document.querySelector('.service-card[data-service="sideBusiness"]').click();
-  });
+  // ทั้งสองหน้าเป็นทางเข้าแรกของงานธุรกิจเสริมแล้ว ปุ่มย้อนกลับจึงกลับหน้าแรก
+  // เหมือนหน้างานอื่น (เดิมกลับไปที่การ์ดกลาง ซึ่งตอนนี้ไม่มีแล้ว -- ถ้าไม่แก้
+  // ปุ่มย้อนกลับของหน้าโบรชัวร์จะวนกลับมาที่ตัวเอง)
+  document.getElementById("brochureBackBtn").addEventListener("click", enterApp);
   document.getElementById("quotationBackBtn").addEventListener("click", () => {
-    // ถอยทีละขั้น: จากกระดาษกลับรายการก่อน แล้วค่อยออกไปการ์ดงานธุรกิจเสริม
+    // ถอยทีละขั้น: จากกระดาษกลับรายการก่อน แล้วค่อยออกไปหน้าแรก
     if (!quotationFormMode.hidden) {
       if (!quoConfirmLeave()) return;
       setQuoDirty(false);
       showQuotationList();
       return;
     }
-    document.querySelector('.service-card[data-service="sideBusiness"]').click();
+    enterApp();
   });
   document.getElementById("vocBackBtn").addEventListener("click", () => enterApp());
 

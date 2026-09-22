@@ -24,7 +24,7 @@
 <title>CS Connect</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=Sarabun:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=20260922c">
+<link rel="stylesheet" href="style.css?v=20260922d">
 </head>
 <body>
 
@@ -1685,13 +1685,6 @@
            รูปตั้ง src ด้วย JS ตอนคลิกการ์ดเท่านั้น ไม่ใส่ไว้ใน markup ตรง ๆ เพื่อไม่ให้
            เบราว์เซอร์โหลดรูปทั้งหมดไว้ล่วงหน้าตั้งแต่เปิดหน้าแรกทั้งที่อาจไม่มีใครกดดู -->
       <div id="serviceGallery" class="service-gallery" hidden></div>
-      <!-- ทางเข้าโมดูลย่อยของการ์ดงานธุรกิจเสริม -- ซ่อนกับการ์ดอื่นทั้งหมด
-           (ดู SERVICE_MODULES ใน app.js) วางไว้เหนือปุ่มกลับหน้าหลักเพราะเป็น
-           สิ่งที่คนเปิดการ์ดนี้มาเพื่อจะกด ไม่ใช่ทางออก -->
-      <div id="serviceModules" class="service-modules" hidden>
-        <button type="button" class="btn btn-primary" data-service-module="brochure">โบรชัวร์</button>
-        <button type="button" class="btn btn-primary" data-service-module="quotation">งานเสนอราคา</button>
-      </div>
       <button class="btn btn-ghost" id="backToHomeBtn">กลับสู่หน้าหลัก</button>
     </div>
   </main>
@@ -1709,7 +1702,7 @@
       <button id="brochureBackBtn" class="btn btn-ghost btn-icon" aria-label="ย้อนกลับ">
         <svg viewBox="0 0 24 24" fill="none"><path d="M15 18l-6-6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
       </button>
-      <span class="topbar-title">โบรชัวร์ธุรกิจเสริม</span>
+      <span class="topbar-title">งานธุรกิจเสริม</span>
     </div>
     <div class="topbar-user">
       <span id="userGreeting5" class="user-greeting"></span>
@@ -1717,7 +1710,25 @@
     </div>
   </header>
 
-  <main class="work-main">
+  <div class="requests-layout">
+    <nav class="requests-sidebar">
+      <button type="button" class="requests-nav-item active" data-side-nav="brochure">
+        <svg viewBox="0 0 24 24" fill="none"><path d="M4 5h7v14H4zM13 5h7v14h-7z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M6.5 8.5h2M15.5 8.5h2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+        โบรชัวร์
+      </button>
+      <button type="button" class="requests-nav-item" data-side-nav="quotation">
+        <svg viewBox="0 0 24 24" fill="none"><path d="M7 3h8l4 4v14H7V3Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M15 3v4h4M10 12h5M10 16h5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+        งานเสนอราคา
+      </button>
+      <!-- ลิงก์ออกไป Google Sheet ของแผนก -- href เติมจาก SERVICES.sideBusiness
+           ใน app.js ตอนโหลด ไม่ฝัง URL ซ้ำไว้ตรงนี้ให้ต้องแก้สองที่ -->
+      <a class="requests-nav-item" data-side-nav="sheet" target="_blank" rel="noopener"
+         title="Google Sheet: Check list จ้างเหมา Turnkey">
+        <svg viewBox="0 0 24 24" fill="none"><rect x="4" y="3" width="16" height="18" rx="1.6" stroke="currentColor" stroke-width="1.6"/><path d="M4 9h16M4 15h16M10 3v18" stroke="currentColor" stroke-width="1.6"/></svg>
+        Check list จ้างเหมา Turnkey
+      </a>
+    </nav>
+    <main class="work-main">
     <div class="requests-content-heading">
       <div class="requests-content-heading-row">
         <div>
@@ -1732,7 +1743,8 @@
     </div>
     <p id="brochureError" class="form-error" hidden></p>
     <div id="brochureList" class="brochure-grid"></div>
-  </main>
+    </main>
+  </div>
 </section>
 
 <!-- ฟอร์มเพิ่ม/แก้โบรชัวร์ (โมดอลเต็มจอ ไม่ใช่ view แยก เพราะเป็นงานสั้น ๆ
@@ -1787,7 +1799,7 @@
       <button id="quotationBackBtn" class="btn btn-ghost btn-icon" aria-label="ย้อนกลับ">
         <svg viewBox="0 0 24 24" fill="none"><path d="M15 18l-6-6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
       </button>
-      <span class="topbar-title">งานเสนอราคา</span>
+      <span class="topbar-title">งานธุรกิจเสริม</span>
     </div>
     <div class="topbar-user">
       <span id="userGreeting6" class="user-greeting"></span>
@@ -1795,7 +1807,25 @@
     </div>
   </header>
 
-  <main class="work-main">
+  <div class="requests-layout">
+    <nav class="requests-sidebar">
+      <button type="button" class="requests-nav-item" data-side-nav="brochure">
+        <svg viewBox="0 0 24 24" fill="none"><path d="M4 5h7v14H4zM13 5h7v14h-7z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M6.5 8.5h2M15.5 8.5h2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+        โบรชัวร์
+      </button>
+      <button type="button" class="requests-nav-item active" data-side-nav="quotation">
+        <svg viewBox="0 0 24 24" fill="none"><path d="M7 3h8l4 4v14H7V3Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M15 3v4h4M10 12h5M10 16h5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+        งานเสนอราคา
+      </button>
+      <!-- ลิงก์ออกไป Google Sheet ของแผนก -- href เติมจาก SERVICES.sideBusiness
+           ใน app.js ตอนโหลด ไม่ฝัง URL ซ้ำไว้ตรงนี้ให้ต้องแก้สองที่ -->
+      <a class="requests-nav-item" data-side-nav="sheet" target="_blank" rel="noopener"
+         title="Google Sheet: Check list จ้างเหมา Turnkey">
+        <svg viewBox="0 0 24 24" fill="none"><rect x="4" y="3" width="16" height="18" rx="1.6" stroke="currentColor" stroke-width="1.6"/><path d="M4 9h16M4 15h16M10 3v18" stroke="currentColor" stroke-width="1.6"/></svg>
+        Check list จ้างเหมา Turnkey
+      </a>
+    </nav>
+    <main class="work-main">
     <!-- ===== โหมดรายการ -- สามแท็บ: ใบเสนอราคา / แม่แบบ / รายการราคา ===== -->
     <div id="quotationListMode">
       <div class="requests-content-heading">
@@ -2077,7 +2107,8 @@
         </div>
       </div>
     </div>
-  </main>
+    </main>
+  </div>
 </section>
 
 <!-- ===== ระบบรับฟังเสียงของลูกค้า (PEA-VOC) ===== -->
@@ -2248,6 +2279,6 @@
      **ต้องเปลี่ยนเลขนี้ทุกครั้งที่แก้ app.js / style.css / track.js / qr.js**
      ไม่งั้นผู้ใช้บางคนจะยังได้ไฟล์เก่าไปอีกพักใหญ่ -->
 <script src="vendor/supabase.js?v=2.116.0"></script>
-<script src="app.js?v=20260922c"></script>
+<script src="app.js?v=20260922d"></script>
 </body>
 </html>
