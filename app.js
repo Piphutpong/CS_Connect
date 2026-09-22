@@ -14933,6 +14933,8 @@ ${sheetHtml}
     }
 
     rows.forEach(item => protectCatalogRows.appendChild(buildProtectRow(item)));
+    // ต่อเข้า DOM แล้วเท่านั้นถึงจะขยายความสูงได้ถูกต้อง (ดู autosizeTextarea)
+    protectCatalogRows.querySelectorAll("textarea.price-name-input").forEach(autosizeTextarea);
   }
 
   function buildProtectRow(item) {
@@ -14998,7 +15000,7 @@ ${sheetHtml}
     refreshNet();
 
     const surveyCell = document.createElement("td");
-    surveyCell.className = "price-col-price";
+    surveyCell.className = "protect-col-survey";
     const surveyBtn = document.createElement("button");
     surveyBtn.type = "button";
     surveyBtn.className = "btn btn-ghost protect-survey-btn";
