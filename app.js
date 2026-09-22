@@ -11697,6 +11697,8 @@ ${sheetHtml}
   // สำเนาผลคำนวณราคา EV ของใบที่เปิดอยู่ (จากเครื่องคำนวณ) -- เก็บไว้กับใบเพื่อ
   // ให้เปิดกลับมาแก้ต่อได้ และเพื่อให้ราคาที่เสนอไปแล้วไม่เปลี่ยนตามงวดราคา
   let quoEvCalc = null;
+  // สำเนาผลคำนวณราคาอุปกรณ์ป้องกันของใบที่เปิดอยู่ -- เหตุผลเดียวกับ quoEvCalc
+  let quoProtectCalc = null;
   let quoDirtyFlag = false;
 
   const QUOTATION_STATUS_TONE = {
@@ -12056,9 +12058,11 @@ ${sheetHtml}
       description: String(l.description || ""),
       unitPrice: Number(l.unitPrice ?? l.price) || 0,
       qty: Number(l.qty) || 0,
-      fromEv: Boolean(l.fromEv)
+      fromEv: Boolean(l.fromEv),
+      fromProtect: Boolean(l.fromProtect)
     }));
     quoEvCalc = base.evCalc || null;
+    quoProtectCalc = base.protectCalc || null;
     quoVatEnabled.checked = base.vatEnabled !== false;
     quoThaiDigits.checked = Boolean(base.thaiDigits);
     quoPaper.classList.toggle("is-thai-digits", quoThaiDigits.checked);
@@ -12110,11 +12114,13 @@ ${sheetHtml}
           qty: Number(l.qty) || 0
         };
         if (l.fromEv) line.fromEv = true;
+        if (l.fromProtect) line.fromProtect = true;
         return line;
       });
     data.vatEnabled = quoVatEnabled.checked;
     // สำเนาผลคำนวณ EV -- ราคาในใบนี้จะไม่เปลี่ยนตามเมื่อแก้ราคาในงวดภายหลัง
     if (quoEvCalc) data.evCalc = quoEvCalc;
+    if (quoProtectCalc) data.protectCalc = quoProtectCalc;
     data.thaiDigits = quoThaiDigits.checked;
     // คำต่อท้ายหน้าที่แก้เอง (key = เลขหน้า) -- ไม่มี = ใช้ค่าอัตโนมัติ
     data.contTexts = { ...quoContOverrides };
@@ -12774,6 +12780,8 @@ ${sheetHtml}
     quotationFormMode.hidden = true;
     evCalcMode.hidden = true;
     priceBookMode.hidden = true;
+    protectCalcMode.hidden = true;
+    protectCatalogMode.hidden = true;
     quotationListMode.hidden = false;
     renderQuotationTab();
     window.scrollTo(0, 0);
@@ -12796,8 +12804,15 @@ ${sheetHtml}
       await openEvCalc();
       return;
     }
+    if (quotationTab === "protect") {
+      quotationListMode.hidden = true;
+      await openProtectCalc();
+      return;
+    }
     evCalcMode.hidden = true;
     priceBookMode.hidden = true;
+    protectCalcMode.hidden = true;
+    protectCatalogMode.hidden = true;
     quotationListMode.hidden = false;
 
     quotationAddBtn.hidden = quotationTab !== "docs";
@@ -13230,8 +13245,10 @@ ${sheetHtml}
     quoFieldEls.forEach(el => { el.innerHTML = ""; });
     quoContOverrides = {};
     quoEvCalc = null;
+    quoProtectCalc = null;
     setQuoDirty(false);
     clearPricingScreens();
+    clearProtectScreens();
   }
 
   // ============================================ งวดราคา + คำนวณราคา EV Charger
@@ -14279,6 +14296,1027 @@ ${sheetHtml}
     evCalcMode.hidden = true;
     priceBookMode.hidden = true;
     setBookDirty(false);
+  }
+
+  // ================================ คำนวณราคางานติดตั้ง/รื้อถอนอุปกรณ์ป้องกัน
+  /**
+   * ราคาต่อรายการคิดจากสองทาง แล้วใช้ทางที่ "สูงกว่า" เสมอ
+   *
+   *   (ก) โปรแกรมประมาณการของ กฟภ. -- กรอกค่าวัสดุกับค่าแรง ที่เหลือคิดให้:
+   *       ติดตั้ง   ค่าควบคุมงาน = 30% ของค่าแรง
+   *                 ค่าขนส่ง     = 5% ของค่าวัสดุ
+   *                 ค่าเบ็ดเตล็ด = 5% ของ (วัสดุ + แรง + ควบคุมงาน + ขนส่ง)
+   *                 ค่าดำเนินการ = 5% ของ (วัสดุ + แรง + ควบคุมงาน + ขนส่ง + เบ็ดเตล็ด)
+   *                 ราคาสุทธิ    = ผลรวมทั้งหกก้อน
+   *       รื้อถอน   ไม่มีค่าวัสดุ (ไม่ได้ซื้อของมาติด) และสองก้อนกลับด้านกัน:
+   *                 ค่าเบ็ดเตล็ด = 35% ของค่าแรง  แล้ว ค่าขนส่ง = 25% ของค่าเบ็ดเตล็ด
+   *                 ค่าดำเนินการ = 5% ของ (แรง + ควบคุมงาน + ขนส่ง + เบ็ดเตล็ด)
+   *                 ราคาสุทธิ    = แรง + ควบคุมงาน + ขนส่ง + เบ็ดเตล็ด + ดำเนินการ
+   *
+   *   (ข) ราคาสืบจากท้องตลาด -- ต้องมีบริษัทที่สืบและวันที่สืบกำกับ ใช้ครั้งล่าสุด
+   *
+   *   ต้นทุนจริง = max(ก, ข)
+   *   + ค่าดำเนินการ 7.5% ของต้นทุนจริง      = ต้นทุนรวม
+   *   + กำไรขั้นต้น (ร้อยละของต้นทุนรวม)      = ค่าบริการ -> ปัดขึ้นหลักสิบ
+   *
+   * ทุกขั้นตอนย่อยปัดทศนิยม 2 ตำแหน่ง ปัดขึ้นหลักสิบที่ค่าบริการขั้นสุดท้ายเท่านั้น
+   * (ตามที่เจ้าของระบบกำหนด -- ตารางต้นฉบับปัดเป็นจำนวนเต็มบาททุกขั้น ตัวเลขจึง
+   * ต่างกันหลักสตางค์ถึงหลักบาท)
+   *
+   * อัตรากำไรขั้นต้นใช้ "ตารางเดียวกับ EV Charger" (profitTiers ของ price_book)
+   * ยกเว้นใบที่มีค่าบริการบำรุงรักษาด้วย ซึ่งคิดแค่ 10% -- ติ๊กเองในหน้าคำนวณ
+   */
+  const PROTECT_MAINTENANCE_PROFIT_PCT = 10;
+  const PROTECT_OUTER_OVERHEAD_PCT = 7.5;
+
+  let protectItems = [];
+  let protectItemsLoaded = false;
+  let protectQty = new Map();       // id ของรายการ -> จำนวน
+  let protectPeriod = "";           // งวดพัสดุที่เลือกใช้คำนวณ
+  let protectBookId = null;         // งวดราคา EV ที่ยืมตารางกำไรมาใช้
+  let protectSearchQuery = "";
+  let protectReturnToQuotation = false;
+  let protectCatalogKind = "install";
+  let protectSurveyEditing = null;  // รายการที่กำลังแก้ประวัติราคาสืบ
+  let protectSurveyDraft = [];
+
+  const protectCalcMode = document.getElementById("protectCalcMode");
+  const protectCatalogMode = document.getElementById("protectCatalogMode");
+  const protectPeriodSelect = document.getElementById("protectPeriod");
+  const protectBookSelect = document.getElementById("protectBook");
+  const protectItemsEl = document.getElementById("protectItems");
+  const protectSummaryEl = document.getElementById("protectSummary");
+  const protectSummaryNote = document.getElementById("protectSummaryNote");
+  const protectError = document.getElementById("protectError");
+  const protectSearch = document.getElementById("protectSearch");
+  const protectOnlyPicked = document.getElementById("protectOnlyPicked");
+  const protectPickedCount = document.getElementById("protectPickedCount");
+  const protectSubtitle = document.getElementById("protectSubtitle");
+  const protectHasMaintenance = document.getElementById("protectHasMaintenance");
+  const protectCatalogRows = document.getElementById("protectCatalogRows");
+  const protectCatalogError = document.getElementById("protectCatalogError");
+  const protectCatalogPeriod = document.getElementById("protectCatalogPeriod");
+  const protectSurveyModal = document.getElementById("protectSurveyModal");
+  const protectSurveyRows = document.getElementById("protectSurveyRows");
+  const protectSurveyError = document.getElementById("protectSurveyError");
+
+  const PROTECT_KIND_LABEL = { install: "งานติดตั้งใหม่", remove: "งานรื้อถอน" };
+
+  async function ensureProtectItems(force) {
+    if (protectItemsLoaded && !force) return;
+    try {
+      protectItems = await backend.loadWorkItems("protect_item");
+      protectItemsLoaded = true;
+    } catch (err) {
+      protectItems = [];
+      showError(quotationError, moduleErrorText(err));
+    }
+  }
+
+  function protectData(item) {
+    return item && item.data ? item.data : {};
+  }
+
+  function protectEstimates(item) {
+    const list = protectData(item).estimates;
+    return Array.isArray(list) ? list : [];
+  }
+
+  function protectSurveys(item) {
+    const list = protectData(item).surveys;
+    return Array.isArray(list) ? list : [];
+  }
+
+  /** ชื่องวดพัสดุทั้งหมดที่มีในรายการ ใหม่สุดขึ้นก่อน (เรียงแบบ "3/2569" ได้ถูก) */
+  function protectPeriodList() {
+    const seen = new Set();
+    protectItems.forEach(item => {
+      protectEstimates(item).forEach(e => {
+        const period = String(e.period || "").trim();
+        if (period) seen.add(period);
+      });
+    });
+    return Array.from(seen).sort((a, b) => comparePeriod(b, a));
+  }
+
+  /** เทียบงวดแบบ "งวด/ปี" -- ปีก่อน แล้วค่อยงวด ไม่ใช่เรียงตัวอักษรซึ่ง 10 จะมาก่อน 2 */
+  function comparePeriod(a, b) {
+    const pa = String(a).split("/").map(v => Number(v.replace(/\D/g, "")) || 0);
+    const pb = String(b).split("/").map(v => Number(v.replace(/\D/g, "")) || 0);
+    const ya = pa[1] || 0, yb = pb[1] || 0;
+    if (ya !== yb) return ya - yb;
+    return (pa[0] || 0) - (pb[0] || 0);
+  }
+
+  /**
+   * ค่าวัสดุ/ค่าแรงของรายการนี้ในงวดที่เลือก -- ถ้างวดนั้นไม่มีค่าของรายการนี้
+   * ใช้งวดที่เก่ากว่าและใกล้ที่สุดแทน (ราคาที่ยังไม่ถูกแก้ในงวดใหม่ถือว่าคงเดิม)
+   * ไม่ใช้งวดที่ใหม่กว่าเด็ดขาด -- การคิดราคาย้อนงวดต้องไม่ดึงราคาอนาคตมาใช้
+   */
+  function protectEstimateFor(item, period) {
+    const list = protectEstimates(item);
+    if (!list.length) return null;
+    const exact = list.find(e => String(e.period || "") === String(period));
+    if (exact) return exact;
+    const older = list
+      .filter(e => comparePeriod(e.period, period) <= 0)
+      .sort((a, b) => comparePeriod(b.period, a.period));
+    return older[0] || null;
+  }
+
+  /** ราคาสืบครั้งล่าสุด (วันที่ใหม่สุด) -- ค่าเริ่มต้นที่ระบบใช้เสมอ */
+  function protectLatestSurvey(item) {
+    const list = protectSurveys(item).filter(sv => Number(sv.price) > 0);
+    if (!list.length) return null;
+    return list.slice().sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")))[0];
+  }
+
+  /** ราคาสุทธิตามโปรแกรมประมาณการ กฟภ. -- คืนทุกก้อนไว้โชว์ในตารางด้วย */
+  function protectEstimateBreakdown(workKind, materialCost, labourCost) {
+    const material = workKind === "remove" ? 0 : quoRound2(materialCost);
+    const labour = quoRound2(labourCost);
+    const supervision = quoRound2(labour * 0.30);
+
+    let misc, transport;
+    if (workKind === "remove") {
+      // รื้อถอน: ค่าเบ็ดเตล็ดมาจากค่าแรง แล้วค่าขนส่งมาจากค่าเบ็ดเตล็ดอีกที
+      misc = quoRound2(labour * 0.35);
+      transport = quoRound2(misc * 0.25);
+    } else {
+      transport = quoRound2(material * 0.05);
+      misc = quoRound2((material + labour + supervision + transport) * 0.05);
+    }
+
+    const base = material + labour + supervision + transport + misc;
+    const operation = quoRound2(base * 0.05);
+    const net = quoRound2(base + operation);
+    return { material, labour, supervision, transport, misc, operation, net };
+  }
+
+  /** คิดราคาหนึ่งรายการจนจบ -- ราคาต่อหน่วย ยังไม่คูณจำนวน */
+  function computeProtectRow(item, period, book, hasMaintenance) {
+    const d = protectData(item);
+    const workKind = d.workKind === "remove" ? "remove" : "install";
+    const est = protectEstimateFor(item, period);
+    const breakdown = protectEstimateBreakdown(
+      workKind,
+      est ? est.materialCost : 0,
+      est ? est.labourCost : 0
+    );
+    const survey = protectLatestSurvey(item);
+    const surveyPrice = survey ? quoRound2(survey.price) : 0;
+
+    // ใช้ราคาที่สูงกว่าเสมอ -- ถ้ายังไม่มีราคาสืบก็ใช้ราคาประมาณการไปก่อน
+    const usedSurvey = surveyPrice > breakdown.net;
+    const realCost = usedSurvey ? surveyPrice : breakdown.net;
+    const overhead = quoRound2(realCost * PROTECT_OUTER_OVERHEAD_PCT / 100);
+    const totalCost = quoRound2(realCost + overhead);
+    const profitPct = hasMaintenance
+      ? PROTECT_MAINTENANCE_PROFIT_PCT
+      : profitPctFor(book, totalCost);
+    const profit = quoRound2(totalCost * profitPct / 100);
+    // ปัดขึ้นหลักสิบเฉพาะขั้นสุดท้ายนี้ขั้นเดียว
+    const service = Math.ceil(quoRound2(totalCost + profit) / 10) * 10;
+
+    return {
+      id: item.id,
+      code: d.code || "",
+      name: item.title || "",
+      workKind,
+      period: est ? est.period : "",
+      ...breakdown,
+      surveyPrice,
+      surveyCompany: survey ? survey.company || "" : "",
+      surveyDate: survey ? survey.date || "" : "",
+      usedSurvey,
+      realCost,
+      overheadPct: PROTECT_OUTER_OVERHEAD_PCT,
+      overhead,
+      totalCost,
+      profitPct,
+      profit,
+      service
+    };
+  }
+
+  /** รวมทั้งใบ -- ค่าบริการต่อหน่วยปัดขึ้นหลักสิบแล้วค่อยคูณจำนวน */
+  function computeProtectTotal() {
+    const book = priceBookById(protectBookId);
+    const hasMaintenance = protectHasMaintenance.checked;
+    const lines = [];
+    protectItems.forEach(item => {
+      const qty = Number(protectQty.get(String(item.id))) || 0;
+      if (qty <= 0) return;
+      const row = computeProtectRow(item, protectPeriod, book, hasMaintenance);
+      row.qty = qty;
+      row.amount = quoRound2(row.service * qty);
+      lines.push(row);
+    });
+    const total = quoRound2(lines.reduce((sum, l) => sum + l.amount, 0));
+    return {
+      period: protectPeriod,
+      bookId: book ? book.id : null,
+      bookTitle: book ? book.title : "",
+      hasMaintenance,
+      lines,
+      total
+    };
+  }
+
+  // ------------------------------------------------------------ เครื่องคำนวณ
+  async function openProtectCalc(options) {
+    const opts = options || {};
+    hideError(protectError);
+    protectReturnToQuotation = Boolean(opts.fromQuotation);
+    quotationListMode.hidden = true;
+    quotationFormMode.hidden = true;
+    evCalcMode.hidden = true;
+    priceBookMode.hidden = true;
+    protectCatalogMode.hidden = true;
+    protectCalcMode.hidden = false;
+    window.scrollTo(0, 0);
+
+    protectItemsEl.innerHTML = '<div class="request-empty">กำลังโหลดรายการ...</div>';
+    await ensureProtectItems();
+    await ensurePriceBooks();
+
+    const prev = opts.fromQuotation ? quoProtectCalc : null;
+    protectQty = new Map();
+    if (prev && Array.isArray(prev.lines)) {
+      prev.lines.forEach(l => protectQty.set(String(l.id), Number(l.qty) || 0));
+    }
+    const periods = protectPeriodList();
+    protectPeriod = (prev && prev.period) || periods[0] || "";
+    const book = (prev && priceBookById(prev.bookId)) || currentPriceBook();
+    protectBookId = book ? book.id : null;
+    protectHasMaintenance.checked = Boolean(prev && prev.hasMaintenance);
+    protectSearch.value = "";
+    protectSearchQuery = "";
+    protectOnlyPicked.checked = false;
+
+    renderProtectPeriodOptions();
+    renderProtectBookOptions();
+    renderProtectItems();
+    protectSubtitle.textContent = protectReturnToQuotation
+      ? "คิดราคาแล้วกด “ใส่ราคาในใบเสนอราคา” เพื่อกลับไปที่ใบเดิม"
+      : "คิดราคาแล้วกด “ใส่ราคาในใบเสนอราคา” เพื่อสร้างใบใหม่จากราคานี้";
+  }
+
+  function renderProtectPeriodOptions() {
+    const periods = protectPeriodList();
+    protectPeriodSelect.innerHTML = "";
+    if (!periods.length) {
+      const option = document.createElement("option");
+      option.textContent = "ยังไม่มีงวดพัสดุ -- กด “จัดการรายการ/ราคา”";
+      protectPeriodSelect.appendChild(option);
+      protectPeriodSelect.disabled = true;
+      return;
+    }
+    protectPeriodSelect.disabled = false;
+    periods.forEach((period, index) => {
+      const option = document.createElement("option");
+      option.value = period;
+      option.textContent = "งวด " + period + (index === 0 ? " — งวดล่าสุด" : "");
+      protectPeriodSelect.appendChild(option);
+    });
+    if (!periods.includes(protectPeriod)) protectPeriod = periods[0];
+    protectPeriodSelect.value = protectPeriod;
+  }
+
+  function renderProtectBookOptions() {
+    protectBookSelect.innerHTML = "";
+    const usable = priceBooks.filter(b => b.status !== "ยกเลิก" || String(b.id) === String(protectBookId));
+    if (!usable.length) {
+      const option = document.createElement("option");
+      option.textContent = "ยังไม่มีงวดราคา -- ใช้กำไร 0%";
+      protectBookSelect.appendChild(option);
+      protectBookSelect.disabled = true;
+      protectBookId = null;
+      return;
+    }
+    protectBookSelect.disabled = false;
+    const current = currentPriceBook();
+    usable
+      .slice()
+      .sort((a, b) => String((b.data && b.data.effectiveFrom) || "")
+        .localeCompare(String((a.data && a.data.effectiveFrom) || "")))
+      .forEach(book => {
+        const option = document.createElement("option");
+        option.value = String(book.id);
+        const tag = current && String(current.id) === String(book.id) ? " — งวดปัจจุบัน" : "";
+        option.textContent = book.title + tag;
+        protectBookSelect.appendChild(option);
+      });
+    if (protectBookId && priceBookById(protectBookId)) protectBookSelect.value = String(protectBookId);
+    else protectBookId = protectBookSelect.value;
+  }
+
+  function renderProtectItems() {
+    const query = protectSearchQuery.trim().toLowerCase();
+    const book = priceBookById(protectBookId);
+    const hasMaintenance = protectHasMaintenance.checked;
+    protectItemsEl.innerHTML = "";
+
+    const shown = protectItems.filter(item => {
+      if (protectOnlyPicked.checked && !(Number(protectQty.get(String(item.id))) > 0)) return false;
+      if (!query) return true;
+      return [item.title, protectData(item).code, protectData(item).group]
+        .some(v => String(v || "").toLowerCase().includes(query));
+    });
+
+    if (!shown.length) {
+      const empty = document.createElement("div");
+      empty.className = "request-empty";
+      empty.textContent = protectItems.length
+        ? "ไม่พบรายการที่ค้นหา"
+        : "ยังไม่มีรายการอุปกรณ์ป้องกัน -- กด “จัดการรายการ/ราคา” เพื่อเพิ่ม";
+      protectItemsEl.appendChild(empty);
+      renderProtectSummary();
+      return;
+    }
+
+    // แยกหัวข้อตามประเภทงาน (ติดตั้ง/รื้อถอน) ก่อน แล้วค่อยเรียงตามรหัสพัสดุ
+    ["install", "remove"].forEach(kind => {
+      const rows = shown.filter(item => (protectData(item).workKind === "remove" ? "remove" : "install") === kind);
+      if (!rows.length) return;
+
+      const head = document.createElement("div");
+      head.className = "ev-group";
+      head.textContent = PROTECT_KIND_LABEL[kind];
+      protectItemsEl.appendChild(head);
+
+      rows.forEach(item => {
+        const calc = computeProtectRow(item, protectPeriod, book, hasMaintenance);
+        const row = document.createElement("div");
+        row.className = "ev-item protect-item";
+
+        const name = document.createElement("div");
+        name.className = "ev-item-name";
+        name.textContent = calc.name;
+        const meta = document.createElement("span");
+        meta.className = "ev-item-brand";
+        const bits = [];
+        if (calc.code) bits.push(calc.code);
+        bits.push("EST. " + formatMoney(calc.net));
+        if (calc.surveyPrice > 0) {
+          bits.push("สืบ " + formatMoney(calc.surveyPrice)
+            + (calc.surveyDate ? " (" + formatThaiDate(calc.surveyDate) + ")" : ""));
+        }
+        meta.textContent = bits.join(" · ");
+        name.appendChild(meta);
+
+        const price = document.createElement("div");
+        price.className = "ev-item-price";
+        price.textContent = formatMoney(calc.service);
+        const which = document.createElement("span");
+        which.className = "protect-src";
+        which.textContent = calc.usedSurvey ? "ใช้ราคาสืบ" : "ใช้ราคาประมาณการ";
+        price.appendChild(which);
+
+        const qtyWrap = document.createElement("div");
+        qtyWrap.className = "ev-item-qty";
+        const minus = document.createElement("button");
+        minus.type = "button";
+        minus.className = "ev-step";
+        minus.textContent = "−";
+        minus.setAttribute("aria-label", "ลดจำนวน " + calc.name);
+        const qty = document.createElement("input");
+        qty.type = "text";
+        qty.inputMode = "decimal";
+        qty.className = "ev-qty-input";
+        const current = Number(protectQty.get(String(item.id))) || 0;
+        qty.value = current > 0 ? String(current) : "";
+        qty.placeholder = "0";
+        qty.setAttribute("aria-label", "จำนวน " + calc.name);
+        const plus = document.createElement("button");
+        plus.type = "button";
+        plus.className = "ev-step";
+        plus.textContent = "+";
+        plus.setAttribute("aria-label", "เพิ่มจำนวน " + calc.name);
+
+        const amount = document.createElement("div");
+        amount.className = "ev-item-amount";
+
+        const paint = () => {
+          const value = Number(protectQty.get(String(item.id))) || 0;
+          amount.textContent = value > 0 ? formatMoney(quoRound2(calc.service * value)) : "";
+          row.classList.toggle("is-picked", value > 0);
+        };
+        const setQty = (value) => {
+          const next = Math.max(0, quoRound2(value));
+          if (next > 0) protectQty.set(String(item.id), next);
+          else protectQty.delete(String(item.id));
+          paint();
+          renderProtectSummary();
+        };
+
+        qty.addEventListener("input", () => {
+          const value = quoParseNumber(qty.value);
+          setQty(Number.isNaN(value) ? 0 : value);
+        });
+        minus.addEventListener("click", () => {
+          const value = Math.max(0, (Number(protectQty.get(String(item.id))) || 0) - 1);
+          qty.value = value > 0 ? String(value) : "";
+          setQty(value);
+        });
+        plus.addEventListener("click", () => {
+          const value = (Number(protectQty.get(String(item.id))) || 0) + 1;
+          qty.value = String(value);
+          setQty(value);
+        });
+
+        qtyWrap.append(minus, qty, plus);
+        row.append(name, price, qtyWrap, amount);
+        protectItemsEl.appendChild(row);
+        paint();
+      });
+    });
+
+    renderProtectSummary();
+  }
+
+  function renderProtectSummary() {
+    const calc = computeProtectTotal();
+    protectPickedCount.textContent = calc.lines.length
+      ? "เลือกแล้ว " + calc.lines.length + " รายการ"
+      : "ยังไม่ได้เลือกรายการ";
+
+    protectSummaryEl.innerHTML = "";
+    if (!calc.lines.length) {
+      const dt = document.createElement("dt");
+      dt.textContent = "รวมทั้งสิ้น";
+      dt.classList.add("is-grand");
+      const dd = document.createElement("dd");
+      dd.textContent = formatMoney(0);
+      dd.classList.add("is-grand");
+      protectSummaryEl.append(dt, dd);
+    } else {
+      calc.lines.forEach(line => {
+        const dt = document.createElement("dt");
+        dt.textContent = line.name;
+        const hint = document.createElement("span");
+        hint.className = "ev-summary-hint";
+        hint.textContent = formatMoney(line.service) + " x " + line.qty
+          + (line.usedSurvey ? " · ราคาสืบ" : " · ประมาณการ")
+          + " · กำไร " + line.profitPct + "%";
+        dt.appendChild(hint);
+        const dd = document.createElement("dd");
+        dd.textContent = formatMoney(line.amount);
+        protectSummaryEl.append(dt, dd);
+      });
+      const dt = document.createElement("dt");
+      dt.textContent = "รวมทั้งสิ้น (ก่อน VAT)";
+      dt.classList.add("is-grand");
+      const dd = document.createElement("dd");
+      dd.textContent = formatMoney(calc.total);
+      dd.classList.add("is-grand");
+      protectSummaryEl.append(dt, dd);
+    }
+
+    const parts = [];
+    if (calc.period) parts.push("งวดพัสดุ " + calc.period);
+    if (calc.bookTitle) parts.push("อัตรากำไรจาก “" + calc.bookTitle + "”");
+    if (calc.hasMaintenance) parts.push("คิดกำไรขั้นต้น 10% เพราะใบนี้มีค่าบริการบำรุงรักษา");
+    parts.push("ค่าบริการแต่ละรายการปัดขึ้นหลักสิบแล้วจึงคูณจำนวน");
+    protectSummaryNote.textContent = parts.join(" · ");
+    return calc;
+  }
+
+  protectPeriodSelect.addEventListener("change", () => {
+    protectPeriod = protectPeriodSelect.value;
+    renderProtectItems();
+  });
+  protectBookSelect.addEventListener("change", () => {
+    protectBookId = protectBookSelect.value;
+    renderProtectItems();
+  });
+  protectHasMaintenance.addEventListener("change", renderProtectItems);
+  protectSearch.addEventListener("input", () => {
+    protectSearchQuery = protectSearch.value;
+    renderProtectItems();
+  });
+  protectOnlyPicked.addEventListener("change", renderProtectItems);
+
+  document.getElementById("protectResetBtn").addEventListener("click", () => {
+    if (!protectQty.size) return;
+    if (!confirm("ล้างจำนวนที่เลือกไว้ทั้งหมดใช่หรือไม่?")) return;
+    protectQty = new Map();
+    renderProtectItems();
+  });
+
+  document.getElementById("protectBackBtn").addEventListener("click", () => {
+    protectCalcMode.hidden = true;
+    if (protectReturnToQuotation) {
+      protectReturnToQuotation = false;
+      quotationFormMode.hidden = false;
+    } else {
+      setQuotationTab("docs");
+    }
+  });
+
+  document.getElementById("quotationProtectBtn").addEventListener("click", () => {
+    openProtectCalc({ fromQuotation: true });
+  });
+
+  /**
+   * ใส่ราคาเข้าใบเสนอราคา -- แยกเป็นบรรทัดต่อรายการ (ต่างจาก EV ที่รวมเป็นก้อนเดียว)
+   * เพราะลูกค้าสั่งงานอุปกรณ์ป้องกันเป็นรายชิ้น และราคาต่อหน่วยที่โชว์คือ "ค่าบริการ"
+   * ที่รวมกำไรแล้ว ไม่ใช่ต้นทุน จึงเปิดเผยได้ตามปกติ
+   */
+  document.getElementById("protectApplyBtn").addEventListener("click", () => {
+    hideError(protectError);
+    const calc = computeProtectTotal();
+    if (!calc.lines.length) {
+      showError(protectError, "ยังไม่ได้เลือกรายการ -- ใส่จำนวนอย่างน้อยหนึ่งรายการก่อน");
+      return;
+    }
+    calc.calculatedAt = Date.now();
+
+    protectCalcMode.hidden = true;
+    if (protectReturnToQuotation) {
+      protectReturnToQuotation = false;
+      quotationFormMode.hidden = false;
+    } else {
+      quotationTab = "docs";
+      quoTabBtns.forEach(btn => btn.classList.toggle("active", btn.dataset.quoTab === "docs"));
+      openQuotationForm(null);
+    }
+
+    quoLineModel = quoLineModel.filter(line => !line.fromProtect);
+    calc.lines.forEach(line => {
+      quoLineModel.push({
+        description: line.name,
+        unitPrice: line.service,
+        qty: line.qty,
+        fromProtect: true
+      });
+    });
+    quoProtectCalc = calc;
+    quoVatEnabled.checked = true;
+    renderQuoLines();
+    setQuoDirty(true);
+    scheduleQuoLayout(0);
+    flashQuoSaved("ใส่ " + calc.lines.length + " รายการ รวม "
+      + formatMoney(calc.total) + " บาท (ก่อน VAT) แล้ว");
+  });
+
+  // ------------------------------------------------ จัดการรายการ/ราคา
+  async function openProtectCatalog() {
+    hideError(protectCatalogError);
+    quotationListMode.hidden = true;
+    quotationFormMode.hidden = true;
+    evCalcMode.hidden = true;
+    priceBookMode.hidden = true;
+    protectCalcMode.hidden = true;
+    protectCatalogMode.hidden = false;
+    window.scrollTo(0, 0);
+    await ensureProtectItems();
+    renderProtectCatalogPeriods();
+    renderProtectCatalog();
+  }
+
+  function renderProtectCatalogPeriods() {
+    const periods = protectPeriodList();
+    protectCatalogPeriod.innerHTML = "";
+    if (!periods.length) {
+      const option = document.createElement("option");
+      option.value = "";
+      option.textContent = "ยังไม่มีงวดพัสดุ";
+      protectCatalogPeriod.appendChild(option);
+      protectPeriod = "";
+      return;
+    }
+    periods.forEach((period, index) => {
+      const option = document.createElement("option");
+      option.value = period;
+      option.textContent = "งวด " + period + (index === 0 ? " — ล่าสุด" : "");
+      protectCatalogPeriod.appendChild(option);
+    });
+    if (!periods.includes(protectPeriod)) protectPeriod = periods[0];
+    protectCatalogPeriod.value = protectPeriod;
+  }
+
+  function renderProtectCatalog() {
+    protectCatalogRows.innerHTML = "";
+    const rows = protectItems.filter(item =>
+      (protectData(item).workKind === "remove" ? "remove" : "install") === protectCatalogKind);
+
+    document.getElementById("protectCatalogSubtitle").textContent =
+      PROTECT_KIND_LABEL[protectCatalogKind] + " · " + rows.length + " รายการ"
+      + (protectPeriod ? " · งวด " + protectPeriod : "");
+
+    if (!rows.length) {
+      const tr = document.createElement("tr");
+      const td = document.createElement("td");
+      td.colSpan = 7;
+      td.className = "request-empty";
+      td.textContent = "ยังไม่มีรายการ -- กด “+ เพิ่มรายการ”";
+      tr.appendChild(td);
+      protectCatalogRows.appendChild(tr);
+      return;
+    }
+
+    rows.forEach(item => protectCatalogRows.appendChild(buildProtectRow(item)));
+  }
+
+  function buildProtectRow(item) {
+    const tr = document.createElement("tr");
+    const d = protectData(item);
+    const workKind = d.workKind === "remove" ? "remove" : "install";
+    if (item.isNew) tr.classList.add("price-row-dirty");
+
+    const markDirty = () => {
+      tr.classList.add("price-row-dirty");
+      saveBtn.disabled = false;
+      refreshNet();
+    };
+
+    const textInput = (value, placeholder) => {
+      const input = document.createElement("input");
+      input.type = "text";
+      input.value = value || "";
+      if (placeholder) input.placeholder = placeholder;
+      input.addEventListener("input", markDirty);
+      return input;
+    };
+
+    const code = textInput(d.code || "", "รหัสพัสดุ");
+    const name = document.createElement("textarea");
+    name.className = "price-name-input";
+    name.rows = 1;
+    name.placeholder = "ชื่อรายการ";
+    name.value = item.title || "";
+    name.addEventListener("input", () => { markDirty(); autosizeTextarea(name); });
+
+    const est = protectEstimateFor(item, protectPeriod);
+    const numInput = (value) => {
+      const input = document.createElement("input");
+      input.type = "text";
+      input.inputMode = "decimal";
+      input.value = Number(value) > 0 ? formatMoney(value) : "";
+      input.placeholder = "0.00";
+      input.addEventListener("input", markDirty);
+      input.addEventListener("blur", () => {
+        if (!input.value.trim()) return;
+        const parsed = quoParseNumber(input.value);
+        if (!Number.isNaN(parsed)) input.value = formatMoney(parsed);
+      });
+      return input;
+    };
+    const material = numInput(est ? est.materialCost : 0);
+    const labour = numInput(est ? est.labourCost : 0);
+    // งานรื้อถอนไม่มีค่าวัสดุในสูตร -- ปิดช่องไว้ไม่ให้กรอกแล้วเข้าใจผิดว่าถูกคิด
+    if (workKind === "remove") {
+      material.disabled = true;
+      material.value = "";
+      material.placeholder = "ไม่ใช้";
+    }
+
+    const netCell = document.createElement("td");
+    netCell.className = "price-col-price protect-net";
+    const refreshNet = () => {
+      const breakdown = protectEstimateBreakdown(
+        workKind, quoParseNumber(material.value) || 0, quoParseNumber(labour.value) || 0);
+      netCell.textContent = formatMoney(breakdown.net);
+    };
+    refreshNet();
+
+    const surveyCell = document.createElement("td");
+    surveyCell.className = "price-col-price";
+    const surveyBtn = document.createElement("button");
+    surveyBtn.type = "button";
+    surveyBtn.className = "btn btn-ghost protect-survey-btn";
+    const latest = protectLatestSurvey(item);
+    surveyBtn.textContent = latest
+      ? formatMoney(latest.price) + (latest.date ? " · " + formatThaiDate(latest.date) : "")
+      : "+ เพิ่มราคาสืบ";
+    surveyBtn.addEventListener("click", () => openProtectSurvey(item));
+    surveyCell.appendChild(surveyBtn);
+
+    const saveBtn = document.createElement("button");
+    saveBtn.type = "button";
+    saveBtn.className = "btn btn-primary";
+    saveBtn.textContent = "บันทึก";
+    saveBtn.disabled = !item.isNew;
+
+    const delBtn = document.createElement("button");
+    delBtn.type = "button";
+    delBtn.className = "btn btn-ghost";
+    delBtn.textContent = item.isNew ? "ยกเลิก" : "ลบ";
+
+    saveBtn.addEventListener("click", async () => {
+      hideError(protectCatalogError);
+      const title = name.value.trim();
+      if (!title) { showError(protectCatalogError, "กรุณากรอกชื่อรายการ"); name.focus(); return; }
+      if (!protectPeriod) {
+        showError(protectCatalogError, "ยังไม่มีงวดพัสดุ -- กด “+ งวดพัสดุใหม่” ก่อน");
+        return;
+      }
+      const materialCost = quoParseNumber(material.value) || 0;
+      const labourCost = quoParseNumber(labour.value) || 0;
+      if (Number.isNaN(materialCost) || Number.isNaN(labourCost)) {
+        showError(protectCatalogError, "ค่าวัสดุและค่าแรงต้องเป็นตัวเลข");
+        return;
+      }
+
+      // เขียนทับค่าของงวดที่เลือกเท่านั้น งวดอื่นคงเดิม -- ราคาย้อนหลังต้องไม่ถูกแก้
+      const estimates = protectEstimates(item).filter(e => String(e.period) !== String(protectPeriod));
+      estimates.push({
+        period: protectPeriod,
+        materialCost: quoRound2(workKind === "remove" ? 0 : materialCost),
+        labourCost: quoRound2(labourCost)
+      });
+      estimates.sort((a, b) => comparePeriod(a.period, b.period));
+
+      setBusy(saveBtn, true, "กำลังบันทึก...");
+      try {
+        const saved = await backend.saveWorkItem("protect_item", {
+          id: item.id,
+          title,
+          status: "",
+          data: {
+            code: code.value.trim(),
+            workKind,
+            group: d.group || "",
+            estimates,
+            surveys: protectSurveys(item)
+          }
+        });
+        const index = protectItems.indexOf(item);
+        if (index === -1) protectItems.push(saved);
+        else protectItems[index] = saved;
+        renderProtectCatalogPeriods();
+        renderProtectCatalog();
+      } catch (err) {
+        showError(protectCatalogError, moduleErrorText(err));
+        setBusy(saveBtn, false);
+      }
+    });
+
+    delBtn.addEventListener("click", async () => {
+      if (item.isNew) {
+        protectItems = protectItems.filter(p => p !== item);
+        renderProtectCatalog();
+        return;
+      }
+      if (!confirm("ลบรายการ “" + item.title + "” ใช่หรือไม่?\n(ใบเสนอราคาที่คิดราคาไปแล้วไม่ได้รับผลกระทบ)")) return;
+      setBusy(delBtn, true, "กำลังลบ...");
+      try {
+        await backend.deleteWorkItem(item.id);
+        protectItems = protectItems.filter(p => p !== item);
+        protectQty.delete(String(item.id));
+        renderProtectCatalog();
+      } catch (err) {
+        showError(protectCatalogError, moduleErrorText(err));
+        setBusy(delBtn, false);
+      }
+    });
+
+    const cells = [
+      ["protect-col-code", code],
+      ["", name],
+      ["price-col-price", material],
+      ["price-col-price", labour]
+    ];
+    cells.forEach(([cls, el]) => {
+      const td = document.createElement("td");
+      if (cls) td.className = cls;
+      td.appendChild(el);
+      tr.appendChild(td);
+    });
+    tr.appendChild(netCell);
+    tr.appendChild(surveyCell);
+    const actions = document.createElement("td");
+    actions.className = "price-col-actions";
+    actions.append(saveBtn, " ", delBtn);
+    tr.appendChild(actions);
+    return tr;
+  }
+
+  document.querySelectorAll("[data-protect-kind]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      protectCatalogKind = btn.dataset.protectKind;
+      document.querySelectorAll("[data-protect-kind]").forEach(b =>
+        b.classList.toggle("active", b === btn));
+      renderProtectCatalog();
+    });
+  });
+
+  protectCatalogPeriod.addEventListener("change", () => {
+    protectPeriod = protectCatalogPeriod.value;
+    renderProtectCatalog();
+  });
+
+  document.getElementById("protectManageBtn").addEventListener("click", openProtectCatalog);
+  document.getElementById("protectCatalogBackBtn").addEventListener("click", () => {
+    protectCatalogMode.hidden = true;
+    openProtectCalc({ fromQuotation: protectReturnToQuotation });
+  });
+
+  document.getElementById("protectAddItemBtn").addEventListener("click", () => {
+    protectItems.unshift({
+      id: newWorkItemId(),
+      title: "",
+      data: { code: "", workKind: protectCatalogKind, group: "", estimates: [], surveys: [] },
+      isNew: true,
+      sortOrder: -1
+    });
+    renderProtectCatalog();
+    const first = protectCatalogRows.querySelector("input");
+    if (first) first.focus();
+  });
+
+  /**
+   * งวดพัสดุใหม่ -- ไม่คัดลอกราคาไปล่วงหน้า เพราะ protectEstimateFor() ใช้ค่าจาก
+   * งวดเก่าที่ใกล้ที่สุดอยู่แล้วเมื่องวดใหม่ยังไม่มีค่าของรายการนั้น จึงแก้เฉพาะ
+   * รายการที่ราคาขยับจริง ไม่ต้องไล่บันทึกทุกแถว
+   */
+  document.getElementById("protectAddPeriodBtn").addEventListener("click", () => {
+    const suggestion = nextProtectPeriod();
+    const period = prompt("ชื่องวดพัสดุใหม่ (เช่น 4/2569)", suggestion);
+    if (period === null) return;
+    const name = period.trim();
+    if (!name) return;
+    if (protectPeriodList().includes(name)) {
+      protectPeriod = name;
+      renderProtectCatalogPeriods();
+      renderProtectCatalog();
+      return;
+    }
+    // งวดยังไม่มีรายการไหนใช้ -- ใส่ไว้ในตัวเลือกชั่วคราวจนกว่าจะบันทึกแถวแรก
+    const option = document.createElement("option");
+    option.value = name;
+    option.textContent = "งวด " + name + " (ยังไม่มีราคา)";
+    protectCatalogPeriod.prepend(option);
+    protectPeriod = name;
+    protectCatalogPeriod.value = name;
+    renderProtectCatalog();
+  });
+
+  function nextProtectPeriod() {
+    const periods = protectPeriodList();
+    if (!periods.length) {
+      const year = new Date().getFullYear() + 543;
+      return "1/" + year;
+    }
+    const parts = String(periods[0]).split("/");
+    const no = Number(String(parts[0]).replace(/\D/g, "")) || 0;
+    return (no + 1) + "/" + (parts[1] || "");
+  }
+
+  // ------------------------------------------------------------ ราคาสืบ
+  function openProtectSurvey(item) {
+    protectSurveyEditing = item;
+    protectSurveyDraft = protectSurveys(item).map(sv => ({
+      company: sv.company || "",
+      date: sv.date || "",
+      price: Number(sv.price) || 0
+    }));
+    if (!protectSurveyDraft.length) protectSurveyDraft.push({ company: "", date: todayDateString(), price: 0 });
+    document.getElementById("protectSurveyTitle").textContent = "ราคาสืบ: " + (item.title || "รายการใหม่");
+    hideError(protectSurveyError);
+    renderProtectSurveyRows();
+    protectSurveyModal.hidden = false;
+  }
+
+  function renderProtectSurveyRows() {
+    protectSurveyRows.innerHTML = "";
+    const latest = protectSurveyDraft
+      .filter(sv => Number(sv.price) > 0)
+      .slice()
+      .sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")))[0];
+
+    protectSurveyDraft.forEach((sv, index) => {
+      const tr = document.createElement("tr");
+      if (sv === latest) tr.classList.add("protect-survey-latest");
+
+      const company = document.createElement("input");
+      company.type = "text";
+      company.value = sv.company || "";
+      company.placeholder = "ชื่อบริษัทที่สืบราคา";
+      company.addEventListener("input", () => { sv.company = company.value; });
+
+      const date = document.createElement("input");
+      date.type = "date";
+      date.value = sv.date || "";
+      date.addEventListener("change", () => { sv.date = date.value; renderProtectSurveyRows(); });
+
+      const price = document.createElement("input");
+      price.type = "text";
+      price.inputMode = "decimal";
+      price.value = Number(sv.price) > 0 ? formatMoney(sv.price) : "";
+      price.placeholder = "0.00";
+      price.addEventListener("input", () => {
+        const parsed = quoParseNumber(price.value);
+        sv.price = Number.isNaN(parsed) ? 0 : parsed;
+      });
+      price.addEventListener("blur", () => {
+        if (!price.value.trim()) return;
+        const parsed = quoParseNumber(price.value);
+        if (!Number.isNaN(parsed)) price.value = formatMoney(parsed);
+        renderProtectSurveyRows();
+      });
+
+      [company, date, price].forEach((el, i) => {
+        const td = document.createElement("td");
+        if (i === 1) td.className = "protect-col-date";
+        if (i === 2) td.className = "price-col-price";
+        td.appendChild(el);
+        tr.appendChild(td);
+      });
+
+      const actions = document.createElement("td");
+      actions.className = "price-col-actions";
+      const del = document.createElement("button");
+      del.type = "button";
+      del.className = "btn btn-ghost";
+      del.textContent = "ลบ";
+      del.addEventListener("click", () => {
+        protectSurveyDraft.splice(index, 1);
+        renderProtectSurveyRows();
+      });
+      actions.appendChild(del);
+      tr.appendChild(actions);
+      protectSurveyRows.appendChild(tr);
+    });
+  }
+
+  document.getElementById("protectSurveyAddBtn").addEventListener("click", () => {
+    protectSurveyDraft.push({ company: "", date: todayDateString(), price: 0 });
+    renderProtectSurveyRows();
+  });
+  document.getElementById("protectSurveyCancelBtn").addEventListener("click", () => {
+    protectSurveyModal.hidden = true;
+    protectSurveyEditing = null;
+  });
+  protectSurveyModal.addEventListener("click", (e) => {
+    if (e.target === protectSurveyModal) {
+      protectSurveyModal.hidden = true;
+      protectSurveyEditing = null;
+    }
+  });
+
+  document.getElementById("protectSurveySaveBtn").addEventListener("click", async () => {
+    if (!protectSurveyEditing) return;
+    hideError(protectSurveyError);
+    const rows = protectSurveyDraft.filter(sv => Number(sv.price) > 0 || String(sv.company || "").trim());
+    // บริษัทและวันที่เป็นหลักฐานอ้างอิงของราคาสืบ ไม่มีสองอย่างนี้ราคาก็ใช้ยืนยันไม่ได้
+    const bad = rows.find(sv => !String(sv.company || "").trim() || !sv.date || !(Number(sv.price) > 0));
+    if (bad) {
+      showError(protectSurveyError, "ทุกแถวต้องมีชื่อบริษัท วันที่สืบ และราคามากกว่า 0");
+      return;
+    }
+
+    const item = protectSurveyEditing;
+    const btn = document.getElementById("protectSurveySaveBtn");
+    setBusy(btn, true, "กำลังบันทึก...");
+    try {
+      const d = protectData(item);
+      const saved = await backend.saveWorkItem("protect_item", {
+        id: item.id,
+        title: item.title || "",
+        status: "",
+        data: {
+          code: d.code || "",
+          workKind: d.workKind === "remove" ? "remove" : "install",
+          group: d.group || "",
+          estimates: protectEstimates(item),
+          surveys: rows.map(sv => ({
+            company: String(sv.company).trim(),
+            date: sv.date,
+            price: quoRound2(sv.price)
+          }))
+        }
+      });
+      const index = protectItems.indexOf(item);
+      if (index === -1) protectItems.push(saved);
+      else protectItems[index] = saved;
+      protectSurveyModal.hidden = true;
+      protectSurveyEditing = null;
+      renderProtectCatalog();
+    } catch (err) {
+      showError(protectSurveyError, moduleErrorText(err));
+    } finally {
+      setBusy(btn, false);
+    }
+  });
+
+  /** ล้างหน้าจออุปกรณ์ป้องกันตอนออกจากระบบ */
+  function clearProtectScreens() {
+    protectItems = [];
+    protectItemsLoaded = false;
+    protectQty = new Map();
+    protectPeriod = "";
+    protectBookId = null;
+    protectSurveyEditing = null;
+    protectSurveyDraft = [];
+    protectItemsEl.innerHTML = "";
+    protectSummaryEl.innerHTML = "";
+    protectCatalogRows.innerHTML = "";
+    protectSurveyRows.innerHTML = "";
+    protectSurveyModal.hidden = true;
+    protectCalcMode.hidden = true;
+    protectCatalogMode.hidden = true;
   }
 
   // -------------------------------------------- ระบบรับฟังเสียงของลูกค้า (VOC)

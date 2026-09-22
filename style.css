@@ -4742,3 +4742,56 @@ body.quo-print-body {
   font-size: 16px;
   color: var(--volt-700);
 }
+
+/* ---------------------------- คำนวณราคาอุปกรณ์ป้องกัน (ติดตั้ง / รื้อถอน) ---
+   ใช้โครงเดียวกับเครื่องคำนวณ EV (.ev-layout / .ev-item / .ev-summary) ต่างกันที่
+   แต่ละแถวต้องบอกด้วยว่าราคาที่ใช้มาจากทางไหน (ประมาณการ กฟภ. หรือราคาสืบ) */
+.protect-maintenance {
+  margin: 0 0 14px;
+  padding: 10px 14px;
+  background: var(--warning-tint);
+  border: 1px solid var(--warning);
+  border-radius: 10px;
+}
+
+.protect-item .ev-item-price { line-height: 1.3; }
+.protect-src {
+  display: block;
+  margin-top: 2px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ink-soft);
+}
+.ev-item.is-picked .protect-src { color: var(--volt-700); }
+
+.protect-period-pick {
+  padding: 7px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font: inherit;
+  background: var(--white);
+}
+
+.protect-table .protect-col-code { width: 130px; }
+.protect-table .protect-net {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  color: var(--volt-700);
+  text-align: right;
+}
+.protect-survey-btn {
+  width: 100%;
+  padding: 6px 8px;
+  font-size: 13px;
+  white-space: nowrap;
+}
+.protect-col-date { width: 160px; }
+
+/* แถวราคาสืบที่ระบบใช้จริง (วันที่ใหม่สุด) -- ประวัติเก่ายังอยู่ครบแต่ไม่ถูกใช้ */
+.protect-survey-latest { background: var(--success-tint); }
+.protect-survey-latest td:first-child::after {
+  content: " (ใช้ราคานี้)";
+  font-size: 12px;
+  color: var(--success);
+  font-weight: 600;
+}
