@@ -11692,6 +11692,9 @@ ${sheetHtml}
   let quoPendingId = null;
   // รายการในตาราง -- ผูกสดกับช่องบนกระดาษ ทุกการพิมพ์เขียนลงที่นี่ทันที
   let quoLineModel = [];
+  // สำเนาผลคำนวณราคา EV ของใบที่เปิดอยู่ (จากเครื่องคำนวณ) -- เก็บไว้กับใบเพื่อ
+  // ให้เปิดกลับมาแก้ต่อได้ และเพื่อให้ราคาที่เสนอไปแล้วไม่เปลี่ยนตามงวดราคา
+  let quoEvCalc = null;
   let quoDirtyFlag = false;
 
   const QUOTATION_STATUS_TONE = {
@@ -12050,8 +12053,10 @@ ${sheetHtml}
     quoLineModel = (Array.isArray(base.lines) ? base.lines : []).map(l => ({
       description: String(l.description || ""),
       unitPrice: Number(l.unitPrice ?? l.price) || 0,
-      qty: Number(l.qty) || 0
+      qty: Number(l.qty) || 0,
+      fromEv: Boolean(l.fromEv)
     }));
+    quoEvCalc = base.evCalc || null;
     quoVatEnabled.checked = base.vatEnabled !== false;
     quoThaiDigits.checked = Boolean(base.thaiDigits);
     quoPaper.classList.toggle("is-thai-digits", quoThaiDigits.checked);
@@ -12096,12 +12101,18 @@ ${sheetHtml}
     quoFieldEls.forEach(el => { data[el.dataset.field] = quoReadField(el); });
     data.lines = quoLineModel
       .filter(l => String(l.description || "").trim() || Number(l.unitPrice) || Number(l.qty))
-      .map(l => ({
-        description: String(l.description || "").trim(),
-        unitPrice: quoRound2(l.unitPrice),
-        qty: Number(l.qty) || 0
-      }));
+      .map(l => {
+        const line = {
+          description: String(l.description || "").trim(),
+          unitPrice: quoRound2(l.unitPrice),
+          qty: Number(l.qty) || 0
+        };
+        if (l.fromEv) line.fromEv = true;
+        return line;
+      });
     data.vatEnabled = quoVatEnabled.checked;
+    // สำเนาผลคำนวณ EV -- ราคาในใบนี้จะไม่เปลี่ยนตามเมื่อแก้ราคาในงวดภายหลัง
+    if (quoEvCalc) data.evCalc = quoEvCalc;
     data.thaiDigits = quoThaiDigits.checked;
     // คำต่อท้ายหน้าที่แก้เอง (key = เลขหน้า) -- ไม่มี = ใช้ค่าอัตโนมัติ
     data.contTexts = { ...quoContOverrides };
@@ -12759,6 +12770,8 @@ ${sheetHtml}
 
   function showQuotationList() {
     quotationFormMode.hidden = true;
+    evCalcMode.hidden = true;
+    priceBookMode.hidden = true;
     quotationListMode.hidden = false;
     renderQuotationTab();
     window.scrollTo(0, 0);
@@ -12775,6 +12788,16 @@ ${sheetHtml}
   quoTabBtns.forEach(btn => btn.addEventListener("click", () => setQuotationTab(btn.dataset.quoTab)));
 
   async function renderQuotationTab() {
+    // แท็บ "คำนวณราคา EV Charger" ไม่ใช่รายการ -- เป็นหน้าเครื่องคำนวณของตัวเอง
+    if (quotationTab === "ev") {
+      quotationListMode.hidden = true;
+      await openEvCalc();
+      return;
+    }
+    evCalcMode.hidden = true;
+    priceBookMode.hidden = true;
+    quotationListMode.hidden = false;
+
     quotationAddBtn.hidden = quotationTab !== "docs";
     priceItemAddBtn.hidden = quotationTab !== "prices";
     quotationSearch.placeholder = quotationTab === "prices"
@@ -12782,7 +12805,8 @@ ${sheetHtml}
       : "ค้นหาด้วยเรื่อง, ผู้รับ, เลขที่หนังสือ...";
 
     if (quotationTab === "prices") {
-      quotationListTitle.textContent = "รายการราคา";
+      quotationListTitle.textContent = "ราคาและค่าแรง";
+      await ensurePriceBooks();
       await ensurePriceItems();
       renderPriceItems();
       return;
@@ -12943,6 +12967,12 @@ ${sheetHtml}
     const rows = sortedPriceItems(priceItems).filter(item => item.isNew || priceMatches(item, query));
     quotationCount.textContent = `ทั้งหมด ${priceItems.filter(p => !p.isNew).length} รายการ`;
     quotationList.innerHTML = "";
+    quotationList.appendChild(renderPriceBooksSection());
+
+    const priceHead = document.createElement("h3");
+    priceHead.className = "book-section-head";
+    priceHead.textContent = "รายการราคาเดี่ยว (หยิบใส่ใบเสนอราคาได้ทีละรายการ)";
+    quotationList.appendChild(priceHead);
 
     const hint = document.createElement("p");
     hint.className = "field-hint";
@@ -13175,7 +13205,981 @@ ${sheetHtml}
     removeQuoGaps();
     quoFieldEls.forEach(el => { el.innerHTML = ""; });
     quoContOverrides = {};
+    quoEvCalc = null;
     setQuoDirty(false);
+    clearPricingScreens();
+  }
+
+  // ============================================ งวดราคา + คำนวณราคา EV Charger
+  /**
+   * งานธุรกิจเสริม: คิดราคางานติดตั้ง EV Charger วงจรที่ 2 ของบ้านอยู่อาศัย
+   *
+   *   ราคาอุปกรณ์ + ค่าแรงคนงาน + ค่าควบคุมงาน      = ต้นทุนสืบราคา
+   *   + ค่าดำเนินการ (ร้อยละของต้นทุนสืบราคา)        = ต้นทุนรวม
+   *   + กำไร (ร้อยละของต้นทุนรวม ตามช่วงต้นทุน)      = ราคาเสนอ
+   *   ปัดขึ้นหลักสิบ  ->  + VAT 7%                   = ราคารวมภาษี
+   *
+   * ทุกราคาและทุกอัตราอ่านจาก "งวดราคา" (kind = price_book) ที่เลือก ไม่ฝังในโค้ด
+   * -- ราคาของและค่าแรงขึ้นทุกปี ถ้าฝังไว้จะแก้ได้เฉพาะคนที่แก้โค้ดเป็น
+   *
+   * หนึ่งงวด = หนึ่งแถว (ราคาทุกรายการ + ค่าแรงทุกจำนวนวัน + อัตราทั้งหมด) แก้ทั้ง
+   * งวดแล้วกดบันทึกครั้งเดียว อัปเดตราคาประจำงวดจึงไม่มีสภาพ "แก้ไปได้ครึ่งเดียว"
+   * และการสร้างงวดใหม่คือคัดลอกงวดเดิมมาแก้ -- ราคาเก่าทั้งชุดยังอยู่ครบเสมอ
+   *
+   * ใบเสนอราคาที่คิดจากงวดไหนแล้ว เก็บ "สำเนาผลคำนวณ" ไว้ในใบนั้น (data.evCalc)
+   * แก้ราคาในงวดภายหลังจึงไม่ย้อนไปเปลี่ยนใบที่เสนอลูกค้าไปแล้ว
+   */
+  const EV_VAT_PCT = 7;
+  const EV_DEFAULT_JOB_NAME =
+    "ติดตั้งเครื่องอัดประจุยานยนต์ไฟฟ้า (EV Charger) วงจรที่ 2 สำหรับบ้านอยู่อาศัย";
+
+  let priceBooks = [];
+  let priceBooksLoaded = false;
+  let bookEditing = null;     // งวดที่กำลังแก้ (null = งวดใหม่ ยังไม่เคยบันทึก)
+  let bookDraft = null;       // สำเนาที่กำลังแก้ -- บันทึกสำเร็จแล้วค่อยทับของจริง
+  let bookDirtyFlag = false;
+  let bookItemQuery = "";
+
+  let evQty = new Map();      // key ของรายการ -> จำนวนที่เลือก
+  let evBookId = null;
+  let evDays = null;
+  let evSearchQuery = "";
+  let evReturnToQuotation = false;   // เปิดจากใบเสนอราคา -> ใส่ราคากลับใบเดิม
+
+  const evCalcMode = document.getElementById("evCalcMode");
+  const priceBookMode = document.getElementById("priceBookMode");
+  const evBookSelect = document.getElementById("evBook");
+  const evDaysSelect = document.getElementById("evDays");
+  const evJobName = document.getElementById("evJobName");
+  const evItemsEl = document.getElementById("evItems");
+  const evSummaryEl = document.getElementById("evSummary");
+  const evSummaryNote = document.getElementById("evSummaryNote");
+  const evError = document.getElementById("evError");
+  const evSearch = document.getElementById("evSearch");
+  const evOnlyPicked = document.getElementById("evOnlyPicked");
+  const evPickedCount = document.getElementById("evPickedCount");
+  const evSubtitle = document.getElementById("evSubtitle");
+  const bookError = document.getElementById("bookError");
+  const bookDirty = document.getElementById("bookDirty");
+  const bookItemsEl = document.getElementById("bookItems");
+  const bookLabourEl = document.getElementById("bookLabour");
+  const bookTiersEl = document.getElementById("bookTiers");
+  const pricePasteModal = document.getElementById("pricePasteModal");
+  const pricePasteInput = document.getElementById("pricePasteInput");
+  const pricePasteError = document.getElementById("pricePasteError");
+
+  async function ensurePriceBooks(force) {
+    if (priceBooksLoaded && !force) return;
+    try {
+      priceBooks = await backend.loadWorkItems("price_book");
+      priceBooksLoaded = true;
+    } catch (err) {
+      priceBooks = [];
+      showError(quotationError, moduleErrorText(err));
+    }
+  }
+
+  /** งวดที่ใช้อยู่ตอนนี้ = งวดที่ยังไม่ยกเลิก ซึ่งเริ่มใช้แล้วและใหม่ที่สุด */
+  function currentPriceBook() {
+    const today = todayDateString();
+    const usable = priceBooks
+      .filter(b => b.status !== "ยกเลิก")
+      .sort((a, b) => String((b.data && b.data.effectiveFrom) || "")
+        .localeCompare(String((a.data && a.data.effectiveFrom) || "")));
+    return usable.find(b => String((b.data && b.data.effectiveFrom) || "") <= today) || usable[0] || null;
+  }
+
+  function priceBookById(id) {
+    return priceBooks.find(b => String(b.id) === String(id)) || null;
+  }
+
+  function bookLabourRows(book) {
+    const rows = book && book.data && Array.isArray(book.data.labour) ? book.data.labour : [];
+    return rows.slice().sort((a, b) => (Number(a.days) || 0) - (Number(b.days) || 0));
+  }
+
+  /** อัตรากำไรตามต้นทุนรวม -- ช่วงที่เว้น "ไม่เกิน" ว่างคือช่วงบนสุด */
+  function profitPctFor(book, cost) {
+    const tiers = book && book.data && Array.isArray(book.data.profitTiers) ? book.data.profitTiers : [];
+    const bounded = tiers.filter(t => Number(t.max) > 0).sort((a, b) => Number(a.max) - Number(b.max));
+    const hit = bounded.find(t => cost <= Number(t.max));
+    if (hit) return Number(hit.pct) || 0;
+    const open = tiers.find(t => !(Number(t.max) > 0));
+    return open ? Number(open.pct) || 0 : 0;
+  }
+
+  /**
+   * คิดราคาทั้งชุด ปัดทศนิยม 2 ตำแหน่งทีละขั้นเหมือนกระดาษคำนวณของแผนก
+   * แล้วปัดขึ้นหลักสิบที่ "ราคาเสนอ" ก่อนคิดภาษี
+   */
+  function computeEvPrice(book, days, qtyMap) {
+    const items = book && book.data && Array.isArray(book.data.items) ? book.data.items : [];
+    const lines = items
+      .map(item => ({ item, qty: Number(qtyMap.get(item.key)) || 0 }))
+      .filter(row => row.qty > 0)
+      .map(row => ({
+        key: row.item.key,
+        group: row.item.group || "",
+        name: row.item.name || "",
+        unit: row.item.unit || "",
+        brand: row.item.brand || "",
+        price: Number(row.item.price) || 0,
+        qty: row.qty,
+        amount: quoRound2((Number(row.item.price) || 0) * row.qty)
+      }));
+
+    const labour = bookLabourRows(book).find(l => Number(l.days) === Number(days)) || null;
+    const materialTotal = quoRound2(lines.reduce((sum, row) => sum + row.amount, 0));
+    const wage = quoRound2(labour ? labour.wage : 0);
+    const supervision = quoRound2(labour ? labour.supervision : 0);
+    const baseCost = quoRound2(materialTotal + wage + supervision);
+    const overheadPct = Number(book && book.data && book.data.overheadPct) || 0;
+    const overhead = quoRound2(baseCost * overheadPct / 100);
+    const costTotal = quoRound2(baseCost + overhead);
+    const profitPct = profitPctFor(book, costTotal);
+    const profit = quoRound2(costTotal * profitPct / 100);
+    const total = quoRound2(costTotal + profit);
+    const say = Math.ceil(total / 10) * 10;
+    const vat = quoRound2(say * EV_VAT_PCT / 100);
+    const grand = quoRound2(say + vat);
+
+    return {
+      bookId: book ? book.id : null,
+      bookTitle: book ? book.title : "",
+      days: Number(days) || 0,
+      lines: lines,
+      materialTotal: materialTotal,
+      wage: wage,
+      supervision: supervision,
+      baseCost: baseCost,
+      overheadPct: overheadPct,
+      overhead: overhead,
+      costTotal: costTotal,
+      profitPct: profitPct,
+      profit: profit,
+      total: total,
+      say: say,
+      vatPct: EV_VAT_PCT,
+      vat: vat,
+      grand: grand
+    };
+  }
+
+  // ------------------------------------------------------------ เครื่องคำนวณ
+  async function openEvCalc(options) {
+    const opts = options || {};
+    hideError(evError);
+    evReturnToQuotation = Boolean(opts.fromQuotation);
+    quotationListMode.hidden = true;
+    quotationFormMode.hidden = true;
+    priceBookMode.hidden = true;
+    evCalcMode.hidden = false;
+    window.scrollTo(0, 0);
+
+    evItemsEl.innerHTML = '<div class="request-empty">กำลังโหลดราคา...</div>';
+    await ensurePriceBooks();
+
+    // เปิดจากใบที่เคยคิดราคาไว้แล้ว -- ตั้งค่าตามครั้งก่อนให้แก้ต่อได้เลย
+    const prev = opts.fromQuotation ? quoEvCalc : null;
+    const book = (prev && priceBookById(prev.bookId)) || currentPriceBook();
+    evBookId = book ? book.id : null;
+    evQty = new Map();
+    if (prev && Array.isArray(prev.lines)) prev.lines.forEach(l => evQty.set(l.key, Number(l.qty) || 0));
+    evDays = prev ? Number(prev.days) : null;
+    evJobName.value = (prev && prev.jobName) || EV_DEFAULT_JOB_NAME;
+    evSearch.value = "";
+    evSearchQuery = "";
+    evOnlyPicked.checked = false;
+
+    renderEvBookOptions();
+    renderEvDaysOptions();
+    renderEvItems();
+    evSubtitle.textContent = evReturnToQuotation
+      ? "คิดราคาแล้วกด “ใส่ราคาในใบเสนอราคา” เพื่อกลับไปที่ใบเดิม"
+      : "คิดราคาแล้วกด “ใส่ราคาในใบเสนอราคา” เพื่อสร้างใบใหม่จากราคานี้";
+  }
+
+  function renderEvBookOptions() {
+    evBookSelect.innerHTML = "";
+    const usable = priceBooks.filter(b => b.status !== "ยกเลิก" || String(b.id) === String(evBookId));
+    if (!usable.length) {
+      const option = document.createElement("option");
+      option.textContent = "ยังไม่มีงวดราคา -- สร้างที่แท็บ “ราคาและค่าแรง”";
+      evBookSelect.appendChild(option);
+      evBookSelect.disabled = true;
+      evBookId = null;
+      return;
+    }
+    evBookSelect.disabled = false;
+    const current = currentPriceBook();
+    usable
+      .slice()
+      .sort((a, b) => String((b.data && b.data.effectiveFrom) || "")
+        .localeCompare(String((a.data && a.data.effectiveFrom) || "")))
+      .forEach(book => {
+        const option = document.createElement("option");
+        option.value = String(book.id);
+        const from = book.data && book.data.effectiveFrom
+          ? " (เริ่มใช้ " + formatThaiDate(book.data.effectiveFrom) + ")" : "";
+        const tag = current && String(current.id) === String(book.id) ? " — งวดปัจจุบัน" : "";
+        option.textContent = book.title + from + tag;
+        evBookSelect.appendChild(option);
+      });
+    if (evBookId && priceBookById(evBookId)) evBookSelect.value = String(evBookId);
+    else evBookId = evBookSelect.value;
+  }
+
+  function renderEvDaysOptions() {
+    const rows = bookLabourRows(priceBookById(evBookId));
+    evDaysSelect.innerHTML = "";
+    if (!rows.length) {
+      const option = document.createElement("option");
+      option.textContent = "งวดนี้ยังไม่มีค่าแรง";
+      evDaysSelect.appendChild(option);
+      evDaysSelect.disabled = true;
+      evDays = null;
+      return;
+    }
+    evDaysSelect.disabled = false;
+    rows.forEach(row => {
+      const option = document.createElement("option");
+      option.value = String(row.days);
+      option.textContent = row.days + " วัน — ค่าแรง " + formatMoney(row.wage)
+        + " / ควบคุมงาน " + formatMoney(row.supervision);
+      evDaysSelect.appendChild(option);
+    });
+    if (!rows.some(r => Number(r.days) === Number(evDays))) evDays = rows[0].days;
+    evDaysSelect.value = String(evDays);
+  }
+
+  function renderEvItems() {
+    const book = priceBookById(evBookId);
+    const items = book && book.data && Array.isArray(book.data.items) ? book.data.items : [];
+    const query = evSearchQuery.trim().toLowerCase();
+    evItemsEl.innerHTML = "";
+
+    const shown = items.filter(item => {
+      if (evOnlyPicked.checked && !(Number(evQty.get(item.key)) > 0)) return false;
+      if (!query) return true;
+      return [item.name, item.group, item.brand, item.unit]
+        .some(v => String(v || "").toLowerCase().includes(query));
+    });
+
+    if (!shown.length) {
+      const empty = document.createElement("div");
+      empty.className = "request-empty";
+      empty.textContent = items.length ? "ไม่พบรายการที่ค้นหา" : "งวดนี้ยังไม่มีรายการอุปกรณ์";
+      evItemsEl.appendChild(empty);
+      renderEvSummary();
+      return;
+    }
+
+    let lastGroup = null;
+    shown.forEach(item => {
+      const group = item.group || "ไม่ระบุหมวด";
+      if (group !== lastGroup) {
+        const head = document.createElement("div");
+        head.className = "ev-group";
+        head.textContent = group;
+        evItemsEl.appendChild(head);
+        lastGroup = group;
+      }
+
+      const row = document.createElement("div");
+      row.className = "ev-item";
+
+      const name = document.createElement("div");
+      name.className = "ev-item-name";
+      name.textContent = item.name;
+      if (item.brand) {
+        const brand = document.createElement("span");
+        brand.className = "ev-item-brand";
+        brand.textContent = item.brand;
+        name.appendChild(brand);
+      }
+
+      const price = document.createElement("div");
+      price.className = "ev-item-price";
+      price.textContent = formatMoney(item.price) + " / " + (item.unit || "หน่วย");
+
+      const qtyWrap = document.createElement("div");
+      qtyWrap.className = "ev-item-qty";
+      const minus = document.createElement("button");
+      minus.type = "button";
+      minus.className = "ev-step";
+      minus.textContent = "−";
+      minus.setAttribute("aria-label", "ลดจำนวน " + item.name);
+      const qty = document.createElement("input");
+      qty.type = "text";
+      qty.inputMode = "decimal";
+      qty.className = "ev-qty-input";
+      qty.value = Number(evQty.get(item.key)) > 0 ? String(evQty.get(item.key)) : "";
+      qty.placeholder = "0";
+      qty.setAttribute("aria-label", "จำนวน " + item.name);
+      const plus = document.createElement("button");
+      plus.type = "button";
+      plus.className = "ev-step";
+      plus.textContent = "+";
+      plus.setAttribute("aria-label", "เพิ่มจำนวน " + item.name);
+
+      const amount = document.createElement("div");
+      amount.className = "ev-item-amount";
+
+      const paint = () => {
+        const value = Number(evQty.get(item.key)) || 0;
+        amount.textContent = value > 0 ? formatMoney(quoRound2(value * (Number(item.price) || 0))) : "";
+        row.classList.toggle("is-picked", value > 0);
+      };
+      const setQty = (value) => {
+        const next = Math.max(0, quoRound2(value));
+        if (next > 0) evQty.set(item.key, next);
+        else evQty.delete(item.key);
+        paint();
+        renderEvSummary();
+      };
+
+      qty.addEventListener("input", () => {
+        const value = quoParseNumber(qty.value);
+        setQty(Number.isNaN(value) ? 0 : value);
+      });
+      minus.addEventListener("click", () => {
+        const value = Math.max(0, (Number(evQty.get(item.key)) || 0) - 1);
+        qty.value = value > 0 ? String(value) : "";
+        setQty(value);
+      });
+      plus.addEventListener("click", () => {
+        const value = (Number(evQty.get(item.key)) || 0) + 1;
+        qty.value = String(value);
+        setQty(value);
+      });
+
+      qtyWrap.append(minus, qty, plus);
+      row.append(name, price, qtyWrap, amount);
+      evItemsEl.appendChild(row);
+      paint();
+    });
+
+    renderEvSummary();
+  }
+
+  function renderEvSummary() {
+    const book = priceBookById(evBookId);
+    const calc = computeEvPrice(book, evDays, evQty);
+    evPickedCount.textContent = calc.lines.length
+      ? "เลือกแล้ว " + calc.lines.length + " รายการ"
+      : "ยังไม่ได้เลือกอุปกรณ์";
+
+    const rows = [
+      ["ราคาอุปกรณ์", calc.materialTotal, "", ""],
+      ["ค่าแรงคนงาน", calc.wage, calc.days + " วัน", ""],
+      ["ค่าควบคุมงาน", calc.supervision, calc.days + " วัน", ""],
+      ["รวมต้นทุนสืบราคา", calc.baseCost, "", "is-sub"],
+      ["ค่าดำเนินการ " + calc.overheadPct + "%", calc.overhead, "", ""],
+      ["ต้นทุนรวม", calc.costTotal, "", "is-sub"],
+      ["กำไร " + calc.profitPct + "%", calc.profit, "", ""],
+      ["รวมก่อนปัดเศษ", calc.total, "", ""],
+      ["ราคาเสนอ (ปัดขึ้นหลักสิบ)", calc.say, "", "is-say"],
+      ["ภาษีมูลค่าเพิ่ม " + calc.vatPct + "%", calc.vat, "", ""],
+      ["รวมทั้งสิ้น", calc.grand, "", "is-grand"]
+    ];
+
+    evSummaryEl.innerHTML = "";
+    rows.forEach(entry => {
+      const dt = document.createElement("dt");
+      dt.textContent = entry[0];
+      if (entry[2]) {
+        const small = document.createElement("span");
+        small.className = "ev-summary-hint";
+        small.textContent = entry[2];
+        dt.appendChild(small);
+      }
+      const dd = document.createElement("dd");
+      dd.textContent = formatMoney(entry[1]);
+      if (entry[3]) { dt.classList.add(entry[3]); dd.classList.add(entry[3]); }
+      evSummaryEl.append(dt, dd);
+    });
+
+    evSummaryNote.textContent = book
+      ? "อัตราทั้งหมดมาจากงวด “" + book.title
+        + "” -- ใบเสนอราคาที่ออกไปแล้วจะไม่เปลี่ยนตามเมื่อแก้ราคาในงวดภายหลัง"
+      : "ยังไม่ได้เลือกงวดราคา";
+    return calc;
+  }
+
+  evBookSelect.addEventListener("change", () => {
+    evBookId = evBookSelect.value;
+    // รายการของคนละงวดเป็นคนละ key -- ล้างจำนวนที่เลือกไว้ ไม่ให้ค้างของที่ไม่มีอยู่
+    evQty = new Map();
+    renderEvDaysOptions();
+    renderEvItems();
+  });
+  evDaysSelect.addEventListener("change", () => {
+    evDays = Number(evDaysSelect.value);
+    renderEvSummary();
+  });
+  evSearch.addEventListener("input", () => { evSearchQuery = evSearch.value; renderEvItems(); });
+  evOnlyPicked.addEventListener("change", renderEvItems);
+
+  document.getElementById("evResetBtn").addEventListener("click", () => {
+    if (!evQty.size) return;
+    if (!confirm("ล้างจำนวนอุปกรณ์ที่เลือกไว้ทั้งหมดใช่หรือไม่?")) return;
+    evQty = new Map();
+    renderEvItems();
+  });
+
+  document.getElementById("evBackBtn").addEventListener("click", () => {
+    evCalcMode.hidden = true;
+    if (evReturnToQuotation) {
+      evReturnToQuotation = false;
+      quotationFormMode.hidden = false;
+    } else {
+      setQuotationTab("docs");
+    }
+  });
+
+  /**
+   * ส่งราคาเข้าใบเสนอราคาเป็น "รายการเดียว" ราคาเสนอก่อน VAT -- ไม่แจกแจงอุปกรณ์
+   * ให้ลูกค้าเห็น เพราะราคาต่อหน่วยในงวดเป็น "ต้นทุน" ยังไม่รวมค่าดำเนินการและ
+   * กำไร เอาไปโชว์แล้วยอดในใบจะไม่ตรงกับราคาที่เสนอจริง
+   * รายละเอียดการคิดทั้งหมดเก็บไว้ในใบ (data.evCalc) เปิดกลับมาดู/แก้ต่อได้
+   */
+  document.getElementById("evApplyBtn").addEventListener("click", () => {
+    hideError(evError);
+    const book = priceBookById(evBookId);
+    if (!book) { showError(evError, "ยังไม่ได้เลือกงวดราคา"); return; }
+    const calc = computeEvPrice(book, evDays, evQty);
+    if (!calc.lines.length) {
+      showError(evError, "ยังไม่ได้เลือกอุปกรณ์ -- ใส่จำนวนอย่างน้อยหนึ่งรายการก่อน");
+      return;
+    }
+    calc.jobName = evJobName.value.trim() || EV_DEFAULT_JOB_NAME;
+    calc.calculatedAt = Date.now();
+
+    evCalcMode.hidden = true;
+    if (evReturnToQuotation) {
+      evReturnToQuotation = false;
+      quotationFormMode.hidden = false;
+    } else {
+      // กลับไปแท็บเอกสารก่อน ไม่งั้นบันทึกเสร็จแล้วหน้าจะเด้งเข้าเครื่องคำนวณอีก
+      quotationTab = "docs";
+      quoTabBtns.forEach(btn => btn.classList.toggle("active", btn.dataset.quoTab === "docs"));
+      openQuotationForm(null);
+    }
+
+    // รายการที่มาจากเครื่องคำนวณถูกแทนที่ ไม่ใช่เพิ่มซ้ำเมื่อคิดราคาใหม่
+    quoLineModel = quoLineModel.filter(line => !line.fromEv);
+    quoLineModel.push({ description: calc.jobName, unitPrice: calc.say, qty: 1, fromEv: true });
+    quoEvCalc = calc;
+    quoVatEnabled.checked = true;
+    renderQuoLines();
+    setQuoDirty(true);
+    scheduleQuoLayout(0);
+    flashQuoSaved("ใส่ราคา " + formatMoney(calc.say) + " บาท (ก่อน VAT) ในใบเสนอราคาแล้ว");
+  });
+
+  document.getElementById("quotationEvBtn").addEventListener("click", () => {
+    openEvCalc({ fromQuotation: true });
+  });
+
+  // ---------------------------------------------------------------- งวดราคา
+  function setBookDirty(dirty) {
+    bookDirtyFlag = dirty;
+    bookDirty.textContent = "ยังไม่ได้บันทึก";
+    bookDirty.hidden = !dirty;
+  }
+
+  function flashBookSaved(text) {
+    bookDirty.textContent = text;
+    bookDirty.hidden = false;
+    setTimeout(() => { if (!bookDirtyFlag) bookDirty.hidden = true; }, 3000);
+  }
+
+  function newPriceBookDraft(source) {
+    if (source && source.data) return JSON.parse(JSON.stringify(source.data));
+    return {
+      effectiveFrom: todayDateString(),
+      note: "",
+      overheadPct: 7.5,
+      labour: [
+        { days: 1, wage: 0, supervision: 0 },
+        { days: 2, wage: 0, supervision: 0 },
+        { days: 3, wage: 0, supervision: 0 }
+      ],
+      profitTiers: [
+        { max: 200000, pct: 25 },
+        { max: 500000, pct: 20 },
+        { max: 1000000, pct: 15 },
+        { max: 2000000, pct: 10 },
+        { max: null, pct: 8 }
+      ],
+      items: []
+    };
+  }
+
+  function openPriceBook(book, options) {
+    const opts = options || {};
+    bookEditing = opts.copy ? null : (book || null);
+    bookDraft = newPriceBookDraft(book);
+    if (!Array.isArray(bookDraft.labour)) bookDraft.labour = [];
+    if (!Array.isArray(bookDraft.profitTiers)) bookDraft.profitTiers = [];
+    if (!Array.isArray(bookDraft.items)) bookDraft.items = [];
+    if (opts.copy) {
+      bookDraft.effectiveFrom = todayDateString();
+      bookDraft.note = "";
+    }
+    bookItemQuery = "";
+    document.getElementById("bookItemSearch").value = "";
+    hideError(bookError);
+
+    document.getElementById("bookName").value = opts.copy
+      ? book.title + " (คัดลอก)"
+      : (book ? book.title : "");
+    document.getElementById("bookFrom").value = bookDraft.effectiveFrom || todayDateString();
+    document.getElementById("bookStatus").value = (bookEditing && bookEditing.status) || "ใช้งาน";
+    document.getElementById("bookNote").value = bookDraft.note || "";
+    document.getElementById("bookOverhead").value =
+      bookDraft.overheadPct === null || bookDraft.overheadPct === undefined
+        ? "" : String(bookDraft.overheadPct);
+    document.getElementById("bookTitleText").textContent = bookEditing ? "แก้ไขงวดราคา" : "งวดราคาใหม่";
+    document.getElementById("bookSubtitle").textContent = bookEditing
+      ? "แก้ไขล่าสุด: " + (bookEditing.updatedByName || bookEditing.createdByName || "-")
+      : (opts.copy ? "คัดลอกราคาทั้งหมดจาก “" + book.title + "” มาแก้ต่อ" : "ยังไม่ได้บันทึก");
+    document.getElementById("bookDeleteBtn").hidden = !bookEditing;
+
+    renderBookLabour();
+    renderBookTiers();
+    renderBookItems();
+    setBookDirty(false);
+
+    quotationListMode.hidden = true;
+    quotationFormMode.hidden = true;
+    evCalcMode.hidden = true;
+    priceBookMode.hidden = false;
+    window.scrollTo(0, 0);
+  }
+
+  /** ช่องกรอกตัวเลข: แก้แล้วขึ้น "ยังไม่ได้บันทึก" และจัดรูปแบบตอนออกจากช่อง */
+  function bookNumberInput(value, onChange, options) {
+    const opts = options || {};
+    const input = document.createElement("input");
+    input.type = "text";
+    input.inputMode = "decimal";
+    const blank = value === null || value === undefined || value === "";
+    input.value = blank ? "" : (opts.plain ? String(value) : formatMoney(value));
+    if (opts.placeholder) input.placeholder = opts.placeholder;
+    input.addEventListener("input", () => {
+      const parsed = quoParseNumber(input.value);
+      onChange(Number.isNaN(parsed) ? 0 : parsed);
+      setBookDirty(true);
+    });
+    input.addEventListener("blur", () => {
+      if (!input.value.trim()) return;
+      const parsed = quoParseNumber(input.value);
+      if (Number.isNaN(parsed)) return;
+      input.value = opts.plain ? String(parsed) : formatMoney(parsed);
+    });
+    return input;
+  }
+
+  function bookDeleteCell(onDelete) {
+    const td = document.createElement("td");
+    td.className = "price-col-actions";
+    const del = document.createElement("button");
+    del.type = "button";
+    del.className = "btn btn-ghost";
+    del.textContent = "ลบ";
+    del.addEventListener("click", onDelete);
+    td.appendChild(del);
+    return td;
+  }
+
+  function renderBookLabour() {
+    bookLabourEl.innerHTML = "";
+    bookDraft.labour.forEach((row, index) => {
+      const tr = document.createElement("tr");
+      const tdDays = document.createElement("td");
+      tdDays.appendChild(bookNumberInput(row.days, v => { row.days = v; },
+        { plain: true, placeholder: "วัน" }));
+      const tdWage = document.createElement("td");
+      tdWage.className = "price-col-price";
+      tdWage.appendChild(bookNumberInput(row.wage, v => { row.wage = v; }));
+      const tdSup = document.createElement("td");
+      tdSup.className = "price-col-price";
+      tdSup.appendChild(bookNumberInput(row.supervision, v => { row.supervision = v; }));
+      tr.append(tdDays, tdWage, tdSup, bookDeleteCell(() => {
+        bookDraft.labour.splice(index, 1);
+        setBookDirty(true);
+        renderBookLabour();
+      }));
+      bookLabourEl.appendChild(tr);
+    });
+  }
+
+  function renderBookTiers() {
+    bookTiersEl.innerHTML = "";
+    bookDraft.profitTiers.forEach((tier, index) => {
+      const tr = document.createElement("tr");
+      const tdMax = document.createElement("td");
+      tdMax.className = "price-col-price";
+      tdMax.appendChild(bookNumberInput(tier.max, v => { tier.max = v || null; },
+        { placeholder: "เว้นว่าง = ไม่จำกัด" }));
+      const tdPct = document.createElement("td");
+      tdPct.appendChild(bookNumberInput(tier.pct, v => { tier.pct = v; },
+        { plain: true, placeholder: "%" }));
+      tr.append(tdMax, tdPct, bookDeleteCell(() => {
+        bookDraft.profitTiers.splice(index, 1);
+        setBookDirty(true);
+        renderBookTiers();
+      }));
+      bookTiersEl.appendChild(tr);
+    });
+  }
+
+  function renderBookItems() {
+    const query = bookItemQuery.trim().toLowerCase();
+    bookItemsEl.innerHTML = "";
+    document.getElementById("bookItemCount").textContent = String(bookDraft.items.length);
+
+    const rows = bookDraft.items.filter(item => !query
+      || [item.name, item.group, item.brand].some(v => String(v || "").toLowerCase().includes(query)));
+
+    if (!rows.length) {
+      const tr = document.createElement("tr");
+      const td = document.createElement("td");
+      td.colSpan = 6;
+      td.className = "request-empty";
+      td.textContent = bookDraft.items.length
+        ? "ไม่พบรายการที่ค้นหา"
+        : "ยังไม่มีรายการ -- กด “+ เพิ่มรายการ” หรือวางจาก Excel";
+      tr.appendChild(td);
+      bookItemsEl.appendChild(tr);
+      return;
+    }
+
+    rows.forEach(item => {
+      const tr = document.createElement("tr");
+      if (item.isNew) tr.classList.add("price-row-dirty");
+      const textCell = (key, cls, placeholder) => {
+        const td = document.createElement("td");
+        if (cls) td.className = cls;
+        const input = document.createElement("input");
+        input.type = "text";
+        input.value = item[key] || "";
+        if (placeholder) input.placeholder = placeholder;
+        input.addEventListener("input", () => { item[key] = input.value; setBookDirty(true); });
+        td.appendChild(input);
+        return td;
+      };
+      const tdPrice = document.createElement("td");
+      tdPrice.className = "price-col-price";
+      tdPrice.appendChild(bookNumberInput(item.price, v => { item.price = v; }));
+
+      tr.append(
+        textCell("group", "price-col-cat", "หมวด"),
+        textCell("name", "", "ชื่อรายการ"),
+        textCell("unit", "book-col-unit", "หน่วย"),
+        textCell("brand", "book-col-brand", "ยี่ห้อ"),
+        tdPrice,
+        bookDeleteCell(() => {
+          bookDraft.items = bookDraft.items.filter(i => i !== item);
+          setBookDirty(true);
+          renderBookItems();
+        })
+      );
+      bookItemsEl.appendChild(tr);
+    });
+  }
+
+  document.getElementById("bookItemSearch").addEventListener("input", (e) => {
+    bookItemQuery = e.target.value;
+    renderBookItems();
+  });
+
+  document.getElementById("bookAddItemBtn").addEventListener("click", () => {
+    bookDraft.items.unshift({
+      key: "k" + Date.now() + randomSuffix(),
+      group: "", name: "", unit: "", brand: "", price: 0, isNew: true
+    });
+    bookItemQuery = "";
+    document.getElementById("bookItemSearch").value = "";
+    setBookDirty(true);
+    renderBookItems();
+    const first = bookItemsEl.querySelector("input");
+    if (first) first.focus();
+  });
+
+  document.getElementById("bookAddLabourBtn").addEventListener("click", () => {
+    const max = bookDraft.labour.reduce((m, r) => Math.max(m, Number(r.days) || 0), 0);
+    bookDraft.labour.push({ days: max + 1, wage: 0, supervision: 0 });
+    setBookDirty(true);
+    renderBookLabour();
+  });
+
+  document.getElementById("bookAddTierBtn").addEventListener("click", () => {
+    bookDraft.profitTiers.push({ max: null, pct: 0 });
+    setBookDirty(true);
+    renderBookTiers();
+  });
+
+  ["bookName", "bookFrom", "bookStatus", "bookNote", "bookOverhead"].forEach(id => {
+    document.getElementById(id).addEventListener("input", () => setBookDirty(true));
+  });
+
+  document.getElementById("bookBackBtn").addEventListener("click", () => {
+    if (bookDirtyFlag && !confirm("มีการแก้ไขที่ยังไม่ได้บันทึก ออกจากหน้านี้ใช่หรือไม่?")) return;
+    setBookDirty(false);
+    priceBookMode.hidden = true;
+    setQuotationTab("prices");
+  });
+
+  document.getElementById("bookSaveBtn").addEventListener("click", async () => {
+    hideError(bookError);
+    const name = document.getElementById("bookName").value.trim();
+    if (!name) { showError(bookError, "กรุณาตั้งชื่องวด"); return; }
+
+    const btn = document.getElementById("bookSaveBtn");
+    bookDraft.effectiveFrom = document.getElementById("bookFrom").value || todayDateString();
+    bookDraft.note = document.getElementById("bookNote").value.trim();
+    const overhead = quoParseNumber(document.getElementById("bookOverhead").value);
+    bookDraft.overheadPct = Number.isNaN(overhead) ? 0 : overhead;
+    bookDraft.labour = bookDraft.labour
+      .filter(r => Number(r.days) > 0)
+      .map(r => ({ days: Number(r.days), wage: quoRound2(r.wage), supervision: quoRound2(r.supervision) }));
+    bookDraft.profitTiers = bookDraft.profitTiers
+      .map(t => ({ max: Number(t.max) > 0 ? Number(t.max) : null, pct: Number(t.pct) || 0 }));
+    bookDraft.items = bookDraft.items
+      .filter(i => String(i.name || "").trim())
+      .map(i => ({
+        key: i.key || ("k" + Date.now() + randomSuffix()),
+        group: String(i.group || "").trim(),
+        name: String(i.name).trim(),
+        unit: String(i.unit || "").trim(),
+        brand: String(i.brand || "").trim(),
+        price: quoRound2(i.price)
+      }));
+
+    setBusy(btn, true, "กำลังบันทึก...");
+    try {
+      const saved = await backend.saveWorkItem("price_book", {
+        id: bookEditing ? bookEditing.id : newWorkItemId(),
+        title: name,
+        status: document.getElementById("bookStatus").value,
+        data: bookDraft
+      });
+      const index = priceBooks.findIndex(b => String(b.id) === String(saved.id));
+      if (index === -1) priceBooks.unshift(saved);
+      else priceBooks[index] = saved;
+      bookEditing = saved;
+      bookDraft = JSON.parse(JSON.stringify(saved.data || {}));
+      document.getElementById("bookDeleteBtn").hidden = false;
+      document.getElementById("bookTitleText").textContent = "แก้ไขงวดราคา";
+      setBookDirty(false);
+      renderBookLabour();
+      renderBookTiers();
+      renderBookItems();
+      flashBookSaved("บันทึกงวดราคาแล้ว");
+    } catch (err) {
+      showError(bookError, moduleErrorText(err));
+    } finally {
+      setBusy(btn, false);
+    }
+  });
+
+  document.getElementById("bookDeleteBtn").addEventListener("click", async () => {
+    if (!bookEditing) return;
+    if (!confirm("ลบงวด “" + bookEditing.title
+      + "” ใช่หรือไม่?\n(ใบเสนอราคาที่คิดราคาจากงวดนี้ไปแล้วไม่ได้รับผลกระทบ)")) return;
+    const btn = document.getElementById("bookDeleteBtn");
+    setBusy(btn, true, "กำลังลบ...");
+    try {
+      await backend.deleteWorkItem(bookEditing.id);
+      priceBooks = priceBooks.filter(b => String(b.id) !== String(bookEditing.id));
+      setBookDirty(false);
+      priceBookMode.hidden = true;
+      setQuotationTab("prices");
+    } catch (err) {
+      showError(bookError, moduleErrorText(err));
+    } finally {
+      setBusy(btn, false);
+    }
+  });
+
+  // ------------------------------------------------------ อัปเดตราคาจาก Excel
+  document.getElementById("bookPasteBtn").addEventListener("click", () => {
+    pricePasteInput.value = "";
+    pricePasteError.hidden = true;
+    pricePasteModal.hidden = false;
+    pricePasteInput.focus();
+  });
+  document.getElementById("pricePasteCancelBtn").addEventListener("click", () => {
+    pricePasteModal.hidden = true;
+  });
+  pricePasteModal.addEventListener("click", (e) => {
+    if (e.target === pricePasteModal) pricePasteModal.hidden = true;
+  });
+
+  /**
+   * วางตารางจาก Excel -- จับคู่ด้วยชื่อรายการ ราคาที่ตรงกันอัปเดตทับ ชื่อที่ไม่มีใน
+   * งวดถูกเพิ่มเป็นรายการใหม่และทำเครื่องหมายไว้ให้ตรวจ ยังไม่เขียนลงฐานข้อมูลจน
+   * กว่าจะกด "บันทึกงวด" -- วางผิดยังกดย้อนกลับทิ้งได้ทั้งชุด
+   */
+  document.getElementById("pricePasteApplyBtn").addEventListener("click", () => {
+    pricePasteError.hidden = true;
+    const lines = pricePasteInput.value.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+    if (!lines.length) {
+      pricePasteError.textContent = "ยังไม่ได้วางข้อมูล";
+      pricePasteError.hidden = false;
+      return;
+    }
+
+    const byName = new Map(bookDraft.items.map(i => [String(i.name || "").trim().toLowerCase(), i]));
+    let updated = 0;
+    let added = 0;
+    let skipped = 0;
+
+    lines.forEach(line => {
+      const cells = line.split("\t").map(c => c.trim());
+      if (cells.length < 2) { skipped += 1; return; }
+      // ชื่ออยู่ช่องแรก ราคาอยู่ช่องสุดท้ายที่อ่านเป็นตัวเลขได้
+      const priceCell = cells.slice().reverse().find(c => c && !Number.isNaN(quoParseNumber(c)));
+      const price = quoParseNumber(priceCell);
+      const name = cells[0];
+      if (!name || !priceCell || Number.isNaN(price)) { skipped += 1; return; }
+
+      const found = byName.get(name.toLowerCase());
+      if (found) {
+        found.price = quoRound2(price);
+        updated += 1;
+      } else {
+        const item = {
+          key: "k" + Date.now() + randomSuffix(),
+          group: cells.length > 2 ? cells[1] : "",
+          name: name, unit: "", brand: "", price: quoRound2(price), isNew: true
+        };
+        bookDraft.items.push(item);
+        byName.set(name.toLowerCase(), item);
+        added += 1;
+      }
+    });
+
+    setBookDirty(true);
+    renderBookItems();
+    pricePasteModal.hidden = true;
+    flashBookSaved("อัปเดตราคา " + updated + " รายการ · เพิ่มใหม่ " + added + " รายการ"
+      + (skipped ? " · ข้าม " + skipped + " บรรทัด" : "")
+      + " -- ตรวจในตารางแล้วกด “บันทึกงวด”");
+  });
+
+  // ------------------------------------------- รายการงวดในแท็บ "ราคาและค่าแรง"
+  function renderPriceBooksSection() {
+    const wrap = document.createElement("div");
+    wrap.className = "book-list";
+
+    const head = document.createElement("div");
+    head.className = "book-list-head";
+    const title = document.createElement("h3");
+    title.textContent = "งวดราคาอุปกรณ์และค่าแรง (ใช้กับเครื่องคำนวณ EV Charger)";
+    const addBtn = document.createElement("button");
+    addBtn.type = "button";
+    addBtn.className = "btn btn-primary";
+    addBtn.textContent = "+ สร้างงวดใหม่";
+    addBtn.addEventListener("click", () => {
+      const current = currentPriceBook();
+      if (current && confirm("สร้างงวดใหม่โดยคัดลอกราคาทั้งหมดจาก “" + current.title
+        + "” มาแก้ต่อ ใช่หรือไม่?\n(กดยกเลิกเพื่อสร้างงวดเปล่า)")) {
+        openPriceBook(current, { copy: true });
+      } else {
+        openPriceBook(null);
+      }
+    });
+    head.append(title, addBtn);
+    wrap.appendChild(head);
+
+    if (!priceBooks.length) {
+      const empty = document.createElement("div");
+      empty.className = "request-empty";
+      empty.textContent = "ยังไม่มีงวดราคา -- กด “+ สร้างงวดใหม่”";
+      wrap.appendChild(empty);
+      return wrap;
+    }
+
+    const current = currentPriceBook();
+    priceBooks
+      .slice()
+      .sort((a, b) => String((b.data && b.data.effectiveFrom) || "")
+        .localeCompare(String((a.data && a.data.effectiveFrom) || "")))
+      .forEach(book => {
+        const card = document.createElement("div");
+        card.className = "book-card";
+        if (current && String(current.id) === String(book.id)) card.classList.add("is-current");
+
+        const info = document.createElement("div");
+        info.className = "book-card-info";
+        const name = document.createElement("div");
+        name.className = "book-card-name";
+        name.textContent = book.title;
+        if (current && String(current.id) === String(book.id)) {
+          const tag = document.createElement("span");
+          tag.className = "request-badge tone-success";
+          tag.textContent = "งวดปัจจุบัน";
+          name.appendChild(tag);
+        }
+        if (book.status === "ยกเลิก") {
+          const tag = document.createElement("span");
+          tag.className = "request-badge tone-danger";
+          tag.textContent = "ยกเลิก";
+          name.appendChild(tag);
+        }
+        const meta = document.createElement("div");
+        meta.className = "book-card-meta";
+        const count = book.data && Array.isArray(book.data.items) ? book.data.items.length : 0;
+        const from = book.data && book.data.effectiveFrom ? formatThaiDate(book.data.effectiveFrom) : "-";
+        const overhead = book.data && book.data.overheadPct !== undefined ? book.data.overheadPct : "-";
+        meta.textContent = "เริ่มใช้ " + from + " · " + count + " รายการ · ค่าดำเนินการ " + overhead + "%"
+          + (book.data && book.data.note ? " · " + book.data.note : "");
+        info.append(name, meta);
+
+        const actions = document.createElement("div");
+        actions.className = "book-card-actions";
+        const editBtn = document.createElement("button");
+        editBtn.type = "button";
+        editBtn.className = "btn btn-ghost";
+        editBtn.textContent = "แก้ไข";
+        editBtn.addEventListener("click", () => openPriceBook(book));
+        const copyBtn = document.createElement("button");
+        copyBtn.type = "button";
+        copyBtn.className = "btn btn-ghost";
+        copyBtn.textContent = "สร้างงวดใหม่จากงวดนี้";
+        copyBtn.addEventListener("click", () => openPriceBook(book, { copy: true }));
+        actions.append(editBtn, copyBtn);
+
+        card.append(info, actions);
+        wrap.appendChild(card);
+      });
+
+    return wrap;
+  }
+
+  /** ล้างหน้าจอส่วนราคา/เครื่องคำนวณตอนออกจากระบบ */
+  function clearPricingScreens() {
+    priceBooks = [];
+    priceBooksLoaded = false;
+    bookEditing = null;
+    bookDraft = null;
+    evQty = new Map();
+    evBookId = null;
+    evDays = null;
+    evReturnToQuotation = false;
+    evItemsEl.innerHTML = "";
+    evSummaryEl.innerHTML = "";
+    bookItemsEl.innerHTML = "";
+    bookLabourEl.innerHTML = "";
+    bookTiersEl.innerHTML = "";
+    pricePasteInput.value = "";
+    pricePasteModal.hidden = true;
+    evCalcMode.hidden = true;
+    priceBookMode.hidden = true;
+    setBookDirty(false);
   }
 
   // -------------------------------------------- ระบบรับฟังเสียงของลูกค้า (VOC)

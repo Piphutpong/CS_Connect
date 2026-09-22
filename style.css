@@ -4456,3 +4456,256 @@ body.quo-print-body {
 
 /* อ้างถึง / สิ่งที่ส่งมาด้วย ที่ยังว่าง -- ซ่อน (ไม่กินบรรทัด) จนกว่าจะกดเพิ่มจากแถบเครื่องมือ */
 .qd-line.qd-off { display: none; }
+
+/* ============================================================================
+   งวดราคาอุปกรณ์/ค่าแรง + เครื่องคำนวณราคา EV Charger วงจรที่ 2
+   (งานธุรกิจเสริม -> แท็บ "ราคาและค่าแรง" / "คำนวณราคา EV Charger")
+   ============================================================================ */
+
+/* ---- รายการงวดราคา (บนสุดของแท็บ "ราคาและค่าแรง") -------------------------- */
+.book-section-head {
+  margin: 28px 0 10px;
+  font-size: 15px;
+  color: var(--ink-soft);
+  border-top: 1px solid var(--border);
+  padding-top: 20px;
+}
+.book-list-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.book-list-head h3 { margin: 0; font-size: 16px; }
+
+.book-card {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 16px;
+  padding: 14px 16px;
+  margin-bottom: 10px;
+  background: var(--white);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+.book-card.is-current { border-color: var(--volt-300); background: var(--volt-50); }
+.book-card-info { min-width: 0; }
+.book-card-name {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  color: var(--ink);
+}
+.book-card-meta { margin-top: 3px; font-size: 13px; color: var(--ink-soft); }
+.book-card-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.book-card-actions .btn { padding: 6px 12px; font-size: 13px; }
+
+/* ---- หน้าแก้ไขงวดราคา (#priceBookMode) ------------------------------------- */
+.book-meta {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 14px;
+  margin: 16px 0 24px;
+}
+
+.book-rates {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 24px;
+  margin-bottom: 28px;
+}
+.book-rates h3 { margin: 0 0 10px; font-size: 15px; }
+.book-overhead { max-width: 420px; margin-bottom: 12px; }
+.book-labour-table th:first-child, .book-labour-table td:first-child { width: 90px; }
+.book-tier-table .price-col-price { width: 45%; }
+
+.book-items-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 8px 0 10px;
+}
+.book-items-head h3 { margin: 0; font-size: 15px; }
+.book-items-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.book-items-tools input[type="search"] {
+  padding: 7px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font: inherit;
+  min-width: 200px;
+}
+.book-items-tools .btn { padding: 6px 12px; font-size: 13px; }
+.book-item-table .book-col-unit { width: 90px; }
+.book-item-table .book-col-brand { width: 130px; }
+
+.price-paste-input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font: inherit;
+  font-family: var(--font-mono, monospace);
+  font-size: 13px;
+  resize: vertical;
+}
+
+/* ---- เครื่องคำนวณราคา EV Charger (#evCalcMode) ----------------------------- */
+.ev-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: 24px;
+  align-items: start;
+}
+@media (max-width: 960px) {
+  .ev-layout { grid-template-columns: 1fr; }
+}
+
+.ev-setup {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 14px;
+  margin-bottom: 18px;
+}
+
+.ev-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 16px;
+  margin-bottom: 12px;
+}
+.ev-toolbar input[type="search"] {
+  flex: 1;
+  min-width: 200px;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font: inherit;
+}
+.ev-toolbar .checkbox-field { margin: 0; white-space: nowrap; }
+.ev-picked-count { font-size: 13px; font-weight: 600; color: var(--volt-700); white-space: nowrap; }
+
+.ev-items {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--white);
+  overflow: hidden;
+}
+.ev-group {
+  padding: 8px 14px;
+  background: var(--volt-50);
+  color: var(--volt-700);
+  font-weight: 600;
+  font-size: 13px;
+  border-bottom: 1px solid var(--border);
+  border-top: 1px solid var(--border);
+}
+.ev-group:first-child { border-top: none; }
+
+.ev-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 140px 130px 100px;
+  gap: 10px;
+  align-items: center;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+}
+.ev-item:last-child { border-bottom: none; }
+.ev-item.is-picked { background: var(--volt-50); }
+.ev-item-name { min-width: 0; overflow-wrap: break-word; }
+.ev-item-brand {
+  display: block;
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--ink-soft);
+}
+.ev-item-price {
+  font-size: 13px;
+  color: var(--ink-soft);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+.ev-item-qty { display: flex; align-items: center; gap: 4px; justify-content: center; }
+.ev-step {
+  width: 26px;
+  height: 26px;
+  flex: none;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--white);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  color: var(--volt-700);
+}
+.ev-step:hover { border-color: var(--volt-300); background: var(--volt-50); }
+.ev-qty-input {
+  width: 48px;
+  text-align: center;
+  padding: 5px 4px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+}
+.ev-item-amount {
+  text-align: right;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--volt-700);
+  min-height: 1em;
+}
+@media (max-width: 640px) {
+  .ev-item { grid-template-columns: 1fr; row-gap: 6px; }
+  .ev-item-price, .ev-item-amount { text-align: left; }
+  .ev-item-qty { justify-content: flex-start; }
+}
+
+.ev-summary {
+  position: sticky;
+  top: calc(var(--topbar-h) + 12px);
+  padding: 16px;
+  background: var(--white);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+.ev-summary h3 { margin: 0 0 12px; font-size: 15px; }
+.ev-summary-list {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 6px 10px;
+  margin: 0;
+}
+.ev-summary-list dt { color: var(--ink-soft); font-size: 13px; }
+.ev-summary-list dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; }
+.ev-summary-hint { display: block; font-size: 11px; color: var(--ink-soft); }
+.ev-summary-list dt.is-sub, .ev-summary-list dd.is-sub {
+  padding-top: 6px;
+  margin-top: 4px;
+  border-top: 1px dashed var(--border);
+  font-weight: 600;
+}
+.ev-summary-list dt.is-say, .ev-summary-list dd.is-say {
+  padding-top: 8px;
+  margin-top: 6px;
+  border-top: 1px solid var(--border);
+  font-weight: 700;
+  color: var(--volt-700);
+}
+.ev-summary-list dt.is-grand, .ev-summary-list dd.is-grand {
+  padding-top: 8px;
+  margin-top: 6px;
+  border-top: 2px solid var(--volt-500);
+  font-weight: 700;
+  font-size: 16px;
+  color: var(--volt-700);
+}

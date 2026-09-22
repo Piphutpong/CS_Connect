@@ -24,7 +24,7 @@
 <title>CS Connect</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=Sarabun:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=20260921a">
+<link rel="stylesheet" href="style.css?v=20260922a">
 </head>
 <body>
 
@@ -1812,7 +1812,8 @@
         <div class="requests-modes" id="quotationTabs">
           <button type="button" class="requests-mode-btn active" data-quo-tab="docs">ใบเสนอราคา</button>
           <button type="button" class="requests-mode-btn" data-quo-tab="templates">แม่แบบ</button>
-          <button type="button" class="requests-mode-btn" data-quo-tab="prices">รายการราคา</button>
+          <button type="button" class="requests-mode-btn" data-quo-tab="ev">คำนวณราคา EV Charger</button>
+          <button type="button" class="requests-mode-btn" data-quo-tab="prices">ราคาและค่าแรง</button>
         </div>
         <div class="requests-search">
           <input type="search" id="quotationSearch" placeholder="ค้นหาด้วยเรื่อง, ผู้รับ, เลขที่หนังสือ...">
@@ -1850,6 +1851,7 @@
           <label class="checkbox-field quo-bar-check"><input type="checkbox" id="quoThaiDigits"><span>เลขไทย</span></label>
           <span id="quoDirty" class="quo-dirty" hidden>ยังไม่ได้บันทึก</span>
           <button type="button" id="quotationDuplicateBtn" class="btn btn-ghost" hidden>ทำสำเนา</button>
+          <button type="button" id="quotationEvBtn" class="btn btn-ghost">คำนวณราคา EV</button>
           <button type="button" id="quotationSaveTemplateBtn" class="btn btn-ghost">บันทึกเป็นแม่แบบ</button>
           <button type="button" id="quotationDeleteBtn" class="btn btn-ghost" hidden>ลบ</button>
           <button type="button" id="quotationPrintBtn" class="btn btn-ghost">พิมพ์</button>
@@ -1926,6 +1928,140 @@
         </article>
       </div>
 
+      </div>
+    </div>
+
+    <!-- ===== เครื่องคำนวณราคา EV Charger วงจรที่ 2 =====
+         คิดตามหลักเกณฑ์สืบราคาจากท้องตลาด: ราคาอุปกรณ์ + ค่าแรง + ค่าควบคุมงาน
+         -> ค่าดำเนินการ (ร้อยละของสามก้อนแรก) -> ต้นทุนรวม -> กำไร (ร้อยละตามช่วง
+         ต้นทุน) -> ปัดขึ้นหลักสิบ -> VAT 7% ทุกอัตราอ่านจาก "งวดราคา" ที่เลือก -->
+    <div id="evCalcMode" hidden>
+      <div class="quo-editor-bar">
+        <button type="button" id="evBackBtn" class="btn btn-ghost">← กลับ</button>
+        <div class="quo-editor-title">
+          <h2>คำนวณราคา — ติดตั้ง EV Charger วงจรที่ 2</h2>
+          <p id="evSubtitle" class="requests-count"></p>
+        </div>
+        <div class="quo-editor-actions">
+          <button type="button" id="evResetBtn" class="btn btn-ghost">ล้างจำนวนที่เลือก</button>
+          <button type="button" id="evApplyBtn" class="btn btn-primary">ใส่ราคาในใบเสนอราคา</button>
+        </div>
+      </div>
+      <p id="evError" class="form-error" hidden></p>
+
+      <div class="ev-layout">
+        <div class="ev-main">
+          <div class="ev-setup">
+            <label class="field">
+              <span>งวดราคาที่ใช้</span>
+              <select id="evBook"></select>
+            </label>
+            <label class="field">
+              <span>จำนวนวันติดตั้ง</span>
+              <select id="evDays"></select>
+            </label>
+            <label class="field">
+              <span>ชื่องาน (ใช้เป็นรายการในใบเสนอราคา)</span>
+              <input type="text" id="evJobName" autocomplete="off">
+            </label>
+          </div>
+
+          <div class="ev-toolbar">
+            <input type="search" id="evSearch" placeholder="ค้นหาอุปกรณ์ เช่น เบรกเกอร์, สาย, ท่อ...">
+            <label class="checkbox-field"><input type="checkbox" id="evOnlyPicked"><span>แสดงเฉพาะที่เลือกแล้ว</span></label>
+            <span id="evPickedCount" class="ev-picked-count"></span>
+          </div>
+          <div id="evItems" class="ev-items"></div>
+        </div>
+
+        <!-- สรุปการคิดราคา -- ติดขอบบนไว้ให้เห็นตลอดขณะเลือกของ -->
+        <aside class="ev-summary">
+          <h3>สรุปการคิดราคา</h3>
+          <dl id="evSummary" class="ev-summary-list"></dl>
+          <p class="field-hint" id="evSummaryNote"></p>
+        </aside>
+      </div>
+    </div>
+
+    <!-- ===== งวดราคา: แก้ราคาอุปกรณ์ทั้งงวด + ค่าแรง + อัตรา แล้วบันทึกครั้งเดียว ===== -->
+    <div id="priceBookMode" hidden>
+      <div class="quo-editor-bar">
+        <button type="button" id="bookBackBtn" class="btn btn-ghost">← กลับ</button>
+        <div class="quo-editor-title">
+          <h2 id="bookTitleText">งวดราคา</h2>
+          <p id="bookSubtitle" class="requests-count"></p>
+        </div>
+        <div class="quo-editor-actions">
+          <span id="bookDirty" class="quo-dirty" hidden>ยังไม่ได้บันทึก</span>
+          <button type="button" id="bookDeleteBtn" class="btn btn-ghost" hidden>ลบงวดนี้</button>
+          <button type="button" id="bookSaveBtn" class="btn btn-primary">บันทึกงวด</button>
+        </div>
+      </div>
+      <p id="bookError" class="form-error" hidden></p>
+
+      <div class="book-meta">
+        <label class="field"><span>ชื่องวด</span><input type="text" id="bookName" autocomplete="off" placeholder="เช่น ราคาอุปกรณ์และค่าแรง งวดที่ 2/2569"></label>
+        <label class="field"><span>เริ่มใช้วันที่</span><input type="date" id="bookFrom"></label>
+        <label class="field"><span>สถานะ</span>
+          <select id="bookStatus">
+            <option value="ใช้งาน">ใช้งาน</option>
+            <option value="ยกเลิก">ยกเลิก (ไม่ให้เลือกใช้ใหม่)</option>
+          </select>
+        </label>
+        <label class="field"><span>หมายเหตุ</span><input type="text" id="bookNote" autocomplete="off" placeholder="ที่มาของราคา / วันที่สืบราคา"></label>
+      </div>
+
+      <div class="book-rates">
+        <section>
+          <h3>ค่าแรงคนงาน และค่าควบคุมงาน (ตามจำนวนวันติดตั้ง)</h3>
+          <table class="price-table book-labour-table">
+            <thead><tr><th>จำนวนวัน</th><th>ค่าแรงคนงาน (บาท)</th><th>ค่าควบคุมงาน (บาท)</th><th class="price-col-actions"></th></tr></thead>
+            <tbody id="bookLabour"></tbody>
+          </table>
+          <button type="button" id="bookAddLabourBtn" class="btn btn-ghost">+ เพิ่มจำนวนวัน</button>
+        </section>
+
+        <section>
+          <h3>อัตราค่าดำเนินการและกำไร</h3>
+          <label class="field book-overhead">
+            <span>ค่าดำเนินการ (ร้อยละของ ราคาอุปกรณ์ + ค่าแรง + ค่าควบคุมงาน)</span>
+            <input type="text" id="bookOverhead" inputmode="decimal">
+          </label>
+          <table class="price-table book-tier-table">
+            <thead><tr><th>ต้นทุนรวมไม่เกิน (บาท)</th><th>กำไร (ร้อยละของต้นทุนรวม)</th><th class="price-col-actions"></th></tr></thead>
+            <tbody id="bookTiers"></tbody>
+          </table>
+          <button type="button" id="bookAddTierBtn" class="btn btn-ghost">+ เพิ่มช่วงต้นทุน</button>
+          <p class="field-hint">ช่วงสุดท้ายเว้น "ไม่เกิน" ว่างไว้ = ต้นทุนมากกว่าช่วงก่อนหน้าทั้งหมด</p>
+        </section>
+      </div>
+
+      <div class="book-items-head">
+        <h3>ราคาอุปกรณ์ในงวดนี้ (<span id="bookItemCount">0</span> รายการ)</h3>
+        <div class="book-items-tools">
+          <input type="search" id="bookItemSearch" placeholder="ค้นหารายการ...">
+          <button type="button" id="bookAddItemBtn" class="btn btn-ghost">+ เพิ่มรายการ</button>
+          <button type="button" id="bookPasteBtn" class="btn btn-ghost">อัปเดตราคาจาก Excel</button>
+        </div>
+      </div>
+      <table class="price-table book-item-table">
+        <thead><tr><th class="price-col-cat">หมวด</th><th>รายการ</th><th class="book-col-unit">หน่วย</th><th class="book-col-brand">ยี่ห้อ</th><th class="price-col-price">ราคา/หน่วย</th><th class="price-col-actions"></th></tr></thead>
+        <tbody id="bookItems"></tbody>
+      </table>
+    </div>
+
+    <!-- วางตารางจาก Excel เพื่ออัปเดตราคาทั้งงวดรวดเดียว -->
+    <div id="pricePasteModal" class="modal-overlay" hidden>
+      <div class="modal-card modal-card-wide">
+        <h3>อัปเดตราคาจาก Excel</h3>
+        <p class="field-hint">คัดลอกจาก Excel มาวางได้เลย ต้องมีอย่างน้อย 2 คอลัมน์: <strong>ชื่อรายการ</strong> และ <strong>ราคา</strong> (คั่นด้วย Tab) -- ระบบจับคู่ด้วยชื่อรายการ ชื่อที่ไม่ตรงกับของเดิมจะถูกเพิ่มเป็นรายการใหม่ให้ตรวจก่อนบันทึก</p>
+        <textarea id="pricePasteInput" rows="10" class="price-paste-input" placeholder="เมนเบรกเกอร์ MCB 50A, 2P (เกาะรางปีกนก)&#9;280&#10;สาย CV, 25 sq.mm.&#9;165"></textarea>
+        <p id="pricePasteResult" class="form-success" hidden></p>
+        <p id="pricePasteError" class="form-error" hidden></p>
+        <div class="modal-actions">
+          <button type="button" id="pricePasteCancelBtn" class="btn btn-ghost">ยกเลิก</button>
+          <button type="button" id="pricePasteApplyBtn" class="btn btn-primary">ตรวจและอัปเดตในตาราง</button>
+        </div>
       </div>
     </div>
 
@@ -2112,6 +2248,6 @@
      **ต้องเปลี่ยนเลขนี้ทุกครั้งที่แก้ app.js / style.css / track.js / qr.js**
      ไม่งั้นผู้ใช้บางคนจะยังได้ไฟล์เก่าไปอีกพักใหญ่ -->
 <script src="vendor/supabase.js?v=2.116.0"></script>
-<script src="app.js?v=20260921a"></script>
+<script src="app.js?v=20260922a"></script>
 </body>
 </html>
