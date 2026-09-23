@@ -24,7 +24,7 @@
 <title>CS Connect</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=Sarabun:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=20260922w">
+<link rel="stylesheet" href="style.css?v=20260923a">
 </head>
 <body>
 
@@ -1060,15 +1060,36 @@
             <p class="field-hint">บันทึกพร้อมเลข WBS แล้ว สถานะจะเปลี่ยนเป็น “รอเขียนผัง” ให้อัตโนมัติ</p>
           </div>
 
-          <!-- ขึ้นเมื่อสถานะเป็น "อนุมัติและแจ้งค่าใช้จ่ายแล้ว" หรือเคยกรอกไว้แล้ว -->
-          <div class="field-row" id="extApprovalField" hidden>
-            <div class="field">
-              <label for="extApprovalNo">เลขที่อนุมัติ</label>
-              <input type="text" id="extApprovalNo" placeholder="เลขที่หนังสืออนุมัติ" autocomplete="off">
+          <!-- ขึ้นเมื่อสถานะเป็น "อนุมัติและแจ้งค่าใช้จ่ายแล้ว" หรือเคยกรอกไว้แล้ว
+               ตัว #extApprovalField เองไม่มีคลาสที่ตั้ง display ไว้ จึงซ่อนด้วย
+               hidden ได้ตรง ๆ (ดู Gotcha ใน CLAUDE.md) ส่วน .field-row ข้างในมี
+               .field-row[hidden] รองรับอยู่แล้ว -->
+          <div id="extApprovalField" hidden>
+            <div class="field-row">
+              <div class="field">
+                <label for="extApprovalNo">เลขที่อนุมัติ</label>
+                <input type="text" id="extApprovalNo" placeholder="เลขที่หนังสืออนุมัติ" autocomplete="off">
+              </div>
+              <div class="field">
+                <label for="extApprovalDate">วันที่อนุมัติ</label>
+                <input type="date" id="extApprovalDate">
+              </div>
             </div>
-            <div class="field">
-              <label for="extApprovalDate">วันที่อนุมัติ</label>
-              <input type="date" id="extApprovalDate">
+            <!-- กำหนดยืนราคา: นับจากวันที่อนุมัติ 90 วันสำหรับงานเอกชน
+                 180 วันสำหรับงานราชการ -- วันหมดกำหนดคำนวณให้ ไม่ได้เก็บซ้ำ -->
+            <div class="field-row">
+              <div class="field">
+                <label for="extQuoteTerm">กำหนดยืนราคา</label>
+                <select id="extQuoteTerm">
+                  <option value="90">90 วัน (งานเอกชน)</option>
+                  <option value="180">180 วัน (งานราชการ)</option>
+                </select>
+              </div>
+              <div class="field">
+                <label for="extQuoteDue">วันหมดกำหนดยืนราคา</label>
+                <input type="text" id="extQuoteDue" readonly placeholder="กรอกวันที่อนุมัติก่อน">
+                <p class="field-hint" id="extQuoteDueHint"></p>
+              </div>
             </div>
           </div>
 
@@ -3128,6 +3149,6 @@
      **ต้องเปลี่ยนเลขนี้ทุกครั้งที่แก้ app.js / style.css / track.js / qr.js**
      ไม่งั้นผู้ใช้บางคนจะยังได้ไฟล์เก่าไปอีกพักใหญ่ -->
 <script src="vendor/supabase.js?v=2.116.0"></script>
-<script src="app.js?v=20260922w"></script>
+<script src="app.js?v=20260923a"></script>
 </body>
 </html>

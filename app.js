@@ -4120,6 +4120,9 @@
   const extApprovalField = document.getElementById("extApprovalField");
   const extApprovalNo = document.getElementById("extApprovalNo");
   const extApprovalDate = document.getElementById("extApprovalDate");
+  const extQuoteTerm = document.getElementById("extQuoteTerm");
+  const extQuoteDue = document.getElementById("extQuoteDue");
+  const extQuoteDueHint = document.getElementById("extQuoteDueHint");
   const extEstimateSection = document.getElementById("extEstimateSection");
   const extEstimateSummary = document.getElementById("extEstimateSummary");
   const extDistrict = document.getElementById("extDistrict");
@@ -4760,6 +4763,119 @@
    * เจ้าหน้าที่จะแนบไฟล์ตั้งแต่ยังไม่ได้บันทึกสถานะ แล้วงานจะค้างครึ่งทาง
    * (มีไฟล์แต่สถานะไม่เดิน) -- คำร้องใหม่ที่ยังไม่มี id ก็แนบไม่ได้ด้วยเหตุผลเดียวกัน
    */
+  /**
+   * ---------------------------------------------- กำหนดยืนราคา (ขอขยายเขตฯ)
+   *
+   * ราคาที่แจ้งลูกค้าไปตอน "อนุมัติและแจ้งค่าใช้จ่ายแล้ว" ยืนอยู่ได้จำกัดเวลา
+   * 90 วันสำหรับงานเอกชน (ค่าเริ่มต้น) และ 180 วันสำหรับงานราชการ เลยกำหนดแล้ว
+   * ต้องประมาณการใหม่ -- ซึ่งเป็นงานที่ทำไปแล้วทั้งใบ จึงต้องเตือนก่อนถึงวันนั้น
+   *
+   * เก็บใน record แค่ quoteTermDays (จำนวนวัน) "วันหมดกำหนด" คำนวณทุกครั้งที่
+   * แสดงจากวันที่อนุมัติ + จำนวนวัน ไม่เก็บซ้ำไว้อีกคอลัมน์ -- ถ้าเก็บทั้งคู่
+   * วันหนึ่งจะมีคนแก้วันที่อนุมัติย้อนหลังแล้ววันหมดกำหนดค้างอยู่ค่าเดิม
+   */
+  const QUOTE_TERMS = [
+    { days: 90, label: "งานเอกชน" },
+    { days: 180, label: "งานราชการ" }
+  ];
+  const QUOTE_TERM_DEFAULT = 90;
+  /** เริ่มเตือนเมื่อเหลือกี่วัน -- กำหนดสั้นสุดคือ 90 วัน หนึ่งเดือนจึงพอให้ตามลูกค้าทัน */
+  const QUOTE_WARN_DAYS = 30;
+  /** สถานะที่ "เริ่มนับ" กำหนดยืนราคา และเป็นสถานะเดียวที่ยังต้องเฝ้าอยู่ */
+  const QUOTE_STATUS = "อนุมัติและแจ้งค่าใช้จ่ายแล้ว";
+
+  function quoteTermLabel(days) {
+    const term = QUOTE_TERMS.find(t => t.days === Number(days));
+    return term ? `${term.days} วัน (${term.label})` : `${days} วัน`;
+  }
+
+  /**
+   * วันตั้งต้นนับ -- ใบที่ไม่ได้กรอกช่องวันที่อนุมัติไว้ ถอยไปอ่านเวลาที่สถานะ
+   * เปลี่ยนเป็น "อนุมัติและแจ้งค่าใช้จ่ายแล้ว" จากประวัติสถานะ (วิธีเดียวกับ
+   * meterSentDateOf) -- รู้วันอยู่แล้วแต่ไม่เตือนเพราะช่องว่าง เป็นการเสียของ
+   */
+  function quoteApprovalDateOf(record) {
+    if (!record) return "";
+    if (record.approvalDate) return record.approvalDate;
+    const entry = (Array.isArray(record.statusHistory) ? record.statusHistory : [])
+      .filter(h => h && h.status === QUOTE_STATUS && h.at)
+      .pop();
+    return entry ? todayDateString(new Date(Number(entry.at))) : "";
+  }
+
+  function addDaysToDateString(dateText, days) {
+    const ms = Date.parse(dateText);
+    if (Number.isNaN(ms) || !(Number(days) > 0)) return "";
+    const d = new Date(ms);
+    d.setDate(d.getDate() + Number(days));
+    return todayDateString(d);
+  }
+
+  /**
+   * กำหนดยืนราคาของคำร้องใบหนึ่ง -- null = ใบนี้ไม่มีกำหนดยืนราคาให้พูดถึง
+   * (ไม่ใช่งานขยายเขตฯ, ยังไม่ได้เลือกจำนวนวัน, หรือยังไม่มีวันที่อนุมัติ)
+   *
+   * ใบที่อนุมัติไปก่อนมีฟีเจอร์นี้จะไม่มี quoteTermDays และจะไม่ถูกเตือน --
+   * โดยตั้งใจ เดาให้เป็น 90 วันคือการเตือนผิดวัน ซึ่งแย่กว่าไม่เตือน เจ้าหน้าที่
+   * เปิดใบนั้นแล้วเลือกกำหนดหนึ่งครั้ง ระบบก็เริ่มนับให้
+   *
+   * active = ยังต้องเฝ้าจริง คือสถานะยังค้างอยู่ที่ "อนุมัติและแจ้งค่าใช้จ่ายแล้ว"
+   * งานที่เดินต่อไปแล้ว (ส่ง ผบร./ผปบ./ผกส.) หรือปิดไปแล้ว ยังเห็นวันหมดกำหนดใน
+   * ฟอร์มและการ์ดสรุปได้ แต่ไม่ต้องไปโผล่ในชิปเตือนหรือกองงานที่ต้องสะกิดอีก
+   */
+  function quoteDeadlineOf(record) {
+    if (!record || record.type !== "extend") return null;
+    const termDays = Number(record.quoteTermDays);
+    if (!(termDays > 0)) return null;
+    const from = quoteApprovalDateOf(record);
+    const due = addDaysToDateString(from, termDays);
+    if (!due) return null;
+    const left = crmDaysUntil(due);
+    return {
+      termDays,
+      from,
+      due,
+      left,
+      active: record.jobStatus === QUOTE_STATUS,
+      expired: left < 0,
+      warning: left <= QUOTE_WARN_DAYS
+    };
+  }
+
+  function quoteDeadlineText(left) {
+    if (left === null || left === undefined) return "";
+    if (left < 0) return `เลยกำหนดมาแล้ว ${Math.abs(left)} วัน`;
+    if (left === 0) return "ครบกำหนดวันนี้";
+    return `เหลืออีก ${left} วัน`;
+  }
+
+  function quoteDeadlineTone(left) {
+    if (left === null || left === undefined) return "info";
+    if (left < 0) return "danger";
+    if (left <= QUOTE_WARN_DAYS) return "warning";
+    return "success";
+  }
+
+  /**
+   * วาดวันหมดกำหนดในฟอร์มจากค่าที่อยู่ในช่อง "ตอนนี้" ไม่ใช่จากค่าที่บันทึกไว้ --
+   * คนกำลังเลือก 90/180 หรือแก้วันที่อนุมัติอยู่ตรงหน้า ต้องเห็นผลทันที
+   */
+  function syncQuoteDueField() {
+    const due = addDaysToDateString(extApprovalDate.value, extQuoteTerm.value);
+    const left = due ? crmDaysUntil(due) : null;
+    extQuoteDue.value = due ? formatThaiDate(due) : "";
+    extQuoteDueHint.textContent = due
+      ? quoteDeadlineText(left)
+      : "ระบบคำนวณให้เมื่อกรอกวันที่อนุมัติแล้ว";
+    extQuoteDueHint.className = due
+      ? `field-hint tone-text-${quoteDeadlineTone(left)}`
+      : "field-hint";
+  }
+
+  extQuoteTerm.addEventListener("change", syncQuoteDueField);
+  extApprovalDate.addEventListener("change", syncQuoteDueField);
+  extApprovalDate.addEventListener("input", syncQuoteDueField);
+
   function syncExtendStageFields(record) {
     const status = extJobStatus.value;
 
@@ -4789,8 +4905,17 @@
     extendStage.photo = showPhotos;
     if (showPhotos) renderExtendPhotos(record);
 
-    extApprovalField.hidden = !(status === "อนุมัติและแจ้งค่าใช้จ่ายแล้ว"
-      || Boolean(record && (record.approvalNo || record.approvalDate)));
+    const showApproval = status === QUOTE_STATUS
+      || Boolean(record && (record.approvalNo || record.approvalDate || record.quoteTermDays));
+    extApprovalField.hidden = !showApproval;
+
+    // เพิ่งเลือกสถานะอนุมัติเอง (ไม่ใช่กำลังเปิดใบเก่าขึ้นมาดู) แล้ววันที่อนุมัติ
+    // ยังว่าง = เติมวันนี้ให้ก่อน แก้ทับได้ -- ไม่มีวันที่อนุมัติก็นับกำหนดยืนราคา
+    // ไม่ได้ ทั้งระบบเตือนจะเงียบไปทั้งใบโดยไม่มีอะไรบอก
+    if (!fillingForm && status === QUOTE_STATUS && !extApprovalDate.value) {
+      extApprovalDate.value = todayDateString();
+    }
+    if (showApproval) syncQuoteDueField();
   }
 
   function renderExtendPhotos(record) {
@@ -6342,14 +6467,18 @@
     document.getElementById("extLocation").value = r.location || "";
     document.getElementById("extPurpose").value = r.purpose || "";
     extJobStatus.value = r.jobStatus || "รอจ่ายงาน";
+    // ต้องตั้งค่าบล็อกอนุมัติไว้ "ก่อน" ยิง change -- syncExtendStageFields วาด
+    // วันหมดกำหนดยืนราคาจากสองช่องนี้ ถ้าตั้งทีหลังมันจะคำนวณจากช่องว่าง
+    // (เหตุผลเดียวกับวันที่ชำระของฟอร์มขอใช้ไฟฟ้า)
+    extApprovalNo.value = r.approvalNo || "";
+    extApprovalDate.value = r.approvalDate || "";
+    extQuoteTerm.value = String(r.quoteTermDays || QUOTE_TERM_DEFAULT);
     // ต้องยิง change เอง -- ตัวจัดการที่ซ่อน/แสดง #extAssigneeField ฟังอีเวนต์นี้
     extJobStatus.dispatchEvent(new Event("change"));
     // อ่านอย่างเดียว -- ตั้งค่าได้จากหน้าจ่ายงานเท่านั้น (ดู assignRequests_)
     document.getElementById("extAssignee").value = r.assignee || "";
     // มีเลขแล้วใช้เลขเดิม ยังไม่มีก็ใส่ค่าเริ่มต้น .0000 ให้ (แก้ทับได้ ดู defaultWbs)
     extWbs.value = r.wbs || defaultWbs();
-    extApprovalNo.value = r.approvalNo || "";
-    extApprovalDate.value = r.approvalDate || "";
     document.getElementById("extNote").value = r.note || "";
 
     extCoord.value = formatCoordText(r.lat, r.lng);
@@ -6468,6 +6597,19 @@
     const queueText = surveyQueueText(record);
     if (queueText) {
       lines.push({ label: "คิวรอสำรวจ", value: queueText.replace(/^คิวรอสำรวจ: /, "") });
+    }
+
+    // ใบขยายเขตฯ ที่อนุมัติแล้ว -- คนที่แคปการ์ดนี้ส่งให้ลูกค้าหรือผู้รับเหมา
+    // ต้องตอบได้ทันทีว่าราคานี้ยืนถึงวันไหน ยังนับวันเหลืออยู่ก็บอกไปด้วยเลย
+    const quote = quoteDeadlineOf(record);
+    if (quote) {
+      lines.push({
+        label: "หมดกำหนดยืนราคา",
+        value: formatThaiDate(quote.due)
+          + ` (${quoteTermLabel(quote.termDays)})`
+          + (quote.active ? ` · ${quoteDeadlineText(quote.left)}` : ""),
+        mono: false
+      });
     }
 
     // ใต้สถานะงานเช่นกัน -- คำถามถัดไปของคนที่ถามว่า "ส่งมิเตอร์หรือยัง" คือ "ส่งวันไหน"
@@ -6955,6 +7097,12 @@
     extPlanSection.hidden = true;
     extPhotoSection.hidden = true;
     extApprovalField.hidden = true;
+    // .reset() คืนดรอปดาวน์ให้เป็นตัวเลือกแรก (90 วัน) อยู่แล้ว แต่ช่องวันหมดกำหนด
+    // เป็น readonly ที่ JS เขียนเอง reset() จึงไม่ล้างให้ -- ค้างเป็นวันของใบก่อนหน้า
+    extQuoteTerm.value = String(QUOTE_TERM_DEFAULT);
+    extQuoteDue.value = "";
+    extQuoteDueHint.textContent = "";
+    extQuoteDueHint.className = "field-hint";
     hideError(extPhotoError);
     extPhotoSuccess.hidden = true;
     document.getElementById("extSitePhotoFile").value = "";
@@ -7647,6 +7795,12 @@
       const wbs = wbsValueToSave(extWbs.value);
       const approvalNo = extApprovalNo.value.trim();
       const approvalDate = extApprovalDate.value;
+      // เก็บกำหนดยืนราคาเฉพาะตอนบล็อกอนุมัติเปิดอยู่ -- ใบที่ยังไม่ถึงขั้นอนุมัติ
+      // ไม่ควรถูกประทับ "90 วัน" ใส่ไว้เฉย ๆ จากค่าดีฟอลต์ของดรอปดาวน์ที่ซ่อนอยู่
+      // (บล็อกนี้เปิดเมื่อใบมี quoteTermDays อยู่แล้วด้วย ค่าเดิมจึงไม่มีทางหาย)
+      const quoteTermDays = extApprovalField.hidden
+        ? null
+        : Number(extQuoteTerm.value) || QUOTE_TERM_DEFAULT;
       const deed = extDeed.value.trim();
       const coord = readCoordField(extCoord);
 
@@ -7722,6 +7876,7 @@
         wbs,
         approvalNo,
         approvalDate,
+        quoteTermDays,
         note,
         lat: coord.lat,
         lng: coord.lng
@@ -10176,6 +10331,9 @@ ${sheetHtml}
   const EXTEND_FILTER_QUEUE = "queue";
   // มุมมองของหัวหน้า: งานในมือของแต่ละคน กดชื่อเดียวเห็นทั้งกอง
   const EXTEND_FILTER_PEOPLE = "people";
+  // ใบที่อนุมัติแล้วและใกล้ (หรือเลย) กำหนดยืนราคา -- เลยกำหนดแล้วต้องประมาณการ
+  // ใหม่ทั้งใบ ชิปนี้คือที่ที่ดูว่าใบไหนกำลังจะถึงคิวนั้น
+  const EXTEND_FILTER_QUOTE = "quote";
   const EXTEND_SURVEY_STATUS = "รอสำรวจ";
 
   /**
@@ -10422,6 +10580,10 @@ ${sheetHtml}
   function extendFilterMatches(record) {
     if (extendFilter === EXTEND_FILTER_ALL) return true;
     if (extendFilter === EXTEND_FILTER_QUEUE) return record.jobStatus === EXTEND_SURVEY_STATUS;
+    if (extendFilter === EXTEND_FILTER_QUOTE) {
+      const info = quoteDeadlineOf(record);
+      return Boolean(info && info.active && info.warning);
+    }
     if (extendFilter === EXTEND_FILTER_PEOPLE) {
       // ยังไม่ได้เลือกคน = ยังอยู่หน้ารายชื่อ ให้ผ่านทั้งหมดไปนับยอดรายคน
       if (!extendPersonEmail) return true;
@@ -10438,6 +10600,7 @@ ${sheetHtml}
     if (extendFilter === EXTEND_FILTER_ALL) return "งานทั้งหมด";
     if (extendFilter === EXTEND_FILTER_MINE) return "งานของฉัน";
     if (extendFilter === EXTEND_FILTER_QUEUE) return "คิวรอสำรวจ";
+    if (extendFilter === EXTEND_FILTER_QUOTE) return `ใกล้หมดกำหนดยืนราคา (ภายใน ${QUOTE_WARN_DAYS} วัน)`;
     if (extendFilter === EXTEND_FILTER_PEOPLE) {
       if (!extendPersonEmail) return "งานในมือของแต่ละคน";
       const owner = extendJobs().find(r =>
@@ -10569,11 +10732,22 @@ ${sheetHtml}
       ? [{ key: EXTEND_FILTER_MINE, label: "งานของฉัน", count: mine }]
       : []
     ).concat(workKind === "extend"
-      // คิวรอสำรวจเป็นขั้นตอนของงานขยายเขตฯ เท่านั้น ขอใช้ไฟฟ้าไม่มีสถานะนี้
+      // คิวรอสำรวจและกำหนดยืนราคาเป็นเรื่องของงานขยายเขตฯ เท่านั้น
+      // ขอใช้ไฟฟ้าไม่มีทั้งสองสถานะนี้
       ? [{
         key: EXTEND_FILTER_QUEUE,
         label: "คิวรอสำรวจ",
         count: jobs.filter(r => r.jobStatus === EXTEND_SURVEY_STATUS).length
+      }, {
+        key: EXTEND_FILTER_QUOTE,
+        label: "ใกล้หมดกำหนดยืนราคา",
+        count: jobs.filter(r => {
+          const info = quoteDeadlineOf(r);
+          return Boolean(info && info.active && info.warning);
+        }).length,
+        // ชิปนี้เป็นชิปเดียวที่เป็น "งานที่กำลังจะเสียหาย" ไม่ใช่แค่มุมมองหนึ่ง
+        // -- ทำให้สะดุดตาเมื่อมีงานค้างอยู่จริง ไม่ต้องไปไล่กดหาเอง
+        alert: true
       }]
       : []
     ).concat(canAssignWork()
@@ -10593,6 +10767,7 @@ ${sheetHtml}
       btn.className = "status-chip";
       if (chip.key === extendFilter) btn.classList.add("active");
       if (!chip.count) btn.classList.add("is-empty");
+      if (chip.alert && chip.count) btn.classList.add("is-alert");
 
       const label = document.createElement("span");
       label.textContent = chip.label;
@@ -10832,6 +11007,16 @@ ${sheetHtml}
     } else {
       assigneeEl.textContent = "ยังไม่ได้จ่ายงาน";
       assigneeEl.classList.add("is-unassigned");
+    }
+
+    // เตือนกำหนดยืนราคาบนการ์ด -- เฉพาะใบที่ยังค้างรออยู่ที่สถานะอนุมัติจริง
+    // งานที่เดินต่อไปแล้วไม่ต้องเห็นบรรทัดนี้ให้รก (ดู quoteDeadlineOf)
+    const quote = quoteDeadlineOf(record);
+    if (quote && quote.active) {
+      const quoteEl = document.createElement("div");
+      quoteEl.className = `request-meta quote-deadline tone-text-${quoteDeadlineTone(quote.left)}`;
+      quoteEl.textContent = `ยืนราคาถึง ${formatThaiDate(quote.due)} · ${quoteDeadlineText(quote.left)}`;
+      card.appendChild(quoteEl);
     }
 
     // เปิดคำร้องใบนั้นในฟอร์มเดิม (ฟอร์มเดียวกับหน้ารับคำร้อง) เพื่ออัปเดตสถานะ
@@ -15785,16 +15970,26 @@ ${sheetHtml}
     myAssignedRequests().forEach(r => {
       const stuck = daysSince(lastProgressAt(r));
       const waiting = MYWORK_ATTENTION_STATUSES.has(String(r.jobStatus || ""));
-      if (!waiting && !(stuck !== null && stuck >= myWorkStaleDays)) return;
+      // กำหนดยืนราคาใกล้หมด = มีวันที่ตายตัวกำกับอยู่ จึงเป็นเหตุผลที่แรงที่สุด
+      // ในสามข้อนี้ และขึ้นเป็นเหตุผลที่แสดง -- ไม่แยกเป็นอีกรายการต่างหาก
+      // ไม่งั้นใบเดียวกันจะโผล่สองครั้งเมื่อมันค้างนานด้วย
+      const quote = quoteDeadlineOf(r);
+      const quoteWarn = Boolean(quote && quote.active && quote.warning);
+      if (!quoteWarn && !waiting && !(stuck !== null && stuck >= myWorkStaleDays)) return;
       out.push({
         kind: "request",
         record: r,
         title: r.customerName || r.subject || "(ไม่มีชื่อ)",
         meta: (REQUEST_TYPES[r.type] || r.type) + " · " + (r.trackingNumber || r.requestNumber || ""),
         status: r.jobStatus || "",
-        reason: waiting ? "รอเราดำเนินการ" : "ไม่คืบหน้า " + stuck + " วัน",
-        days: stuck === null ? -1 : stuck,
-        urgent: waiting
+        reason: quoteWarn
+          ? "ยืนราคาถึง " + formatThaiDate(quote.due) + " · " + quoteDeadlineText(quote.left)
+          : waiting ? "รอเราดำเนินการ" : "ไม่คืบหน้า " + stuck + " วัน",
+        // เรียงจากมากไปน้อย -- ยิ่งเหลือวันน้อย (หรือเลยกำหนดมาแล้ว) ยิ่งขึ้นก่อน
+        days: quoteWarn
+          ? Math.max(QUOTE_WARN_DAYS - quote.left, stuck === null ? 0 : stuck)
+          : (stuck === null ? -1 : stuck),
+        urgent: waiting || (quoteWarn && quote.left <= 7)
       });
     });
 

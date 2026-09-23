@@ -1771,6 +1771,20 @@ button:active {
   opacity: 0.5;
 }
 
+/* ชิปที่ไม่ได้เป็นแค่มุมมองหนึ่ง แต่เป็น "งานที่กำลังจะเสียหาย" (ใกล้หมดกำหนด
+   ยืนราคา) -- ต้องสะดุดตาตั้งแต่ยังไม่กด และเฉพาะตอนที่มีงานค้างอยู่จริง
+   ตอนถูกเลือกอยู่ปล่อยให้ .active ทาสีแบรนด์ทับตามเดิม จะได้รู้ว่ากดค้างไว้ */
+.status-chip.is-alert:not(.active) {
+  border-color: var(--danger);
+  color: var(--danger);
+  background: var(--danger-tint);
+}
+
+.status-chip.is-alert:not(.active) .status-chip-count {
+  background: var(--danger);
+  color: var(--white);
+}
+
 .status-chip-count {
   font-family: var(--font-mono);
   font-size: 12.5px;
@@ -2756,6 +2770,13 @@ span.estimate-crumb {
   color: var(--warning);
 }
 
+/* บรรทัดกำหนดยืนราคาบนการ์ดงานขยายเขตฯ และข้อความใต้ช่องวันหมดกำหนดในฟอร์ม
+   -- ใช้สีเดียวกันทั้งสองที่ผ่าน .tone-text-* เพื่อให้ "แดง = เลยกำหนด" อ่าน
+   เหมือนกันทุกหน้าจอ ตัวหนาเพราะมันคือบรรทัดที่ต้องสะดุดตากว่าบรรทัดอื่นบนการ์ด */
+.quote-deadline {
+  font-weight: 600;
+}
+
 .request-date {
   font-family: var(--font-mono);
   font-size: 12.5px;
@@ -2773,6 +2794,14 @@ span.estimate-crumb {
   color: var(--ink-soft);
   line-height: 1.65;
 }
+
+/* สีตามความเร่งด่วนของข้อความล้วน (ไม่ใช่ป้าย badge ที่มีพื้นหลังของตัวเอง)
+   -- ใช้กับบรรทัดกำหนดยืนราคาบนการ์ดและข้อความใต้ช่องวันหมดกำหนดในฟอร์ม
+   ต้องอยู่ "หลัง" .request-meta/.field-hint ที่กำหนดสีไว้แล้ว ไม่งั้นโดนทับ */
+.tone-text-success { color: var(--success); }
+.tone-text-warning { color: var(--warning); }
+.tone-text-danger { color: var(--danger); }
+.tone-text-info { color: var(--ink-soft); }
 
 .request-empty {
   text-align: center;
