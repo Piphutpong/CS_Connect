@@ -4510,18 +4510,35 @@
    * -- ต่างจากค่าธรรมเนียมอัตโนมัติ ช่องนี้ไม่มี data-auto ธงให้ต้องตาม เพราะ
    * เขียนทับแค่ตอนช่องยังว่างอยู่พอดี ก็ปลอดภัยพอแล้ว)
    *
-   * ยังโชว์ต่อไปถ้ามีค่าอยู่แล้วแม้สถานะจะเปลี่ยนไปเป็นอย่างอื่นในภายหลัง (เช่น
-   * แก้สถานะกลับไปเป็นอย่างอื่นหลังบันทึกวันที่ชำระไว้แล้ว) กันไม่ให้ค่าที่กรอก
-   * ไว้หายไปจากสายตาทั้งที่ยังอยู่ในฟอร์ม -- เหมือนเงื่อนไขของ extApprovalField
+   * ยังโชว์ต่อไปถ้ามีค่าที่ "พิมพ์เอง" อยู่แล้วแม้สถานะจะเปลี่ยนไปเป็นอย่างอื่น
+   * ในภายหลัง กันไม่ให้ค่าที่กรอกไว้หายไปจากสายตาทั้งที่ยังอยู่ในฟอร์ม --
+   * เหมือนเงื่อนไขของ extApprovalField
+   *
+   * แต่ค่าที่ "ระบบเติมให้เอง" ไม่ใช่ข้อมูลที่ใครกรอก พอสถานะออกจากชำระเงินแล้ว
+   * ก็ล้างทิ้ง ตามธง data-auto-paid แบบเดียวกับ data-auto-fee ของค่าธรรมเนียม
+   * (เคสที่เจอจริง: เลือก "ชำระเงินแล้ว" ผิด ระบบเติมวันนี้ให้ แก้กลับเป็น
+   * "ไม่มีค่าใช้จ่าย" แล้ววันที่ชำระยังค้างอยู่) และ "ไม่มีค่าใช้จ่าย" แปลว่า
+   * ไม่มีการชำระเงินเลย วันที่ชำระจึงขัดกับสถานะโดยตรง -- ล้างทิ้งทั้งที่พิมพ์เอง
+   * และที่ระบบเติม ไม่ใช่แค่ซ่อน
    */
   function syncPaidDateField() {
     const isPaid = reqJobStatus.value === "ชำระเงินแล้ว";
     // ส่งแผนกมิเตอร์แล้ว = ขั้นถัดจากชำระเงิน -- โชว์วันที่ส่งแทน ส่วนวันที่ชำระ
     // ซ่อนไป (ค่ายังเก็บอยู่ในคำร้อง ไม่ได้ล้าง แค่ไม่ต้องเห็นแล้วในขั้นนี้)
     const isSent = reqJobStatus.value === "ส่งแผนกมิเตอร์แล้ว";
+    const isFree = reqJobStatus.value === "ไม่มีค่าใช้จ่าย";
+    // ตอนเปิดคำร้องขึ้นมา (fillingForm) ห้ามล้างอะไรทั้งนั้น -- แค่เปิดดูไม่ควร
+    // ไปแก้ข้อมูลที่บันทึกไว้แล้ว ธงของใบก่อนหน้าก็ต้องไม่ติดค้างมาด้วย
+    if (fillingForm) delete reqPaidDate.dataset.autoPaid;
+    if (!isPaid) {
+      const wasAuto = reqPaidDate.dataset.autoPaid === "1";
+      delete reqPaidDate.dataset.autoPaid;
+      if (!fillingForm && !isSent && (isFree || wasAuto)) reqPaidDate.value = "";
+    }
     reqPaidDateField.hidden = isSent || (!isPaid && !reqPaidDate.value);
     if (isPaid && !reqPaidDate.value) {
       reqPaidDate.value = todayDateString();
+      reqPaidDate.dataset.autoPaid = "1";
     }
     reqMeterSentDateField.hidden = !isSent;
     if (isSent && !reqMeterSentDate.value) {
@@ -4529,6 +4546,8 @@
     }
   }
   reqJobStatus.addEventListener("change", syncPaidDateField);
+  // พิมพ์เองเมื่อไหร่ ค่านั้นเป็นของผู้ใช้ ระบบไม่ล้างให้อีก (ยกเว้นไม่มีค่าใช้จ่าย)
+  reqPaidDate.addEventListener("input", () => { delete reqPaidDate.dataset.autoPaid; });
 
   /**
    * วันที่ส่งแผนกมิเตอร์ของคำร้อง -- ใบที่ส่งก่อนมีช่องนี้ไม่มีค่าเก็บไว้ จึงถอยไป
