@@ -346,6 +346,10 @@
       throw new Error("โหมดออฟไลน์ไม่รองรับการจ่ายงาน");
     },
 
+    async voidDispatch() {
+      throw new Error("โหมดออฟไลน์ไม่รองรับการยกเลิกสมุดคุม");
+    },
+
     async setUserRole() {
       throw new Error("โหมดออฟไลน์ไม่รองรับการตั้งสิทธิ์หัวหน้างาน");
     },
@@ -772,6 +776,18 @@
 
       async saveGeneralDispatch(dispatch) {
         await callAsUser(() => rpc("save_dispatch", { p_kind: "general", p_record: dispatch }));
+      },
+
+      /**
+       * ยกเลิกสมุดคุมหนึ่งเล่ม -- เซิร์ฟเวอร์ตัดสินทั้งหมด (สิทธิ์, เหตุผล, ใบไหนคืน
+       * สถานะได้) แล้วคืน { dispatch, requests, skipped } ใบที่คืนมาคือฉบับที่ฐาน
+       * ข้อมูลถืออยู่แล้ว จึงเก็บลง snapshot ด้วย ไม่งั้นการบันทึกครั้งถัดไปจะส่งซ้ำ
+       * ไม่อยู่ใน RETRYABLE_ACTIONS โดยตั้งใจ -- ลองซ้ำจะชนกับ "ยกเลิกไปแล้ว"
+       */
+      async voidDispatch(kind, id, reason) {
+        const data = await callAsUser(() => rpc("void_dispatch", { p_kind: kind, p_id: id, p_reason: reason }));
+        (data.requests || []).forEach(r => savedRequests.set(String(r.id), JSON.stringify(r)));
+        return data;
       },
 
       // สมัครผ่าน Edge Function เท่านั้น (ตรวจรหัสเชิญก่อน) -- signUp ของ Auth ปิดไว้
@@ -2355,6 +2371,22 @@
   }
 
   /**
+   * สมุดที่ยกเลิกแล้วยังเปิดดู/พิมพ์ได้ (เป็นหลักฐานว่าเคยมีเล่มนี้) แต่หัวเอกสาร
+   * ต้องบอกชัดว่ายกเลิกแล้ว ไม่งั้นกระดาษที่พิมพ์ซ้ำออกมาจะดูเหมือนฉบับที่ใช้ได้
+   */
+  function voidedTitle(dispatch, title) {
+    return dispatch.voidedAt ? `${title} (ยกเลิกแล้ว)` : title;
+  }
+
+  function reprintNote(dispatch) {
+    if (!dispatch.voidedAt) {
+      return "นี่คือสำเนาของสมุดที่พิมพ์ไปแล้ว จึงแก้ไขไม่ได้ เพื่อให้ตรงกับฉบับที่เซ็นรับไว้";
+    }
+    return `สมุดเล่มนี้ถูกยกเลิกแล้ว โดย ${dispatch.voidedByName || "-"} เมื่อ ${formatThaiDateTime(dispatch.voidedAt)}`
+      + ` · เหตุผล: ${dispatch.voidReason || "-"} -- ใช้อ้างอิงเท่านั้น ไม่ใช่เอกสารส่งงาน`;
+  }
+
+  /**
    * Reopens a stored book for reprinting. Rendered from the snapshot rather
    * than from current request data, and locked (no contenteditable), because
    * this document has already been signed for -- a reprint that quietly
@@ -2366,7 +2398,7 @@
     if (!printWindow) return;
 
     writeDispatchDocument(printWindow, {
-      title: "สมุดคุมคำร้องส่งแผนกมิเตอร์",
+      title: voidedTitle(dispatch, "สมุดคุมคำร้องส่งแผนกมิเตอร์"),
       columns: METER_DISPATCH_PRINT_COLUMNS,
       rows: Array.isArray(dispatch.rows) ? dispatch.rows : [],
       printedAt: dispatch.printedAt,
@@ -2374,7 +2406,7 @@
       receiver: { name: dispatch.receiverName, position: dispatch.receiverPosition },
       editable: false,
       actionLabel: "พิมพ์ซ้ำ",
-      actionNote: "นี่คือสำเนาของสมุดที่พิมพ์ไปแล้ว จึงแก้ไขไม่ได้ เพื่อให้ตรงกับฉบับที่เซ็นรับไว้"
+      actionNote: reprintNote(dispatch)
     });
 
     const reprintBtn = printWindow.document.getElementById("confirmBtn");
@@ -2491,7 +2523,7 @@
     if (!printWindow) return;
 
     writeDispatchDocument(printWindow, {
-      title: "สมุดคุมคำร้องส่งแผนกบริหารรายได้ค่าไฟฟ้า",
+      title: voidedTitle(dispatch, "สมุดคุมคำร้องส่งแผนกบริหารรายได้ค่าไฟฟ้า"),
       columns: REVENUE_DISPATCH_PRINT_COLUMNS,
       rows: Array.isArray(dispatch.rows) ? dispatch.rows : [],
       printedAt: dispatch.printedAt,
@@ -2499,7 +2531,7 @@
       receiver: { name: dispatch.receiverName, position: dispatch.receiverPosition },
       editable: false,
       actionLabel: "พิมพ์ซ้ำ",
-      actionNote: "นี่คือสำเนาของสมุดที่พิมพ์ไปแล้ว จึงแก้ไขไม่ได้ เพื่อให้ตรงกับฉบับที่เซ็นรับไว้"
+      actionNote: reprintNote(dispatch)
     });
 
     const reprintBtn = printWindow.document.getElementById("confirmBtn");
@@ -2512,7 +2544,7 @@
     if (!printWindow) return;
 
     writeDispatchDocument(printWindow, {
-      title: "สมุดคุมคำร้องทั่วไป",
+      title: voidedTitle(dispatch, "สมุดคุมคำร้องทั่วไป"),
       columns: GENERAL_DISPATCH_PRINT_COLUMNS,
       rows: Array.isArray(dispatch.rows) ? dispatch.rows : [],
       printedAt: dispatch.printedAt,
@@ -2520,7 +2552,7 @@
       receiver: { name: dispatch.receiverName, position: dispatch.receiverPosition },
       editable: false,
       actionLabel: "พิมพ์ซ้ำ",
-      actionNote: "นี่คือสำเนาของสมุดที่พิมพ์ไปแล้ว จึงแก้ไขไม่ได้ เพื่อให้ตรงกับฉบับที่เซ็นรับไว้"
+      actionNote: reprintNote(dispatch)
     });
 
     const reprintBtn = printWindow.document.getElementById("confirmBtn");
@@ -3072,6 +3104,8 @@
    */
   function clearWorkspaceScreens() {
     document.getElementById("requestsList").innerHTML = "";
+    document.getElementById("requestsListNotice").hidden = true;
+    document.getElementById("voidDispatchModal").hidden = true;
     document.getElementById("requestsSearchInput").value = "";
 
     document.getElementById("requestForm").reset();
@@ -5855,8 +5889,9 @@
 
   function renderDispatchInfo(record) {
     const line = document.getElementById("requestFormDispatchInfo");
+    // เล่มที่ยกเลิกแล้วไม่นับ -- คำร้องนั้นยังไม่ได้ถูกส่งตามเล่มนั้นจริง
     const dispatch = getDispatches().find(d =>
-      Array.isArray(d.rows) && d.rows.some(row => row.requestId === record.id)
+      !d.voidedAt && Array.isArray(d.rows) && d.rows.some(row => row.requestId === record.id)
     );
 
     line.innerHTML = "";
@@ -5875,8 +5910,9 @@
   /** เหมือน renderDispatchInfo ด้านบน แต่ของสมุดคุมส่ง ผบร. */
   function renderRevenueDispatchInfo(record) {
     const line = document.getElementById("requestFormRevenueDispatchInfo");
+    // เล่มที่ยกเลิกแล้วไม่นับ -- คำร้องนั้นยังไม่ได้ถูกส่งตามเล่มนั้นจริง
     const dispatch = getRevenueDispatches().find(d =>
-      Array.isArray(d.rows) && d.rows.some(row => row.requestId === record.id)
+      !d.voidedAt && Array.isArray(d.rows) && d.rows.some(row => row.requestId === record.id)
     );
 
     line.innerHTML = "";
@@ -5895,8 +5931,9 @@
   /** เหมือน renderDispatchInfo ด้านบน แต่ของสมุดคุมคำร้องทั่วไป (ส่ง ผสน.) */
   function renderGeneralDispatchInfo(record) {
     const line = document.getElementById("requestFormGeneralDispatchInfo");
+    // เล่มที่ยกเลิกแล้วไม่นับ -- คำร้องนั้นยังไม่ได้ถูกส่งตามเล่มนั้นจริง
     const dispatch = getGeneralDispatches().find(d =>
-      Array.isArray(d.rows) && d.rows.some(row => row.requestId === record.id)
+      !d.voidedAt && Array.isArray(d.rows) && d.rows.some(row => row.requestId === record.id)
     );
 
     line.innerHTML = "";
@@ -6074,7 +6111,7 @@
    * ไว้ เผื่อวันหนึ่งมีสมุดคุมเล่มไหนย้ายไปอยู่หน้าอื่น
    */
   function renderDispatchHistoryList({
-    title, dispatches, printBtn, onOpen,
+    kind, title, dispatches, printBtn, onOpen,
     listEl, titleEl, countEl, addBtn, searchQuery
   }) {
     addBtn.hidden = true;
@@ -6085,7 +6122,9 @@
       .sort((a, b) => (b.printedAt || 0) - (a.printedAt || 0));
 
     titleEl.textContent = title;
-    countEl.textContent = `พิมพ์ไปแล้ว ${matches.length} เล่ม`;
+    const voidedCount = matches.filter(d => d.voidedAt).length;
+    countEl.textContent = `พิมพ์ไปแล้ว ${matches.length} เล่ม`
+      + (voidedCount ? ` · ยกเลิก ${voidedCount} เล่ม` : "");
     listEl.innerHTML = "";
 
     if (!matches.length) {
@@ -6132,9 +6171,35 @@
       card.querySelector(".dispatch-meta-people").textContent =
         `ผู้ส่ง: ${dispatch.senderName || "-"} · ผู้รับ: ${dispatch.receiverName || "-"}`;
 
+      // เล่มที่ยกเลิกแล้วอยู่ในประวัติต่อ (ไม่ลบ) แต่ต้องอ่านออกทันทีว่าใช้ไม่ได้แล้ว
+      // พร้อมบอกว่าใครยกเลิก เมื่อไร เพราะอะไร -- คำถามแรกของคนที่เจอเล่มนี้
+      if (dispatch.voidedAt) {
+        card.classList.add("dispatch-voided");
+        const badge = document.createElement("span");
+        badge.className = "request-badge request-badge-status tone-danger";
+        badge.textContent = "ยกเลิกแล้ว";
+        card.querySelector(".request-badges").prepend(badge);
+        const voidLine = document.createElement("div");
+        voidLine.className = "request-meta dispatch-void-line";
+        voidLine.textContent = `ยกเลิกโดย ${dispatch.voidedByName || "-"} · `
+          + `${formatThaiDateTime(dispatch.voidedAt)} · เหตุผล: ${dispatch.voidReason || "-"}`;
+        card.appendChild(voidLine);
+      }
+
       card.classList.add("has-card-actions");
       const actions = document.createElement("div");
       actions.className = "request-card-actions";
+      if (kind && !dispatch.voidedAt && canVoidDispatch(dispatch)) {
+        const voidBtn = document.createElement("button");
+        voidBtn.type = "button";
+        voidBtn.className = "btn btn-ghost btn-danger-ghost request-card-action-btn";
+        voidBtn.textContent = "ยกเลิกสมุดคุม";
+        voidBtn.addEventListener("click", (e) => {
+          e.stopPropagation();
+          openVoidDispatchDialog(kind, dispatch);
+        });
+        actions.appendChild(voidBtn);
+      }
       const reprintBtn = document.createElement("button");
       reprintBtn.type = "button";
       reprintBtn.className = "btn btn-ghost request-card-action-btn";
@@ -6151,9 +6216,214 @@
     });
   }
 
+  // ---------- ยกเลิกสมุดคุม (คุมผิด -> ยกเลิก -> คุมใหม่) ----------
+  //
+  // ไม่ลบเล่มเดิม: เซิร์ฟเวอร์ (void_dispatch) ติดตรายกเลิกพร้อมเหตุผล แล้วคืนคำร้อง
+  // ที่ยังอยู่ที่สถานะ "ส่ง...แล้ว" ของเล่มนี้กลับเข้าคิวรอส่ง หน้าเว็บทำแค่สามอย่าง:
+  // แสดงให้เห็นก่อนว่าใบไหนจะกลับ/ไม่กลับ, บังคับเหตุผล+ติ๊กยืนยัน, และหลังยกเลิก
+  // พาไปแท็บ "รอส่ง" โดยเลือกใบที่กลับมาไว้ให้แล้ว เพื่อคุมเล่มใหม่ได้ทันที
+
+  const requestsListNotice = document.getElementById("requestsListNotice");
+
+  /** สถานะ "ส่งแล้ว" / ประเภทคำร้อง / แคช / ตะกร้าเลือก / โหมด ของสมุดแต่ละชนิด */
+  function dispatchKindInfo(kind) {
+    switch (kind) {
+      case "meter":
+        return {
+          type: "power", sentStatus: "ส่งแผนกมิเตอร์แล้ว", title: "สมุดคุมคำร้องส่งแผนกมิเตอร์",
+          list: getDispatches,
+          replace: (d) => { dispatchesCache = replaceDispatch(dispatchesCache, d); },
+          selection: meterSelection, setPending: () => setMeterMode("pending")
+        };
+      case "general":
+        return {
+          type: "general", sentStatus: "ส่ง ผสน. แล้ว", title: "สมุดคุมคำร้องทั่วไป",
+          list: getGeneralDispatches,
+          replace: (d) => { generalDispatchesCache = replaceDispatch(generalDispatchesCache, d); },
+          selection: generalSelection, setPending: () => setGeneralMode("pending")
+        };
+      case "revenue":
+        return {
+          type: "deposit", sentStatus: "ส่ง ผบร.", title: "สมุดคุมคำร้องส่งแผนกบริหารรายได้ค่าไฟฟ้า",
+          list: getRevenueDispatches,
+          replace: (d) => { revenueDispatchesCache = replaceDispatch(revenueDispatchesCache, d); },
+          selection: revenueSelection, setPending: () => setRevenueMode("pending")
+        };
+      default:
+        return null;
+    }
+  }
+
+  function replaceDispatch(cache, updated) {
+    return cache.map(d => (String(d.id) === String(updated.id) ? updated : d));
+  }
+
+  /**
+   * ปุ่มยกเลิกโผล่ให้คนที่พิมพ์เล่มนั้นเอง หรือหัวหน้างาน/ผู้ดูแลระบบ -- เป็นแค่
+   * การแสดงผล ด่านจริงคือ void_dispatch ที่ตัดสินซ้ำทุกครั้ง
+   */
+  function canVoidDispatch(dispatch) {
+    const session = getSession();
+    if (!session) return false;
+    if (session.isSupervisor || session.isAdmin) return true;
+    return Boolean(dispatch.printedByEmail)
+      && String(dispatch.printedByEmail).toLowerCase() === String(session.email || "").toLowerCase();
+  }
+
+  /**
+   * พรีวิวฝั่งหน้าเว็บด้วยกติกาเดียวกับเซิร์ฟเวอร์ ให้คนกดเห็นก่อนว่าจะเกิดอะไร --
+   * ผลจริงมาจากเซิร์ฟเวอร์เสมอ (ใบที่ไม่ได้โหลดมาจะแจ้งว่าให้เซิร์ฟเวอร์ตรวจ)
+   */
+  function previewVoidDispatch(kind, dispatch) {
+    const info = dispatchKindInfo(kind);
+    const byId = new Map(getRequests().map(r => [String(r.id), r]));
+    const newerBooks = info.list().filter(d =>
+      !d.voidedAt && String(d.id) !== String(dispatch.id) && (d.printedAt || 0) > (dispatch.printedAt || 0));
+    const back = [];
+    const skip = [];
+    (Array.isArray(dispatch.rows) ? dispatch.rows : []).forEach(row => {
+      const name = row.customerName || row.requestNumber || row.subject || "-";
+      const r = row.requestId != null ? byId.get(String(row.requestId)) : null;
+      if (!r) {
+        skip.push({ name, why: "ไม่พบในรายการที่โหลดไว้ ระบบจะตรวจอีกครั้งตอนยืนยัน" });
+      } else if (r.type !== info.type || r.jobStatus !== info.sentStatus) {
+        skip.push({ name, why: `สถานะปัจจุบัน "${r.jobStatus || "-"}"` });
+      } else if (newerBooks.some(d => (d.rows || []).some(x => String(x.requestId) === String(r.id)))) {
+        skip.push({ name, why: "อยู่ในสมุดคุมเล่มที่ใหม่กว่าแล้ว" });
+      } else {
+        back.push({ name });
+      }
+    });
+    return { back, skip };
+  }
+
+  const voidDispatchModal = document.getElementById("voidDispatchModal");
+  const voidDispatchReason = document.getElementById("voidDispatchReason");
+  const voidDispatchAck = document.getElementById("voidDispatchAck");
+  const voidDispatchError = document.getElementById("voidDispatchError");
+  const voidDispatchConfirmBtn = document.getElementById("voidDispatchConfirmBtn");
+  const VOID_REASON_MIN = 5;
+  let voidTarget = null;
+  let voidInFlight = false;
+
+  function fillVoidList(listEl, items) {
+    listEl.innerHTML = "";
+    items.forEach(item => {
+      const li = document.createElement("li");
+      li.textContent = item.name;
+      if (item.why) {
+        const why = document.createElement("span");
+        why.className = "void-dispatch-why";
+        why.textContent = ` — ${item.why}`;
+        li.appendChild(why);
+      }
+      listEl.appendChild(li);
+    });
+  }
+
+  function syncVoidConfirm() {
+    voidDispatchConfirmBtn.disabled = voidInFlight
+      || voidDispatchReason.value.trim().length < VOID_REASON_MIN || !voidDispatchAck.checked;
+  }
+
+  function openVoidDispatchDialog(kind, dispatch) {
+    const info = dispatchKindInfo(kind);
+    if (!info) return;
+    voidTarget = { kind, dispatch };
+    const rows = Array.isArray(dispatch.rows) ? dispatch.rows : [];
+    const { back, skip } = previewVoidDispatch(kind, dispatch);
+
+    document.getElementById("voidDispatchTitle").textContent = `ยกเลิก${info.title}`;
+    document.getElementById("voidDispatchSummary").textContent =
+      `เล่มที่พิมพ์เมื่อ ${formatThaiDateTime(dispatch.printedAt)} โดย ${dispatch.printedByName || "-"} · ${rows.length} รายการ`
+      + ` — สมุดเล่มนี้จะถูกทำเครื่องหมาย "ยกเลิกแล้ว" (ไม่ถูกลบ) และคำร้องจะกลับไปรอส่งเพื่อคุมเล่มใหม่`;
+    document.getElementById("voidDispatchReturnCount").textContent = `(${back.length} รายการ)`;
+    fillVoidList(document.getElementById("voidDispatchReturn"), back);
+    document.getElementById("voidDispatchSkipWrap").hidden = skip.length === 0;
+    document.getElementById("voidDispatchSkipCount").textContent = `(${skip.length} รายการ)`;
+    fillVoidList(document.getElementById("voidDispatchSkip"), skip);
+
+    voidDispatchReason.value = "";
+    voidDispatchAck.checked = false;
+    voidDispatchError.hidden = true;
+    syncVoidConfirm();
+    voidDispatchModal.hidden = false;
+    voidDispatchReason.focus();
+  }
+
+  function closeVoidDispatchDialog() {
+    // ระหว่างรอเซิร์ฟเวอร์ปิดไม่ได้ -- ปิดไปแล้วผลกลับมาทีหลังจะไม่มีใครเห็น
+    if (voidInFlight) return;
+    voidDispatchModal.hidden = true;
+    voidTarget = null;
+  }
+
+  voidDispatchReason.addEventListener("input", syncVoidConfirm);
+  voidDispatchAck.addEventListener("change", syncVoidConfirm);
+  document.getElementById("voidDispatchCancelBtn").addEventListener("click", closeVoidDispatchDialog);
+  voidDispatchModal.addEventListener("click", (e) => {
+    if (e.target === voidDispatchModal) closeVoidDispatchDialog();
+  });
+  voidDispatchModal.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") closeVoidDispatchDialog();
+  });
+
+  voidDispatchConfirmBtn.addEventListener("click", async () => {
+    if (!voidTarget || voidInFlight) return;
+    const reason = voidDispatchReason.value.trim();
+    if (reason.length < VOID_REASON_MIN || !voidDispatchAck.checked) return;
+    const { kind, dispatch } = voidTarget;
+    const info = dispatchKindInfo(kind);
+
+    voidDispatchError.hidden = true;
+    voidInFlight = true;
+    setBusy(voidDispatchConfirmBtn, true, "กำลังยกเลิก...");
+    let result;
+    try {
+      result = await backend.voidDispatch(kind, dispatch.id, reason);
+    } catch (err) {
+      console.error("CS Connect: ยกเลิกสมุดคุมไม่สำเร็จ", err);
+      voidDispatchError.textContent = err?.message || "ยกเลิกสมุดคุมไม่สำเร็จ กรุณาลองใหม่อีกครั้ง";
+      voidDispatchError.hidden = false;
+      return;
+    } finally {
+      voidInFlight = false;
+      setBusy(voidDispatchConfirmBtn, false);
+      syncVoidConfirm();
+    }
+
+    // ฉบับที่เซิร์ฟเวอร์คืนมาคือความจริง -- แทนที่ในแคชทั้งสมุดและคำร้อง
+    if (result.dispatch) info.replace(result.dispatch);
+    const returned = result.requests || [];
+    const byId = new Map(returned.map(r => [String(r.id), r]));
+    requestsCache = requestsCache.map(r => byId.get(String(r.id)) || r);
+
+    voidDispatchModal.hidden = true;
+    voidTarget = null;
+
+    // พาไป "รอส่ง" พร้อมเลือกใบที่เพิ่งกลับมาไว้ให้ -- ขั้นต่อไปคือพิมพ์เล่มใหม่
+    info.setPending();
+    currentSearchQuery = "";
+    requestsSearchInput.value = "";
+    info.selection.clear();
+    returned.forEach(r => info.selection.add(r.id));
+
+    const skipped = result.skipped || [];
+    requestsListNotice.textContent =
+      `ยกเลิก${info.title}แล้ว · คำร้อง ${returned.length} รายการกลับมารอส่ง`
+      + (returned.length ? " และถูกเลือกไว้ให้แล้ว ตรวจรายการแล้วกดพิมพ์สมุดคุมเล่มใหม่ได้ทันที" : "")
+      + (skipped.length
+        ? ` · ${skipped.length} รายการไม่ถูกดึงกลับ: `
+          + skipped.map(x => `${x.customerName || x.requestId} (${x.reason})`).join(", ")
+        : "");
+    requestsListNotice.hidden = false;
+    renderRequestsList();
+  });
+
   /** ประวัติสมุดคุมทั้งสามเล่มอยู่ในหน้างานรับคำร้อง จึงวาดลง requestsList เหมือนกันหมด */
   function renderDispatchHistory() {
     renderDispatchHistoryList({
+      kind: "meter",
       title: REQUEST_TYPES.meter,
       dispatches: getDispatches(),
       printBtn: meterPrintBtn,
@@ -6169,6 +6439,7 @@
   /** เหมือน renderDispatchHistory ด้านบน แต่ของสมุดคุมส่ง ผบร. */
   function renderRevenueDispatchHistory() {
     renderDispatchHistoryList({
+      kind: "revenue",
       title: REQUEST_TYPES.revenueDispatch,
       dispatches: getRevenueDispatches(),
       printBtn: revenuePrintBtn,
@@ -6184,6 +6455,7 @@
   /** เหมือน renderDispatchHistory ด้านบน แต่ของสมุดคุมส่ง ผสน. ในหน้างานรับคำร้อง */
   function renderGeneralDispatchHistory() {
     renderDispatchHistoryList({
+      kind: "general",
       title: REQUEST_TYPES.generalDispatch,
       dispatches: getGeneralDispatches(),
       printBtn: generalPrintBtn,
@@ -6237,6 +6509,7 @@
   // ซ้ำกันสองที่ -- ดึงมารวมไว้ที่เดียวเพราะ restoreNavState() ต้องเรียกสลับแท็บ
   // ตอนโหลดหน้าด้วย (ไม่ใช่แค่ตอนคลิกจริง) ใช้ฟังก์ชันเดียวกันจะได้ไม่มีจุดที่ลืมแก้
   function switchRequestsTab(filter) {
+    requestsListNotice.hidden = true;
     currentRequestFilter = filter;
     setActiveNavItem(currentRequestFilter);
     currentSearchQuery = "";
@@ -6310,6 +6583,7 @@
       currentSearchQuery = "";
       requestsSearchInput.value = "";
       meterSelection.clear();
+      requestsListNotice.hidden = true;
       renderRequestsList();
     });
   });
@@ -6330,6 +6604,7 @@
       currentSearchQuery = "";
       requestsSearchInput.value = "";
       revenueSelection.clear();
+      requestsListNotice.hidden = true;
       renderRequestsList();
     });
   });
@@ -6350,6 +6625,7 @@
       currentSearchQuery = "";
       requestsSearchInput.value = "";
       generalSelection.clear();
+      requestsListNotice.hidden = true;
       renderRequestsList();
     });
   });

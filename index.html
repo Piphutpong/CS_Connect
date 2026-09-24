@@ -24,7 +24,7 @@
 <title>CS Connect</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=Sarabun:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=20260923a">
+<link rel="stylesheet" href="style.css?v=20260924a">
 </head>
 <body>
 
@@ -569,6 +569,9 @@
             <button type="button" class="requests-mode-btn active" data-revenue-mode="pending">รอส่ง</button>
             <button type="button" class="requests-mode-btn" data-revenue-mode="history">ประวัติการส่ง</button>
           </div>
+
+          <!-- หลังยกเลิกสมุดคุม: บอกว่าคำร้องกลับมากี่ใบและเลือกไว้ให้แล้ว (ดู voidDispatch ใน app.js) -->
+          <p id="requestsListNotice" class="form-notice dispatch-void-notice" role="status" hidden></p>
 
           <div class="requests-search">
             <input type="search" id="requestsSearchInput" placeholder="ค้นหาด้วยเลขที่คำร้อง, ชื่อลูกค้า, เบอร์โทร, บ้านเลขที่, เลขที่โฉนด...">
@@ -1871,6 +1874,36 @@
 
 <!-- ฟอร์มเพิ่ม/แก้โบรชัวร์ (โมดอลเต็มจอ ไม่ใช่ view แยก เพราะเป็นงานสั้น ๆ
      ที่ทำเสร็จแล้วกลับมาที่แกลเลอรีเดิมเสมอ) -->
+<!-- ยกเลิกสมุดคุม -- ไม่ลบเล่มเดิม ติดตรายกเลิกไว้ แล้วคืนคำร้องกลับเข้าคิว "รอส่ง"
+     ปุ่มยืนยันกดได้เมื่อกรอกเหตุผลและติ๊กยืนยันแล้วเท่านั้น (ดู openVoidDispatchDialog) -->
+<div id="voidDispatchModal" class="modal-overlay" hidden role="dialog" aria-modal="true" aria-labelledby="voidDispatchTitle">
+  <div class="modal-card modal-card-wide void-dispatch-card">
+    <h3 id="voidDispatchTitle">ยกเลิกสมุดคุม</h3>
+    <p id="voidDispatchSummary" class="void-dispatch-summary"></p>
+    <div class="void-dispatch-group">
+      <p class="void-dispatch-label">คำร้องที่จะกลับไปอยู่ใน “รอส่ง” <span id="voidDispatchReturnCount"></span></p>
+      <ul id="voidDispatchReturn" class="void-dispatch-list"></ul>
+    </div>
+    <div id="voidDispatchSkipWrap" class="void-dispatch-group" hidden>
+      <p class="void-dispatch-label void-dispatch-label-warn">จะไม่ถูกดึงกลับ <span id="voidDispatchSkipCount"></span></p>
+      <ul id="voidDispatchSkip" class="void-dispatch-list"></ul>
+    </div>
+    <div class="field">
+      <label for="voidDispatchReason">เหตุผลที่ยกเลิก (จำเป็น)</label>
+      <textarea id="voidDispatchReason" rows="3" maxlength="500" placeholder="เช่น เลือกคำร้องผิดใบ, ลืมใส่คำร้องของลูกค้าอีกราย"></textarea>
+    </div>
+    <label class="checkbox-field void-dispatch-ack">
+      <input type="checkbox" id="voidDispatchAck">
+      ขีดฆ่า/เรียกคืนสมุดฉบับกระดาษที่พิมพ์ไปแล้วเรียบร้อย
+    </label>
+    <p id="voidDispatchError" class="form-error" hidden></p>
+    <div class="modal-actions">
+      <button type="button" id="voidDispatchCancelBtn" class="btn btn-ghost">ปิด</button>
+      <button type="button" id="voidDispatchConfirmBtn" class="btn btn-ghost btn-danger-ghost" disabled>ยืนยันยกเลิกสมุดคุม</button>
+    </div>
+  </div>
+</div>
+
 <div id="brochureEditModal" class="modal-overlay" hidden>
   <div class="modal-card modal-card-wide">
     <h3 id="brochureEditTitle">เพิ่มโบรชัวร์</h3>
@@ -3149,6 +3182,6 @@
      **ต้องเปลี่ยนเลขนี้ทุกครั้งที่แก้ app.js / style.css / track.js / qr.js**
      ไม่งั้นผู้ใช้บางคนจะยังได้ไฟล์เก่าไปอีกพักใหญ่ -->
 <script src="vendor/supabase.js?v=2.116.0"></script>
-<script src="app.js?v=20260924b"></script>
+<script src="app.js?v=20260924c"></script>
 </body>
 </html>

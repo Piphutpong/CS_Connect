@@ -5277,3 +5277,82 @@ body.quo-print-body {
   white-space: pre-wrap;
 }
 .assign-comment:last-child { border-bottom: none; }
+
+/* ------------------------------------------------------------ ยกเลิกสมุดคุม */
+/* เล่มที่ยกเลิกแล้วยังอยู่ในประวัติ -- จางลงและขอบซ้ายเป็นสีอันตราย ให้แยกออกจาก
+   เล่มที่ใช้ได้ทันทีโดยไม่ต้องอ่านป้าย แต่ยังอ่านชื่อลูกค้าได้ครบ */
+.request-card.dispatch-voided {
+  border-left-color: var(--danger);
+  background: var(--paper);
+}
+
+.request-card.dispatch-voided .request-name {
+  color: var(--ink-soft);
+  text-decoration: line-through;
+  text-decoration-color: var(--danger);
+}
+
+.dispatch-void-line {
+  margin-top: 6px;
+  color: var(--danger);
+}
+
+.dispatch-void-notice {
+  margin: 0 0 16px;
+  background: var(--success-tint);
+  border-left-color: var(--success);
+  color: var(--success);
+}
+
+/* .modal-card จัดกึ่งกลางทุกอย่าง -- กล่องนี้เป็นรายการกับฟอร์ม อ่านชิดซ้ายดีกว่า */
+.void-dispatch-card {
+  text-align: left;
+}
+
+.modal-card .void-dispatch-summary {
+  margin: 0 0 16px;
+  line-height: 1.7;
+}
+
+.void-dispatch-group {
+  margin-bottom: 14px;
+}
+
+.void-dispatch-group[hidden] {
+  display: none;
+}
+
+.modal-card .void-dispatch-label {
+  margin: 0 0 6px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.modal-card .void-dispatch-label-warn {
+  color: var(--warning);
+}
+
+.void-dispatch-list {
+  margin: 0;
+  padding: 8px 12px 8px 30px;
+  max-height: 180px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  font-size: 13.5px;
+  line-height: 1.7;
+}
+
+.void-dispatch-why {
+  color: var(--ink-soft);
+}
+
+.void-dispatch-ack {
+  margin: 4px 0 0;
+  align-items: flex-start;
+}
+
+.void-dispatch-ack input {
+  flex-shrink: 0;
+  margin-top: 3px;
+}
