@@ -5356,3 +5356,92 @@ body.quo-print-body {
   flex-shrink: 0;
   margin-top: 3px;
 }
+
+/* ------------------------------------------------------------ เสนอราคาผ่าน CRM */
+/* .crm-section-head ตั้ง display: flex -- หัวข้อประวัติการเสนอราคาของสถานที่ถูกซ่อน
+   ด้วย hidden ตอนเป็นสถานที่ใหม่ จึงต้องมีตัวกันนี้ (ดูกฎ [hidden] ใน CLAUDE.md) */
+.crm-section-head[hidden] {
+  display: none;
+}
+
+.crm-quote-lookup {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.crm-quote-lookup .field {
+  flex: 1 1 240px;
+  margin: 0;
+}
+
+.crm-quote-card {
+  text-align: left;
+}
+
+.modal-card .crm-quote-customer {
+  margin: 0 0 14px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.modal-card .crm-quote-history {
+  margin: 0 0 14px;
+  font-size: 13px;
+  color: var(--ink-soft);
+}
+
+.modal-card .crm-quote-label {
+  margin: 0 0 8px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.crm-quote-recs {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.crm-quote-rec {
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--white);
+}
+
+.crm-quote-rec.is-top {
+  border-left: 4px solid var(--success);
+}
+
+.crm-quote-source {
+  color: var(--volt-700);
+}
+
+.crm-quote-recent {
+  color: var(--warning);
+}
+
+.crm-quote-rec-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.quo-link-info {
+  margin: 0 0 12px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: var(--volt-50);
+  color: var(--volt-700);
+  font-size: 13.5px;
+  line-height: 1.6;
+}
+
+.quo-link-info[hidden] {
+  display: none;
+}

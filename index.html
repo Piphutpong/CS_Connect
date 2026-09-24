@@ -24,7 +24,7 @@
 <title>CS Connect</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=Sarabun:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=20260924a">
+<link rel="stylesheet" href="style.css?v=20260924b">
 </head>
 <body>
 
@@ -1904,6 +1904,27 @@
   </div>
 </div>
 
+<!-- เสนอราคาให้ลูกค้า CRM: เลือกสถานที่ (CA) แล้วเลือกแพ็คเกจที่ระบบแนะนำ
+     ข้อมูลลูกค้ากรอกลงใบเสนอราคาให้อัตโนมัติ (ดู openCrmQuoteModal ใน app.js) -->
+<div id="crmQuoteModal" class="modal-overlay" hidden role="dialog" aria-modal="true" aria-labelledby="crmQuoteTitle">
+  <div class="modal-card modal-card-wide crm-quote-card">
+    <h3 id="crmQuoteTitle">เสนอราคา</h3>
+    <p id="crmQuoteCustomer" class="crm-quote-customer"></p>
+    <label class="field">
+      <span>เสนอราคาให้สถานที่</span>
+      <select id="crmQuoteSite"></select>
+    </label>
+    <p id="crmQuoteHistory" class="crm-quote-history"></p>
+    <p class="crm-quote-label">แพ็คเกจที่แนะนำ</p>
+    <div id="crmQuoteRecs" class="crm-quote-recs"></div>
+    <p id="crmQuoteError" class="form-error" hidden></p>
+    <div class="modal-actions">
+      <button type="button" id="crmQuoteCloseBtn" class="btn btn-ghost">ปิด</button>
+      <button type="button" id="crmQuoteBlankBtn" class="btn btn-ghost">ใบเปล่า (กรอกข้อมูลลูกค้าให้)</button>
+    </div>
+  </div>
+</div>
+
 <div id="brochureEditModal" class="modal-overlay" hidden>
   <div class="modal-card modal-card-wide">
     <h3 id="brochureEditTitle">เพิ่มโบรชัวร์</h3>
@@ -2048,6 +2069,16 @@
             <span>ลูกค้า (CRM)</span>
             <select id="quoCustomer"><option value="">- ไม่ผูก -</option></select>
           </label>
+          <!-- สถานที่ (CA) ของลูกค้าที่เลือก -- ผูกประวัติการเสนอราคาถึงระดับจุดใช้ไฟ -->
+          <label class="quo-bar-field" id="quoSiteField" hidden>
+            <span>สถานที่ (CA)</span>
+            <select id="quoSite"><option value="">- ทั้งลูกค้า -</option></select>
+          </label>
+          <!-- เฉพาะตอนแก้แม่แบบ: แม่แบบนี้คือเนื้อหาของแพ็คเกจไหน (ใช้ตอนเสนอราคาจาก CRM) -->
+          <label class="quo-bar-field" id="quoPackageField" hidden>
+            <span>ใช้เป็นแพ็คเกจ</span>
+            <select id="quoPackageKey"><option value="">- ไม่ใช่แพ็คเกจ -</option></select>
+          </label>
           <button type="button" id="quotationSaveTemplateBtn" class="btn btn-ghost">บันทึกเป็นแม่แบบ</button>
           <button type="button" id="quotationDeleteBtn" class="btn btn-ghost" hidden>ลบ</button>
           <button type="button" id="quotationPrintBtn" class="btn btn-ghost">พิมพ์</button>
@@ -2055,6 +2086,8 @@
         </div>
       </div>
       <p id="quotationFormError" class="form-error" hidden></p>
+      <!-- ลูกค้า/สถานที่ที่ผูกไว้ + ประวัติการเสนอราคาครั้งก่อน (ดู renderQuoLinkInfo) -->
+      <p id="quoLinkInfo" class="quo-link-info" hidden></p>
       <!-- เครื่องมือของเนื้อเอกสาร -- อยู่นอกกระดาษ เพื่อให้กระดาษบนจอมีแต่สิ่งที่
            พิมพ์ออกไปจริง (หน้าบนจอจึงตรงกับหน้าที่พิมพ์) -->
       <div class="quo-doc-tools">
@@ -2623,6 +2656,15 @@
             </div>
           </div>
         </div>
+        <!-- เสนอราคาด้วย BP / CA -- พิมพ์เลขแล้วเปิดกล่องเสนอราคาของลูกค้า/สถานที่นั้นเลย -->
+        <div class="crm-quote-lookup">
+          <label class="field">
+            <span>เสนอราคาด้วย BP หรือ CA</span>
+            <input type="search" id="crmQuoteLookup" inputmode="numeric" autocomplete="off" placeholder="พิมพ์เลข BP หรือ CA">
+          </label>
+          <button type="button" id="crmQuoteLookupBtn" class="btn btn-primary">เสนอราคา</button>
+        </div>
+        <p id="crmQuoteLookupMsg" class="form-error" hidden></p>
         <div id="crmDueList"></div>
         <div id="crmWarrantyList"></div>
         <div id="crmQuietList"></div>
@@ -2903,6 +2945,7 @@
           </div>
           <div class="quo-editor-actions">
             <button type="button" id="crmSiteDeleteBtn" class="btn btn-ghost" hidden>ลบสถานที่</button>
+            <button type="button" id="crmSiteQuoteBtn" class="btn btn-ghost" hidden>เสนอราคาสถานที่นี้</button>
             <button type="button" id="crmSiteSaveBtn" class="btn btn-primary">บันทึก</button>
           </div>
         </div>
@@ -2970,6 +3013,11 @@
         </div>
         <p class="field-hint" id="crmJobSummary"></p>
         <div id="crmJobs" class="crm-jobs"></div>
+
+        <div class="crm-section-head" id="crmSiteQuotesHead" hidden>
+          <h3>ประวัติการเสนอราคาของสถานที่นี้</h3>
+        </div>
+        <div id="crmSiteQuotes"></div>
       </div>
 
       <!-- ===== งานบริการหนึ่งงาน ===== -->
@@ -3182,6 +3230,6 @@
      **ต้องเปลี่ยนเลขนี้ทุกครั้งที่แก้ app.js / style.css / track.js / qr.js**
      ไม่งั้นผู้ใช้บางคนจะยังได้ไฟล์เก่าไปอีกพักใหญ่ -->
 <script src="vendor/supabase.js?v=2.116.0"></script>
-<script src="app.js?v=20260924c"></script>
+<script src="app.js?v=20260924d"></script>
 </body>
 </html>

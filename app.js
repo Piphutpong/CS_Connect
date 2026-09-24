@@ -382,6 +382,10 @@
       throw new Error("โหมดออฟไลน์ไม่รองรับโมดูลงานใหม่");
     },
 
+    async saveQuotation() {
+      throw new Error("โหมดออฟไลน์ไม่รองรับโมดูลงานใหม่");
+    },
+
     async deleteWorkItem() {
       throw new Error("โหมดออฟไลน์ไม่รองรับโมดูลงานใหม่");
     },
@@ -932,6 +936,15 @@
       async saveWorkItem(kind, item) {
         const data = await callAsUser(() => rpc("save_work_item", { p_kind: kind, p_item: item }));
         return data.item;
+      },
+
+      /**
+       * บันทึกใบเสนอราคา -- คืนทั้งตัวใบ และ `crm` เมื่อการเปลี่ยนเป็น "เสนอราคาแล้ว"
+       * ทำให้เซิร์ฟเวอร์อัปเดตโอกาสขาย/ไทม์ไลน์ลูกค้าไปด้วย (ดู quotation_sent_to_crm)
+       */
+      async saveQuotation(item) {
+        const data = await callAsUser(() => rpc("save_work_item", { p_kind: "quotation", p_item: item }));
+        return { item: data.item, crm: data.crm || null };
       },
 
       async deleteWorkItem(id) {
@@ -12350,6 +12363,10 @@ ${sheetHtml}
   // ลูกค้า CRM ที่ใบนี้ผูกอยู่ -- ไม่ใช่ช่องบนกระดาษ จึงไม่อยู่ใน quoFieldEls
   // ต้องถือไว้เองและใส่กลับตอน collectQuoData ไม่งั้นการผูกจะหลุดตอนบันทึก
   let quoCustomerId = "";
+  // สถานที่ (CA) ที่ผูก + สำเนาข้อมูลลูกค้า/สถานที่/แพ็คเกจ ณ วันที่ออกใบ (ดู crmQuotePrefill)
+  let quoSiteId = "";
+  let quoLinkExtras = {};
+  const QUO_LINK_EXTRA_KEYS = ["customerSnapshot", "siteSnapshot", "packageKey", "packageServiceType"];
   let quoDirtyFlag = false;
 
   const QUOTATION_STATUS_TONE = {
@@ -12728,7 +12745,11 @@ ${sheetHtml}
     quoEvCalc = base.evCalc || null;
     quoProtectCalc = base.protectCalc || null;
     quoCustomerId = base.customerId ? String(base.customerId) : "";
+    quoSiteId = base.siteId ? String(base.siteId) : "";
+    quoLinkExtras = {};
+    QUO_LINK_EXTRA_KEYS.forEach(key => { if (base[key] !== undefined) quoLinkExtras[key] = base[key]; });
     renderQuoCustomerOptions();
+    renderQuoPackageOptions(quoEditingIsTemplate ? (base.packageKey || "") : "");
     quoVatEnabled.checked = base.vatEnabled !== false;
     quoThaiDigits.checked = Boolean(base.thaiDigits);
     quoPaper.classList.toggle("is-thai-digits", quoThaiDigits.checked);
@@ -12786,12 +12807,109 @@ ${sheetHtml}
       select.appendChild(option);
     }
     select.value = quoCustomerId;
+    // แม่แบบไม่ผูกลูกค้า -- ซ่อนทั้งสองช่องตอนแก้แม่แบบ
+    document.getElementById("quoCustomerField").hidden = quoEditingIsTemplate;
+    renderQuoSiteOptions();
+  }
+
+  /** ช่องสถานที่ (CA) -- ขึ้นเมื่อผูกลูกค้าที่มีสถานที่แล้ว */
+  function renderQuoSiteOptions() {
+    const field = document.getElementById("quoSiteField");
+    const select = document.getElementById("quoSite");
+    select.innerHTML = '<option value="">- ทั้งลูกค้า -</option>';
+    const customer = crmCustomers.find(c => String(c.id) === quoCustomerId);
+    const sites = customer ? crmSites(customer) : [];
+    sites.forEach(site => {
+      const option = document.createElement("option");
+      option.value = String(site.id);
+      option.textContent = (site.name || "(ไม่มีชื่อสถานที่)") + (site.ca ? " · CA " + site.ca : "");
+      select.appendChild(option);
+    });
+    // สถานที่ที่ถูกลบไปแล้วแต่ใบยังผูกอยู่ -- เก็บไว้เป็นตัวเลือก ไม่ให้หลุดตอนบันทึก
+    if (quoSiteId && !sites.some(site => String(site.id) === quoSiteId)) {
+      const option = document.createElement("option");
+      option.value = quoSiteId;
+      const snap = quoLinkExtras.siteSnapshot;
+      option.textContent = snap ? (snap.name || "") + (snap.ca ? " · CA " + snap.ca : "") + " (ไม่พบใน CRM แล้ว)"
+        : "สถานที่ที่ถูกลบไปแล้ว";
+      select.appendChild(option);
+    }
+    select.value = quoSiteId;
+    field.hidden = quoEditingIsTemplate || !quoCustomerId || select.options.length <= 1;
+    renderQuoLinkInfo();
+  }
+
+  /** ช่องติดป้ายแพ็คเกจ -- ขึ้นเฉพาะตอนแก้แม่แบบ */
+  function renderQuoPackageOptions(selected) {
+    const select = document.getElementById("quoPackageKey");
+    select.innerHTML = '<option value="">- ไม่ใช่แพ็คเกจ -</option>';
+    Object.entries(CRM_PACKAGES).forEach(([key, pkg]) => {
+      const option = document.createElement("option");
+      option.value = key;
+      option.textContent = pkg.short === pkg.name ? pkg.name : pkg.short + " -- " + pkg.name;
+      select.appendChild(option);
+    });
+    select.value = selected || "";
+    document.getElementById("quoPackageField").hidden = !quoEditingIsTemplate;
+  }
+
+  /**
+   * บรรทัดใต้แถบเครื่องมือ: ใบนี้ผูกกับใคร จุดไหน และเคยเสนอให้รายนี้กี่ใบ ราคาครั้งก่อน
+   * เท่าไร -- ช่วยให้เสนอราคาสม่ำเสมอ ไม่ต้องสลับไปเปิดหน้า CRM
+   */
+  function renderQuoLinkInfo() {
+    const info = document.getElementById("quoLinkInfo");
+    if (quoEditingIsTemplate || !quoCustomerId) {
+      info.hidden = true;
+      info.textContent = "";
+      return;
+    }
+    const customer = crmCustomers.find(c => String(c.id) === quoCustomerId);
+    const snap = quoLinkExtras.customerSnapshot;
+    const name = customer ? customer.name : (snap && snap.name) || "ลูกค้า";
+    const bp = customer ? customer.bp : snap && snap.bp;
+    const site = customer && quoSiteId ? crmSites(customer).find(s => String(s.id) === quoSiteId) : null;
+    const siteSnap = quoLinkExtras.siteSnapshot;
+    const siteText = site ? (site.name || "") + (site.ca ? " (CA " + site.ca + ")" : "")
+      : quoSiteId && siteSnap ? (siteSnap.name || "") + (siteSnap.ca ? " (CA " + siteSnap.ca + ")" : "") : "";
+
+    const currentId = quotationEditing ? String(quotationEditing.id) : "";
+    const others = (quoSiteId ? crmQuotesForSite(quoSiteId) : crmQuotesFor(quoCustomerId))
+      .filter(q => String(q.id) !== currentId)
+      .sort((a, b) => (Number(b.createdAt) || 0) - (Number(a.createdAt) || 0));
+    let history = "ยังไม่เคยเสนอราคาให้" + (quoSiteId ? "สถานที่นี้" : "รายนี้");
+    if (others.length) {
+      const last = others[0];
+      const d = last.data || {};
+      const total = Array.isArray(d.lines) && d.lines.length
+        ? " ยอด " + formatMoney(quotationTotals(d.lines, d.vatEnabled).grand) + " บาท" : "";
+      history = "เคยเสนอให้" + (quoSiteId ? "สถานที่นี้ " : "รายนี้ ") + others.length + " ใบ · ล่าสุด "
+        + formatThaiDateTime(last.createdAt) + " “" + (d.subject || last.title || "") + "”" + total
+        + " [" + (last.status || "-") + "]";
+    }
+    info.textContent = "ผูกกับ " + name + (bp ? " (BP " + bp + ")" : "") + (siteText ? " · " + siteText : "")
+      + " · " + history;
+    info.hidden = false;
   }
 
   document.getElementById("quoCustomer").addEventListener("change", (e) => {
     quoCustomerId = e.target.value;
+    // เปลี่ยนลูกค้า = สถานที่และสำเนาข้อมูลเดิมไม่ใช่ของรายนี้แล้ว (สำเนาใหม่ถูกเก็บตอนบันทึก)
+    quoSiteId = "";
+    delete quoLinkExtras.customerSnapshot;
+    delete quoLinkExtras.siteSnapshot;
     setQuoDirty(true);
+    renderQuoSiteOptions();
   });
+
+  document.getElementById("quoSite").addEventListener("change", (e) => {
+    quoSiteId = e.target.value;
+    delete quoLinkExtras.siteSnapshot;
+    setQuoDirty(true);
+    renderQuoLinkInfo();
+  });
+
+  document.getElementById("quoPackageKey").addEventListener("change", () => setQuoDirty(true));
 
   function renderQuoSubtitle() {
     const item = quotationEditing;
@@ -12823,7 +12941,23 @@ ${sheetHtml}
     // สำเนาผลคำนวณ EV -- ราคาในใบนี้จะไม่เปลี่ยนตามเมื่อแก้ราคาในงวดภายหลัง
     if (quoEvCalc) data.evCalc = quoEvCalc;
     if (quoProtectCalc) data.protectCalc = quoProtectCalc;
-    if (quoCustomerId) data.customerId = quoCustomerId;
+    if (quoEditingIsTemplate) {
+      // แม่แบบไม่ผูกลูกค้า มีแต่ป้ายแพ็คเกจ
+      const packageKey = document.getElementById("quoPackageKey").value;
+      if (packageKey) data.packageKey = packageKey;
+    } else if (quoCustomerId) {
+      data.customerId = quoCustomerId;
+      if (quoSiteId) data.siteId = quoSiteId;
+      QUO_LINK_EXTRA_KEYS.forEach(key => {
+        if (quoLinkExtras[key] !== undefined) data[key] = quoLinkExtras[key];
+      });
+      if (!quoSiteId) delete data.siteSnapshot;
+      // สำเนาข้อมูล ณ วันที่ออกใบ -- ยังไม่มี (ผูกเองจากช่องเลือก) ก็เก็บตอนนี้
+      const customer = crmCustomers.find(c => String(c.id) === quoCustomerId);
+      if (customer && !data.customerSnapshot) data.customerSnapshot = crmCustomerSnapshot(customer);
+      const site = customer && quoSiteId ? crmSites(customer).find(x => String(x.id) === quoSiteId) : null;
+      if (site && !data.siteSnapshot) data.siteSnapshot = crmSiteSnapshot(site);
+    }
     data.thaiDigits = quoThaiDigits.checked;
     // คำต่อท้ายหน้าที่แก้เอง (key = เลขหน้า) -- ไม่มี = ใช้ค่าอัตโนมัติ
     data.contTexts = { ...quoContOverrides };
@@ -12850,21 +12984,32 @@ ${sheetHtml}
 
     setBusy(quotationSaveBtn, true, "กำลังบันทึก...");
     try {
-      const saved = await backend.saveWorkItem("quotation", {
+      const result = await backend.saveQuotation({
         id: quotationEditing ? quotationEditing.id : quoPendingId,
         title: quoEditingIsTemplate ? data.templateName : (data.subject || data.recipient || "ใบเสนอราคา"),
         status: quoEditingIsTemplate ? "แม่แบบ" : quoStatus.value,
         data
       });
+      const saved = result.item;
       quotationEditing = saved;
+      quoLinkExtras = {};
+      QUO_LINK_EXTRA_KEYS.forEach(key => { if (saved.data && saved.data[key] !== undefined) quoLinkExtras[key] = saved.data[key]; });
+      crmUpsertQuotation(saved);
+      // เซิร์ฟเวอร์อัปเดตโอกาสขาย/ไทม์ไลน์ไปแล้ว -- ให้ CRM โหลดใหม่ตอนเปิดครั้งถัดไป
+      if (result.crm) crmLoaded = false;
       quoPendingId = null;
       upsertLocalQuotation(saved);
       quotationDeleteBtn.hidden = false;
       quotationDuplicateBtn.hidden = quoEditingIsTemplate;
       if (!quoEditingIsTemplate) quotationFormTitle.textContent = "แก้ไขใบเสนอราคา";
       renderQuoSubtitle();
+      renderQuoLinkInfo();
       setQuoDirty(false);
-      flashQuoSaved("บันทึกแล้ว");
+      flashQuoSaved(result.crm
+        ? (result.crm.opportunityCreated
+          ? "บันทึกแล้ว · สร้างโอกาสขาย \"เสนอราคาแล้ว\" และบันทึกลงไทม์ไลน์ลูกค้าแล้ว"
+          : "บันทึกแล้ว · อัปเดตโอกาสขายและบันทึกลงไทม์ไลน์ลูกค้าแล้ว")
+        : "บันทึกแล้ว");
     } catch (err) {
       showError(quotationFormError, moduleErrorText(err));
     } finally {
@@ -12892,7 +13037,11 @@ ${sheetHtml}
         id: newWorkItemId(),
         title: templateName,
         status: "แม่แบบ",
-        data: { ...current, isTemplate: true, templateName }
+        data: (() => {
+          const templateData = { ...current, isTemplate: true, templateName };
+          ["customerId", "siteId", "customerSnapshot", "siteSnapshot", "packageServiceType"].forEach(k => { delete templateData[k]; });
+          return templateData;
+        })()
       });
       upsertLocalQuotation(saved);
       flashQuoSaved(`บันทึกแม่แบบ "${templateName}" แล้ว`);
@@ -13608,6 +13757,12 @@ ${sheetHtml}
         to.textContent = `เรียน ${d.recipient}`;
         card.appendChild(to);
       }
+      if (templatesTab && d.packageKey && CRM_PACKAGES[d.packageKey]) {
+        const tag = document.createElement("div");
+        tag.className = "request-meta";
+        tag.textContent = `ใช้เป็นแพ็คเกจ: ${CRM_PACKAGES[d.packageKey].short}`;
+        card.appendChild(tag);
+      }
       if (Array.isArray(d.lines) && d.lines.length) {
         const total = document.createElement("div");
         total.className = "request-meta request-meta-queue";
@@ -13948,6 +14103,10 @@ ${sheetHtml}
     quoContOverrides = {};
     quoEvCalc = null;
     quoProtectCalc = null;
+    quoSiteId = "";
+    quoLinkExtras = {};
+    document.getElementById("quoLinkInfo").hidden = true;
+    document.getElementById("quoLinkInfo").textContent = "";
     setQuoDirty(false);
     clearPricingScreens();
     clearProtectScreens();
@@ -18016,6 +18175,7 @@ ${sheetHtml}
     renderCrmTransformers();
     renderCrmEv();
     renderCrmJobs();
+    renderCrmSiteQuotes();
 
     crmListMode.hidden = true;
     crmHomeMode.hidden = true;
@@ -18234,6 +18394,12 @@ ${sheetHtml}
     crmOppEditing = null;
     crmQuotations = [];
     quoCustomerId = "";
+    crmQuoteModal.hidden = true;
+    crmQuoteCustomer = null;
+    crmQuoteRecs.innerHTML = "";
+    document.getElementById("crmQuoteLookup").value = "";
+    document.getElementById("crmQuoteLookupMsg").hidden = true;
+    document.getElementById("crmSiteQuotes").innerHTML = "";
     document.getElementById("crmCustomerOpps").innerHTML = "";
     document.getElementById("crmCustomerQuotes").innerHTML = "";
     crmActEditing = null;
@@ -18610,7 +18776,8 @@ ${sheetHtml}
             kind: "offer", customer, site,
             title: customer.name + " · " + (site.name || ""),
             detail: "มีหม้อแปลงรวม " + formatMoney(kva) + " kVA แต่ยังไม่เคยใช้บริการบำรุงรักษา",
-            reason: kva <= 250 ? "เสนอ PACKAGE 3" : kva <= 500 ? "เสนอ PACKAGE 2" : "เสนอ PACKAGE 1"
+            // เกณฑ์เดียวกับกล่องเสนอราคา (crmMaintenancePackageKey) -- ตามชื่อรายการราคาจริง
+            reason: "เสนอ " + CRM_PACKAGES[crmMaintenancePackageKey(site) || "transformer"].short
           });
         }
         if (kva > 0 && !has("อุปกรณ์ป้องกัน")) {
@@ -18682,6 +18849,11 @@ ${sheetHtml}
 
         row.append(main, reason);
         row.addEventListener("click", () => {
+          // ข้อเสนอที่ควรยื่น -> ไปที่กล่องเสนอราคาของสถานที่นั้นเลย
+          if (item.kind === "offer") {
+            openCrmQuoteModal(item.customer, item.site);
+            return;
+          }
           openCrmCustomer(item.customer);
           if (item.site) {
             const fresh = crmSites(item.customer).find(s => String(s.id) === String(item.site.id));
@@ -19144,6 +19316,576 @@ ${sheetHtml}
       crmField("crmOppStatus").value !== "ไม่สำเร็จ";
   }
 
+  // ------------------------------------------ เสนอราคาผ่าน CRM (BP / CA)
+  /**
+   * เสนอราคาจากหน้าลูกค้า: เลือกสถานที่ (CA) -> ระบบแนะนำแพ็คเกจจากอุปกรณ์ที่ติดตั้ง
+   * จริงเทียบกับประวัติงาน -> กดแล้วได้ใบเสนอราคาที่กรอกข้อมูลลูกค้าไว้ให้แล้ว
+   *
+   * เนื้อหาของแพ็คเกจมาจาก "แม่แบบ" ที่ติดป้ายแพ็คเกจไว้ (data.packageKey) ตามที่
+   * เจ้าของระบบเลือก -- ไม่มีแม่แบบก็ยังใช้ได้: ดึงราคาจากรายการราคา PACKAGE แทน
+   *
+   * เกณฑ์ PACKAGE ตามชื่อรายการราคาจริง (เจ้าของระบบเลือก):
+   *   รวม ≤ 50 kVA -> 4, ≤ 250 -> 3, ไม่เกิน 2 เครื่องและ ≤ 500 -> 2,
+   *   ไม่เกิน 2 เครื่องและ ≤ 1,500 -> 1, นอกนั้น -> บำรุงรักษาหม้อแปลงรายเครื่อง
+   */
+  const CRM_PACKAGES = {
+    pkg1: {
+      name: "ตรวจสอบและบำรุงรักษาระบบไฟฟ้าแบบครบวงจร PACKAGE 1", short: "PACKAGE 1",
+      serviceType: "ตรวจสอบและบำรุงรักษาระบบไฟฟ้าแบบครบวงจร (PACKAGE)", fit: "หม้อแปลงไม่เกิน 2 เครื่อง รวมไม่เกิน 1,500 kVA",
+      price: /PACKAGE\s*1\b/i
+    },
+    pkg2: {
+      name: "ตรวจสอบและบำรุงรักษาระบบไฟฟ้าแบบครบวงจร PACKAGE 2", short: "PACKAGE 2",
+      serviceType: "ตรวจสอบและบำรุงรักษาระบบไฟฟ้าแบบครบวงจร (PACKAGE)", fit: "หม้อแปลงไม่เกิน 2 เครื่อง รวมไม่เกิน 500 kVA",
+      price: /PACKAGE\s*2\b/i
+    },
+    pkg3: {
+      name: "ตรวจสอบและบำรุงรักษาระบบไฟฟ้าแบบครบวงจร PACKAGE 3", short: "PACKAGE 3",
+      serviceType: "ตรวจสอบและบำรุงรักษาระบบไฟฟ้าแบบครบวงจร (PACKAGE)", fit: "หม้อแปลงรวมไม่เกิน 250 kVA",
+      price: /PACKAGE\s*3\b/i
+    },
+    pkg4: {
+      name: "ตรวจสอบและบำรุงรักษาระบบไฟฟ้าแบบครบวงจร PACKAGE 4", short: "PACKAGE 4",
+      serviceType: "ตรวจสอบและบำรุงรักษาระบบไฟฟ้าแบบครบวงจร (PACKAGE)", fit: "หม้อแปลงรวมไม่เกิน 50 kVA",
+      price: /PACKAGE\s*4\b/i
+    },
+    transformer: {
+      name: "ตรวจสอบและบำรุงรักษาหม้อแปลงไฟฟ้า", short: "บำรุงรักษาหม้อแปลงรายเครื่อง",
+      serviceType: "ตรวจสอบและบำรุงรักษาหม้อแปลงไฟฟ้า", fit: "เกินเงื่อนไข PACKAGE -- คิดราคาตามขนาดของแต่ละเครื่อง"
+    },
+    protect: { name: "ติดตั้งอุปกรณ์ป้องกัน", short: "อุปกรณ์ป้องกัน", serviceType: "ติดตั้งอุปกรณ์ป้องกัน" },
+    solar: { name: "บำรุงรักษาระบบ Solar Roof Top", short: "บำรุงรักษา Solar", serviceType: "บำรุงรักษาระบบ Solar Roof Top" },
+    infrared: { name: "ตรวจจุดร้อนด้วยกล้องอินฟราเรด", short: "ตรวจจุดร้อนอินฟราเรด", serviceType: "ตรวจจุดร้อนด้วยกล้องอินฟราเรด" },
+    ev: { name: "ติดตั้ง EV Charger", short: "EV Charger", serviceType: "ติดตั้ง EV Charger" }
+  };
+
+  // ราคาบำรุงรักษาหม้อแปลงรายเครื่อง แยกตามขนาด -- จับคู่กับชื่อในรายการราคา
+  const CRM_TX_PRICE_TIERS = [
+    { maxKva: 250, price: /หม้อแปลง.*ไม่เกิน\s*250\s*kVA/i },
+    { maxKva: 1500, price: /มากกว่า\s*250\s*kVA\s*ถึง\s*1,?500\s*kVA/i },
+    { maxKva: Infinity, price: /มากกว่า\s*1,?500\s*kVA/i }
+  ];
+
+  // เสนอแพ็คเกจเดิมให้สถานที่เดิมภายในกี่วันจึงถือว่า "เสนอไปแล้ว"
+  const CRM_QUOTE_RECENT_DAYS = 90;
+
+  function crmTransformerUnits(site) {
+    return (Array.isArray(site && site.transformers) ? site.transformers : [])
+      .map(t => Number(t && t.kva) || 0)
+      .filter(kva => kva > 0);
+  }
+
+  /** แพ็คเกจบำรุงรักษาที่เข้าเกณฑ์ของสถานที่นี้ หรือ null ถ้าไม่มีหม้อแปลง */
+  function crmMaintenancePackageKey(site) {
+    const units = crmTransformerUnits(site);
+    const kva = Number(site && site.transformerTotalKva) || units.reduce((s, k) => s + k, 0);
+    if (!(kva > 0)) return null;
+    const count = units.length || 1;
+    if (kva <= 50) return "pkg4";
+    if (kva <= 250) return "pkg3";
+    if (count <= 2 && kva <= 500) return "pkg2";
+    if (count <= 2 && kva <= 1500) return "pkg1";
+    return "transformer";
+  }
+
+  /** งานล่าสุด (ไม่นับที่ยกเลิก) ของสถานที่ที่ประเภทบริการตรงเงื่อนไข */
+  function crmLatestJob(site, test) {
+    return crmJobs(site)
+      .filter(j => j.status !== "ยกเลิก" && test(String(j.serviceType || "")))
+      .sort((a, b) => String(b.serviceDate || "").localeCompare(String(a.serviceDate || "")))[0] || null;
+  }
+
+  /** วันครบรอบของงาน -- ใช้วันที่กรอกไว้ ถ้าไม่มีคิดจากรอบของประเภทบริการ */
+  function crmJobDueDays(job, site) {
+    if (!job) return null;
+    let next = job.nextServiceDate;
+    if (!next) {
+      const type = crmServiceType(job.serviceType);
+      const months = Number(site && site.serviceIntervalMonths) || (type && type.intervalMonths);
+      next = crmAddMonths(job.serviceDate, months);
+    }
+    return crmDaysUntil(next);
+  }
+
+  function crmIsMaintenanceType(type) {
+    return type.includes("บำรุงรักษาหม้อแปลง") || type.includes("(PACKAGE)");
+  }
+
+  /** ใบเสนอราคาที่ผูกกับสถานที่นี้ ไม่รวมแม่แบบ */
+  function crmQuotesForSite(siteId) {
+    return crmQuotations.filter(q =>
+      !(q.data && q.data.isTemplate)
+      && String((q.data && q.data.siteId) || "") === String(siteId));
+  }
+
+  /** ใบที่เสนอแพ็คเกจนี้ให้สถานที่นี้ไปแล้วเมื่อไม่นาน และยังไม่ยกเลิก */
+  function crmRecentQuote(site, key) {
+    const since = Date.now() - CRM_QUOTE_RECENT_DAYS * 86400000;
+    return crmQuotesForSite(site.id)
+      .filter(q => q.data && q.data.packageKey === key && q.status !== "ยกเลิก"
+        && (Number(q.createdAt) || 0) >= since)
+      .sort((a, b) => (Number(b.createdAt) || 0) - (Number(a.createdAt) || 0))[0] || null;
+  }
+
+  /**
+   * แพ็คเกจที่แนะนำสำหรับสถานที่หนึ่งจุด เรียงจากควรเสนอก่อน
+   * priority: 1 = ควรเสนอทันที, 2 = ควรเสนอ, 3 = โอกาสเสริม
+   */
+  function crmRecommendPackages(site) {
+    if (!site) return [];
+    const out = [];
+    const units = crmTransformerUnits(site);
+    const kva = Number(site.transformerTotalKva) || 0;
+    const kwp = Number(site.solarKwp) || 0;
+    const push = (key, priority, reason) => {
+      out.push({ key, priority, reason, recent: crmRecentQuote(site, key) });
+    };
+
+    const maintKey = crmMaintenancePackageKey(site);
+    if (maintKey) {
+      const size = "หม้อแปลง " + (units.length || 1) + " เครื่อง รวม " + formatMoney(kva) + " kVA";
+      const last = crmLatestJob(site, crmIsMaintenanceType);
+      const due = crmJobDueDays(last, site);
+      if (!last) {
+        push(maintKey, 1, size + " · ยังไม่เคยใช้บริการบำรุงรักษา");
+      } else if (due !== null && due <= CRM_DUE_WINDOW_DAYS) {
+        push(maintKey, 1, size + " · " + (due < 0 ? "เลยรอบบำรุงรักษามา " + Math.abs(due) + " วัน"
+          : due === 0 ? "ครบรอบบำรุงรักษาวันนี้" : "ครบรอบบำรุงรักษาอีก " + due + " วัน"));
+      } else {
+        push(maintKey, 3, size + " · บำรุงรักษาล่าสุด " + formatThaiDate(last.serviceDate) + " ยังไม่ถึงรอบ");
+      }
+    }
+
+    if (kva > 0 && !crmLatestJob(site, t => t.includes("อุปกรณ์ป้องกัน"))) {
+      push("protect", 2, "มีหม้อแปลงแต่ยังไม่เคยติดตั้งอุปกรณ์ป้องกัน");
+    }
+
+    if (kva > 0) {
+      const last = crmLatestJob(site, t => t.includes("อินฟราเรด"));
+      const due = crmJobDueDays(last, site);
+      if (!last) push("infrared", 2, "ยังไม่เคยตรวจจุดร้อน -- ตรวจรายปีช่วยหาจุดต่อหลวมก่อนเกิดเหตุ");
+      else if (due !== null && due <= CRM_DUE_WINDOW_DAYS) push("infrared", 2, "ถึงรอบตรวจจุดร้อนประจำปี");
+    }
+
+    if (kwp > 0) {
+      const last = crmLatestJob(site, t => t.includes("บำรุงรักษาระบบ Solar"));
+      const due = crmJobDueDays(last, site);
+      if (!last) push("solar", 2, "มี Solar Roof Top " + formatMoney(kwp) + " kWp แต่ยังไม่มีสัญญาดูแล");
+      else if (due !== null && due <= CRM_DUE_WINDOW_DAYS) push("solar", 2, "ถึงรอบบำรุงรักษา Solar " + formatMoney(kwp) + " kWp");
+    }
+
+    const ev = Array.isArray(site.evChargers) ? site.evChargers : [];
+    if (!ev.length) push("ev", 3, "ยังไม่มีเครื่องอัดประจุ EV -- โอกาสเสริม");
+
+    return out.sort((a, b) => a.priority - b.priority);
+  }
+
+  /** แม่แบบที่ติดป้ายแพ็คเกจนี้ (ถ้ามีหลายใบ ใช้ใบที่แก้ล่าสุด) */
+  function crmPackageTemplate(key) {
+    return crmQuotations
+      .filter(q => q.data && q.data.isTemplate && q.data.packageKey === key)
+      .sort((a, b) => (Number(b.updatedAt || b.createdAt) || 0) - (Number(a.updatedAt || a.createdAt) || 0))[0] || null;
+  }
+
+  function crmFindPriceItem(pattern, exclude) {
+    return priceItems.find(p => pattern.test(String(p.title || ""))
+      && !(exclude && exclude.test(String(p.title || "")))) || null;
+  }
+
+  /** แถวราคาจากรายการราคา PACKAGE -- ใช้เมื่อยังไม่มีแม่แบบของแพ็คเกจนั้น */
+  function crmPackagePriceLines(key, site) {
+    const pkg = CRM_PACKAGES[key];
+    if (!pkg) return [];
+    const line = item => ({ description: item.title, unitPrice: Number(item.data && item.data.unitPrice) || 0 });
+    if (pkg.price) {
+      const item = crmFindPriceItem(pkg.price);
+      return item ? [{ ...line(item), qty: 1 }] : [];
+    }
+    if (key === "transformer") {
+      const lines = [];
+      const units = crmTransformerUnits(site);
+      CRM_TX_PRICE_TIERS.forEach((tier, i) => {
+        const min = i ? CRM_TX_PRICE_TIERS[i - 1].maxKva : 0;
+        const qty = units.filter(k => k > min && k <= tier.maxKva).length;
+        const item = qty ? crmFindPriceItem(tier.price, /PACKAGE/i) : null;
+        if (item) lines.push({ ...line(item), qty });
+      });
+      return lines;
+    }
+    return [];
+  }
+
+  /** บอกว่าเนื้อหา/ราคาจะมาจากไหน -- ให้เห็นก่อนกด ไม่ต้องเดา */
+  function crmPackageSourceText(key, site) {
+    const template = crmPackageTemplate(key);
+    if (template) return "ใช้แม่แบบ “" + (template.data.templateName || template.title || "") + "”";
+    const lines = crmPackagePriceLines(key, site);
+    if (lines.length) {
+      const total = quotationTotals(lines, true).grand;
+      return "ราคาจากรายการ PACKAGE รวม " + formatMoney(total) + " บาท (รวม VAT)";
+    }
+    if (key === "protect") return "ยังไม่มีแม่แบบ -- คำนวณราคาด้วยปุ่ม “คำนวณราคาติดตั้งอุปกรณ์ป้องกัน” บนใบเสนอราคา";
+    if (key === "ev") return "ยังไม่มีแม่แบบ -- คำนวณราคาด้วยปุ่ม “คำนวณราคาติดตั้ง EV” บนใบเสนอราคา";
+    return "ยังไม่มีแม่แบบหรือรายการราคา -- กรอกราคาเองบนใบเสนอราคา";
+  }
+
+  function crmCustomerSnapshot(customer) {
+    return {
+      id: String(customer.id), bp: customer.bp || "", name: customer.name || "",
+      customerType: customer.customerType || "", taxId: customer.taxId || "", address: customer.address || ""
+    };
+  }
+
+  function crmSiteSnapshot(site) {
+    return {
+      id: String(site.id), ca: site.ca || "", name: site.name || "", address: site.address || "",
+      voltageSystem: site.voltageSystem || "", transformerCount: crmTransformerUnits(site).length,
+      kva: Number(site.transformerTotalKva) || 0, kwp: Number(site.solarKwp) || 0
+    };
+  }
+
+  /** "เรียน" -- ตำแหน่งของผู้ตัดสินใจ + ชื่อลูกค้า ถ้าไม่มี ใช้ชื่อลูกค้า */
+  function crmRecipientFor(customer) {
+    const contacts = crmContacts(customer);
+    const decider = contacts.find(c => c.role === "ผู้ตัดสินใจ") || crmPrimaryContact(customer);
+    const position = decider && String(decider.position || "").trim();
+    return position ? position + " " + (customer.name || "") : (customer.name || "");
+  }
+
+  /**
+   * ค่าที่ใช้แทนคำในวงเล็บปีกกาของแม่แบบ เช่น {ชื่อลูกค้า} {CA} {kVA}
+   * แม่แบบจึงเขียนประโยคของตัวเองได้ โดยข้อมูลลูกค้ายังถูกเติมให้อัตโนมัติ
+   */
+  function crmQuoteTokens(customer, site) {
+    const snap = site ? crmSiteSnapshot(site) : null;
+    const decider = crmContacts(customer).find(c => c.role === "ผู้ตัดสินใจ") || crmPrimaryContact(customer);
+    return {
+      "ชื่อลูกค้า": customer.name || "",
+      "BP": customer.bp || "",
+      "ที่อยู่ลูกค้า": customer.address || "",
+      "สถานที่": snap ? snap.name : "",
+      "CA": snap ? snap.ca : "",
+      "ที่อยู่สถานที่": snap ? snap.address : "",
+      "ระบบไฟฟ้า": snap ? snap.voltageSystem : "",
+      "จำนวนหม้อแปลง": snap ? String(snap.transformerCount) : "",
+      "kVA": snap ? formatMoney(snap.kva) : "",
+      "kWp": snap ? formatMoney(snap.kwp) : "",
+      "ผู้ติดต่อ": decider ? decider.name || "" : "",
+      "ตำแหน่งผู้ติดต่อ": decider ? decider.position || "" : ""
+    };
+  }
+
+  function crmFillTokens(text, tokens) {
+    return String(text).replace(/\{([^{}]+)\}/g, (all, key) =>
+      Object.prototype.hasOwnProperty.call(tokens, key) ? tokens[key] : all);
+  }
+
+  /** ย่อหน้าเหตุ -- ใช้เมื่อแม่แบบไม่ได้เขียนไว้เอง */
+  function crmDefaultCause(customer, site) {
+    let text = "ตามที่ " + (customer.name || "") + (customer.bp ? " (BP " + customer.bp + ")" : "");
+    if (!site) return text + " ได้ติดต่อขอทราบราคาค่าบริการ นั้น";
+    const snap = crmSiteSnapshot(site);
+    text += " ใช้ไฟฟ้า ณ " + (snap.name || "สถานที่ของท่าน") + (snap.ca ? " (CA " + snap.ca + ")" : "");
+    if (snap.voltageSystem) text += " ระบบ " + snap.voltageSystem;
+    if (snap.kva > 0) text += " ซึ่งมีหม้อแปลงไฟฟ้า " + (snap.transformerCount || 1) + " เครื่อง ขนาดรวม " + formatMoney(snap.kva) + " kVA";
+    if (snap.kwp > 0) text += (snap.kva > 0 ? " และ" : " ซึ่งมี") + "ระบบ Solar Roof Top " + formatMoney(snap.kwp) + " kWp";
+    return text + " นั้น";
+  }
+
+  /**
+   * ข้อมูลตั้งต้นของใบเสนอราคาใหม่จากลูกค้า/สถานที่/แพ็คเกจ
+   * ลำดับ: ค่าตั้งต้นของใบ <- แม่แบบของแพ็คเกจ (แทนคำในปีกกาแล้ว) <- ข้อมูลลูกค้า
+   * เฉพาะช่องที่แม่แบบเว้นไว้ <- การผูกลูกค้า/สถานที่ (เสมอ)
+   */
+  function crmQuotePrefill(customer, site, key, subject) {
+    const pkg = key ? CRM_PACKAGES[key] : null;
+    const template = key ? crmPackageTemplate(key) : null;
+    const tokens = crmQuoteTokens(customer, site);
+    const base = {};
+    if (template) {
+      Object.entries(template.data || {}).forEach(([field, value]) => {
+        if (["isTemplate", "templateName", "customerId", "siteId", "customerSnapshot", "siteSnapshot"].includes(field)) return;
+        base[field] = typeof value === "string" ? crmFillTokens(value, tokens) : value;
+      });
+      if (Array.isArray(base.lines)) {
+        base.lines = base.lines.map(l => ({ ...l, description: crmFillTokens(l.description || "", tokens) }));
+      }
+    }
+    const defaultSubject = quoDefaultData().subject;
+    if (!base.recipient) base.recipient = crmRecipientFor(customer);
+    if (!base.subject || base.subject === defaultSubject) {
+      base.subject = subject || (pkg ? defaultSubject + pkg.name : defaultSubject);
+    }
+    if (!base.paraCause) base.paraCause = crmDefaultCause(customer, site);
+    if (!(Array.isArray(base.lines) && base.lines.length) && key) base.lines = crmPackagePriceLines(key, site);
+
+    base.customerId = String(customer.id);
+    base.customerSnapshot = crmCustomerSnapshot(customer);
+    if (site) {
+      base.siteId = String(site.id);
+      base.siteSnapshot = crmSiteSnapshot(site);
+    } else {
+      delete base.siteId;
+      delete base.siteSnapshot;
+    }
+    if (pkg) {
+      base.packageKey = key;
+      base.packageServiceType = pkg.serviceType;
+    } else {
+      delete base.packageKey;
+      delete base.packageServiceType;
+    }
+    return base;
+  }
+
+  async function crmStartQuotation(customer, site, key, subject) {
+    // แม่แบบอยู่ใน crmQuotations และรายการราคาอยู่ใน priceItems -- โหลดให้ครบก่อน
+    await Promise.all([ensureCrmQuotations(), ensurePriceItems()]);
+    const prefill = crmQuotePrefill(customer, site, key, subject);
+    await openQuotationView();
+    openQuotationForm(null, prefill);
+    setQuoDirty(true);
+  }
+
+  // ---- กล่อง "เสนอราคา"
+  const crmQuoteModal = document.getElementById("crmQuoteModal");
+  const crmQuoteSite = document.getElementById("crmQuoteSite");
+  const crmQuoteRecs = document.getElementById("crmQuoteRecs");
+  const crmQuoteError = document.getElementById("crmQuoteError");
+  let crmQuoteCustomer = null;
+
+  async function openCrmQuoteModal(customer, site) {
+    if (!customer) return;
+    crmQuoteCustomer = customer;
+    hideError(crmQuoteError);
+    document.getElementById("crmQuoteTitle").textContent = "เสนอราคา";
+    document.getElementById("crmQuoteCustomer").textContent =
+      (customer.name || "") + (customer.bp ? " · BP " + customer.bp : " · ยังไม่มี BP");
+
+    const sites = crmSites(customer);
+    crmQuoteSite.innerHTML = "";
+    const whole = document.createElement("option");
+    whole.value = "";
+    whole.textContent = "ทั้งลูกค้า (ไม่เจาะจงสถานที่)";
+    crmQuoteSite.appendChild(whole);
+    sites.forEach(s => {
+      const option = document.createElement("option");
+      option.value = String(s.id);
+      option.textContent = (s.name || "(ไม่มีชื่อสถานที่)") + (s.ca ? " · CA " + s.ca : "")
+        + (Number(s.transformerTotalKva) > 0 ? " · " + formatMoney(s.transformerTotalKva) + " kVA" : "");
+      crmQuoteSite.appendChild(option);
+    });
+    // มีจุดเดียว = เลือกให้เลย เพราะเกือบทุกข้อเสนอผูกกับจุดใช้ไฟ
+    const preselect = site || (sites.length === 1 ? sites[0] : null);
+    crmQuoteSite.value = preselect ? String(preselect.id) : "";
+
+    crmQuoteRecs.innerHTML = '<div class="request-empty">กำลังโหลด...</div>';
+    crmQuoteModal.hidden = false;
+    crmQuoteSite.focus();
+    await Promise.all([ensureCrmQuotations(), ensurePriceItems()]);
+    if (crmQuoteCustomer === customer) renderCrmQuoteRecs();
+  }
+
+  function crmQuoteSelectedSite() {
+    if (!crmQuoteCustomer || !crmQuoteSite.value) return null;
+    return crmSites(crmQuoteCustomer).find(s => String(s.id) === crmQuoteSite.value) || null;
+  }
+
+  function renderCrmQuoteRecs() {
+    const customer = crmQuoteCustomer;
+    if (!customer) return;
+    const site = crmQuoteSelectedSite();
+
+    // ประวัติที่ผ่านมา -- ให้เห็นก่อนเสนอซ้ำหรือเสนอราคาต่างจากครั้งก่อน
+    const history = site ? crmQuotesForSite(site.id) : crmQuotesFor(customer.id);
+    const latest = history.slice().sort((a, b) =>
+      (Number(b.createdAt) || 0) - (Number(a.createdAt) || 0))[0];
+    document.getElementById("crmQuoteHistory").textContent = history.length
+      ? "เคยเสนอราคาให้" + (site ? "สถานที่นี้ " : "ลูกค้ารายนี้ ") + history.length + " ใบ · ล่าสุด "
+        + formatThaiDateTime(latest.createdAt)
+        + " “" + ((latest.data && latest.data.subject) || latest.title || "") + "” [" + (latest.status || "-") + "]"
+      : "ยังไม่เคยเสนอราคาให้" + (site ? "สถานที่นี้" : "ลูกค้ารายนี้");
+
+    crmQuoteRecs.innerHTML = "";
+    if (!site) {
+      crmQuoteRecs.appendChild(crmEmptyBox(crmSites(customer).length
+        ? "เลือกสถานที่ (CA) ด้านบนเพื่อดูแพ็คเกจที่แนะนำ -- หรือกด “ใบเปล่า” เพื่อเสนอราคาระดับลูกค้า"
+        : "ลูกค้ารายนี้ยังไม่มีสถานที่ -- เพิ่มสถานที่ (CA) พร้อมข้อมูลหม้อแปลงก่อน ระบบจึงแนะนำแพ็คเกจได้"));
+      return;
+    }
+
+    const recs = crmRecommendPackages(site);
+    if (!recs.length) {
+      crmQuoteRecs.appendChild(crmEmptyBox("ยังแนะนำไม่ได้ -- สถานที่นี้ยังไม่มีข้อมูลหม้อแปลง/Solar ให้คิด"));
+      return;
+    }
+
+    recs.forEach(rec => {
+      const pkg = CRM_PACKAGES[rec.key];
+      const card = document.createElement("div");
+      card.className = "crm-quote-rec" + (rec.priority === 1 ? " is-top" : "");
+
+      const head = document.createElement("div");
+      head.className = "crm-card-head";
+      const name = document.createElement("span");
+      name.className = "crm-card-name";
+      name.textContent = pkg.short === pkg.name ? pkg.name : pkg.short + " · " + pkg.name;
+      head.appendChild(name);
+      const badge = document.createElement("span");
+      badge.className = "request-badge request-badge-status tone-"
+        + (rec.priority === 1 ? "success" : rec.priority === 2 ? "info" : "warning");
+      badge.textContent = rec.priority === 1 ? "แนะนำ" : rec.priority === 2 ? "ควรเสนอ" : "โอกาสเสริม";
+      head.appendChild(badge);
+
+      const reason = document.createElement("div");
+      reason.className = "crm-card-meta";
+      reason.textContent = rec.reason + (pkg.fit ? " · เข้าเกณฑ์: " + pkg.fit : "");
+
+      const source = document.createElement("div");
+      source.className = "crm-card-meta crm-quote-source";
+      source.textContent = crmPackageSourceText(rec.key, site);
+
+      card.append(head, reason, source);
+
+      if (rec.recent) {
+        const recent = document.createElement("div");
+        recent.className = "crm-card-meta crm-quote-recent";
+        recent.textContent = "เสนอแพ็คเกจนี้ไปแล้วเมื่อ "
+          + formatThaiDateTime(rec.recent.createdAt) + " [" + (rec.recent.status || "-") + "]";
+        card.appendChild(recent);
+      }
+
+      const actions = document.createElement("div");
+      actions.className = "crm-quote-rec-actions";
+      if (rec.recent) {
+        const openOld = document.createElement("button");
+        openOld.type = "button";
+        openOld.className = "btn btn-ghost";
+        openOld.textContent = "เปิดใบเดิม";
+        openOld.addEventListener("click", () => {
+          crmQuoteModal.hidden = true;
+          openQuotationView().then(() => openQuotationForm(rec.recent));
+        });
+        actions.appendChild(openOld);
+      }
+      const go = document.createElement("button");
+      go.type = "button";
+      go.className = rec.recent ? "btn btn-ghost" : "btn btn-primary";
+      go.textContent = rec.recent ? "เสนอใหม่อีกใบ" : "เสนอราคาแพ็คเกจนี้";
+      go.addEventListener("click", () => crmQuoteGo(rec.key, go));
+      actions.appendChild(go);
+      card.appendChild(actions);
+
+      crmQuoteRecs.appendChild(card);
+    });
+  }
+
+  async function crmQuoteGo(key, btn) {
+    const customer = crmQuoteCustomer;
+    if (!customer) return;
+    const site = crmQuoteSelectedSite();
+    hideError(crmQuoteError);
+    setBusy(btn, true, "กำลังเปิด...");
+    try {
+      await crmStartQuotation(customer, site, key, "");
+      crmQuoteModal.hidden = true;
+      crmQuoteCustomer = null;
+    } catch (err) {
+      showError(crmQuoteError, moduleErrorText(err));
+    } finally {
+      setBusy(btn, false);
+    }
+  }
+
+  crmQuoteSite.addEventListener("change", renderCrmQuoteRecs);
+  document.getElementById("crmQuoteBlankBtn").addEventListener("click", (e) => crmQuoteGo(null, e.currentTarget));
+  document.getElementById("crmQuoteCloseBtn").addEventListener("click", () => {
+    crmQuoteModal.hidden = true;
+    crmQuoteCustomer = null;
+  });
+  crmQuoteModal.addEventListener("click", (e) => {
+    if (e.target === crmQuoteModal) { crmQuoteModal.hidden = true; crmQuoteCustomer = null; }
+  });
+  crmQuoteModal.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") { crmQuoteModal.hidden = true; crmQuoteCustomer = null; }
+  });
+
+  // ---- เสนอราคาด้วย BP / CA จากหน้าแรก CRM
+  function crmDigits(value) {
+    return String(value || "").replace(/\D/g, "");
+  }
+
+  function crmQuoteLookup() {
+    const msg = document.getElementById("crmQuoteLookupMsg");
+    hideError(msg);
+    const typed = crmDigits(document.getElementById("crmQuoteLookup").value);
+    if (!typed) { showError(msg, "กรุณาพิมพ์เลข BP หรือ CA"); return; }
+
+    const byBp = crmCustomers.filter(c => crmDigits(c.bp) === typed);
+    const bySite = [];
+    crmCustomers.forEach(c => crmSites(c).forEach(s => {
+      if (crmDigits(s.ca) === typed) bySite.push({ customer: c, site: s });
+    }));
+
+    if (bySite.length === 1 && !byBp.length) { openCrmQuoteModal(bySite[0].customer, bySite[0].site); return; }
+    if (byBp.length === 1 && !bySite.length) { openCrmQuoteModal(byBp[0], null); return; }
+    if (!byBp.length && !bySite.length) {
+      showError(msg, "ไม่พบลูกค้าที่มี BP หรือสถานที่ที่มี CA " + typed + " ใน CRM -- เพิ่มลูกค้า/สถานที่ในแท็บรายชื่อลูกค้าก่อน");
+      return;
+    }
+    showError(msg, "เลข " + typed + " ตรงกับหลายรายการ -- เปิดจากหน้าลูกค้าแทน");
+  }
+
+  document.getElementById("crmQuoteLookupBtn").addEventListener("click", crmQuoteLookup);
+  document.getElementById("crmQuoteLookup").addEventListener("keydown", (e) => {
+    if (e.key === "Enter") { e.preventDefault(); crmQuoteLookup(); }
+  });
+
+  // ---- ประวัติการเสนอราคาของสถานที่ (หน้าสถานที่)
+  function crmQuoteRow(q, showSite) {
+    const row = document.createElement("button");
+    row.type = "button";
+    row.className = "mywork-job-row";
+    const d = q.data || {};
+    const name = document.createElement("span");
+    name.className = "mywork-job-name";
+    const site = showSite && d.siteSnapshot
+      ? " · " + (d.siteSnapshot.name || "") + (d.siteSnapshot.ca ? " (CA " + d.siteSnapshot.ca + ")" : "")
+      : "";
+    name.textContent = (d.refNo ? d.refNo + " · " : "") + (d.subject || q.title || "(ไม่มีเรื่อง)") + site;
+    const status = document.createElement("span");
+    status.className = "mywork-job-age";
+    const total = Array.isArray(d.lines) && d.lines.length
+      ? " · " + formatMoney(quotationTotals(d.lines, d.vatEnabled).grand) + " บาท" : "";
+    status.textContent = (q.status || "") + total + " · " + formatThaiDateTime(q.updatedAt || q.createdAt);
+    row.append(name, status);
+    row.addEventListener("click", () => {
+      openQuotationView().then(() => openQuotationForm(q));
+    });
+    return row;
+  }
+
+  function renderCrmSiteQuotes() {
+    const host = document.getElementById("crmSiteQuotes");
+    const head = document.getElementById("crmSiteQuotesHead");
+    host.innerHTML = "";
+    const site = crmSiteEditing;
+    head.hidden = !site;
+    document.getElementById("crmSiteQuoteBtn").hidden = !site;
+    if (!site) return;
+    const rows = crmQuotesForSite(site.id)
+      .sort((a, b) => (Number(b.updatedAt || b.createdAt) || 0) - (Number(a.updatedAt || a.createdAt) || 0));
+    if (!rows.length) {
+      host.appendChild(crmEmptyBox("ยังไม่เคยเสนอราคาให้สถานที่นี้ -- กด “เสนอราคาสถานที่นี้” ด้านบน"));
+      return;
+    }
+    rows.forEach(q => host.appendChild(crmQuoteRow(q, false)));
+  }
+
+  document.getElementById("crmSiteQuoteBtn").addEventListener("click", () => {
+    if (crmEditing && crmSiteEditing) openCrmQuoteModal(crmEditing, crmSiteEditing);
+  });
+
   // ------------------------------------------------------- ส่วนในหน้าลูกค้า
   function renderCrmCustomerOpps() {
     const host = document.getElementById("crmCustomerOpps");
@@ -19171,28 +19913,12 @@ ${sheetHtml}
     }
     const rows = crmQuotesFor(crmEditing.id);
     if (!rows.length) {
-      host.appendChild(crmEmptyBox("ยังไม่มีใบเสนอราคาที่ผูกกับลูกค้ารายนี้ -- ผูกได้จากช่อง “ลูกค้า (CRM)” บนใบเสนอราคา"));
+      host.appendChild(crmEmptyBox("ยังไม่มีใบเสนอราคาที่ผูกกับลูกค้ารายนี้ -- กด “+ สร้างใบเสนอราคา” หรือผูกจากช่อง “ลูกค้า (CRM)” บนใบเสนอราคา"));
       return;
     }
     rows
       .sort((a, b) => (Number(b.updatedAt || b.createdAt) || 0) - (Number(a.updatedAt || a.createdAt) || 0))
-      .forEach(q => {
-        const row = document.createElement("button");
-        row.type = "button";
-        row.className = "mywork-job-row";
-        const d = q.data || {};
-        const name = document.createElement("span");
-        name.className = "mywork-job-name";
-        name.textContent = (d.refNo ? d.refNo + " · " : "") + (d.subject || q.title || "(ไม่มีเรื่อง)");
-        const status = document.createElement("span");
-        status.className = "mywork-job-age";
-        status.textContent = (q.status || "") + " · " + formatThaiDateTime(q.updatedAt || q.createdAt);
-        row.append(name, status);
-        row.addEventListener("click", () => {
-          openQuotationView().then(() => openQuotationForm(q));
-        });
-        host.appendChild(row);
-      });
+      .forEach(q => host.appendChild(crmQuoteRow(q, true)));
   }
 
   function crmEmptyBox(text) {
@@ -19233,10 +19959,12 @@ ${sheetHtml}
       const customerId = crmField("crmOppCustomer").value;
       const customer = crmCustomers.find(c => String(c.id) === customerId);
       if (!customer) { showError(crmOppError, "กรุณาเลือกลูกค้าก่อน"); return; }
-      crmOpenQuotationFor(customer, crmField("crmOppName").value.trim());
+      const siteId = crmField("crmOppSite").value;
+      const site = siteId ? crmSites(customer).find(s => String(s.id) === siteId) : null;
+      crmOpenQuotationFor(customer, crmField("crmOppName").value.trim(), site);
     });
     document.getElementById("crmCustomerQuoteBtn").addEventListener("click", () => {
-      if (crmEditing) crmOpenQuotationFor(crmEditing, "");
+      if (crmEditing) openCrmQuoteModal(crmEditing, null);
     });
   }
 
@@ -19246,13 +19974,16 @@ ${sheetHtml}
    * เติม "เรียน" กับที่อยู่จากข้อมูลลูกค้า -- เป็นสองช่องที่ต้องพิมพ์ซ้ำทุกใบ
    * ส่วนช่องอื่นปล่อยว่างไว้ให้กรอกเอง ไม่เดาแทน
    */
-  async function crmOpenQuotationFor(customer, subject) {
-    await openQuotationView();
-    openQuotationForm(null, {
-      customerId: String(customer.id),
-      recipient: customer.name || "",
-      subject: subject || ""
-    });
+  async function crmOpenQuotationFor(customer, subject, site) {
+    await crmStartQuotation(customer, site || null, null, subject);
+  }
+
+  /** ใส่ใบที่เพิ่งบันทึกลงรายการที่ CRM ถืออยู่ -- ประวัติในกล่องเสนอราคาจะได้ตรง */
+  function crmUpsertQuotation(saved) {
+    if (!saved) return;
+    const index = crmQuotations.findIndex(q => String(q.id) === String(saved.id));
+    if (index === -1) crmQuotations.unshift(saved);
+    else crmQuotations[index] = saved;
   }
 
   async function saveCrmOpp() {
