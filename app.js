@@ -1099,8 +1099,8 @@
         return callAsUser(() => rpc("set_user_role", { p_email: email, p_role: role }));
       },
 
-      async searchArchived(query) {
-        const data = await callAsUser(() => rpc("search_archived", { p_query: query }));
+      async searchArchived(query, type) {
+        const data = await callAsUser(() => rpc("search_archived", { p_query: query, p_type: type || null }));
         return data.requests || [];
       },
 
@@ -4032,6 +4032,19 @@
     revenueDispatch: isRevenueDispatch
   };
 
+  // ประเภทคำร้องที่อยู่เบื้องหลังแท็บ derived แต่ละแท็บ -- ใช้จำกัดการค้นหาคำร้องเก่า
+  // ให้ค้นเฉพาะประเภทของหน้าที่เปิดอยู่ (แท็บประเภทปกติใช้ชื่อแท็บเป็นประเภทได้เลย)
+  const DERIVED_TAB_TYPES = {
+    payment: "power",
+    meter: "power",
+    generalDispatch: "general",
+    revenueDispatch: "deposit"
+  };
+
+  function requestTypeForTab(tab) {
+    return DERIVED_TAB_TYPES[tab] || tab;
+  }
+
   const navBadges = document.querySelectorAll(".nav-badge");
 
   // แท็บ dispatch ที่ยังอยู่ในแถบซ้ายของหน้างานรับคำร้องพร้อมป้ายนับจำนวน
@@ -5468,6 +5481,7 @@
     renderRequestCardsInto(requestsList, filtered, {
       isMeterTab, isGeneralTab, isRevenueTab, isAssignTab, groupByStatus,
       searchQuery: currentSearchQuery,
+      searchType: requestTypeForTab(currentRequestFilter),
       onArchiveMerged: renderRequestsList
     });
   }
@@ -5479,7 +5493,7 @@
    */
   function renderRequestCardsInto(listEl, filtered, {
     isMeterTab = false, isGeneralTab = false, isRevenueTab = false, isAssignTab = false,
-    searchQuery = "", onArchiveMerged = renderRequestsList, groupByStatus = false
+    searchQuery = "", searchType = "", onArchiveMerged = renderRequestsList, groupByStatus = false
   } = {}) {
     listEl.innerHTML = "";
 
@@ -5498,7 +5512,7 @@
         archiveBtn.type = "button";
         archiveBtn.className = "btn btn-ghost request-archive-search-btn";
         archiveBtn.textContent = `ค้นหา "${searchQuery}" ในคำร้องเก่าที่จัดเก็บแล้ว`;
-        archiveBtn.addEventListener("click", () => searchArchivedAndMerge(searchQuery, archiveBtn, onArchiveMerged));
+        archiveBtn.addEventListener("click", () => searchArchivedAndMerge(searchQuery, archiveBtn, onArchiveMerged, searchType));
         listEl.appendChild(archiveBtn);
       }
       return;
@@ -6191,10 +6205,14 @@
    * saveRequests() path as anything else, so there's no special "this record
    * came from a search" case to keep correct in the edit/save logic.
    */
-  async function searchArchivedAndMerge(query, triggerBtn, onDone = renderRequestsList) {
+  async function searchArchivedAndMerge(query, triggerBtn, onDone = renderRequestsList, type = "") {
     setBusy(triggerBtn, true, "กำลังค้นหา...");
     try {
-      const found = await backend.searchArchived(query);
+      // ค้นเฉพาะประเภทของหน้าที่เปิดอยู่ -- เซิร์ฟเวอร์กรองให้แล้ว (search_archived
+      // รับ p_type ตั้งแต่ migration 20260924000001 ต้อง push ก่อนขึ้น app.js นี้)
+      // กรองซ้ำที่นี่อีกชั้นเพื่อให้ใบที่รวมเข้าแคชเป็นประเภทของหน้านี้แน่ ๆ
+      const found = (await backend.searchArchived(query, type))
+        .filter(r => !type || r.type === type);
       if (!found.length) {
         triggerBtn.textContent = "ไม่พบคำร้องที่ตรงกันในคำร้องเก่า";
         triggerBtn.disabled = true;
@@ -6591,6 +6609,12 @@
       },
       { label: "สถานะงาน", value: record.jobStatus || "-", status: true }
     ];
+
+    // หมายเลข WBS มีเฉพาะงานขยายเขตฯ -- วางต่อจากเลขที่คำร้อง (ระบบ) ให้เลขอ้างอิง
+    // ทั้งหมดอยู่กลุ่มเดียวกัน ใบขอใช้ไฟฟ้าไม่มีบรรทัดนี้ ไม่งั้นจะขึ้น "-" ทุกใบ
+    if (record.type === "extend" || record.wbs) {
+      lines.splice(2, 0, { label: "หมายเลข WBS", value: record.wbs || "-", mono: true });
+    }
 
     // ใต้สถานะงานพอดี -- คนที่แคปการ์ดนี้ส่งต่อมักถูกถามต่อทันทีว่า "อีกกี่คิว"
     // ขึ้นเฉพาะใบที่อยู่คิวรอสำรวจจริง ใบสถานะอื่นไม่มีบรรทัดนี้ให้รก
@@ -9289,7 +9313,7 @@
     document.getElementById("estimatePrintBtn").hidden = false;
     document.getElementById("estimateSaveBtn").hidden = false;
 
-    estimateView.contextWbs.textContent = record.wbs ? `WBS: ${record.wbs}` : "ยังไม่มีเลข WBS";
+    estimateView.contextWbs.textContent = record.wbs ? `WBS: ${record.wbs}` : "ยังไม่มีหมายเลข WBS";
     estimateView.contextCustomer.textContent =
       [record.requestNumber, record.customerName].filter(Boolean).join(" · ");
 
@@ -10544,8 +10568,8 @@ ${sheetHtml}
   const extendStage = { plan: false, photo: false, estimate: false };
 
   const EXTEND_PANE_NOTICE = {
-    plan: "แนบแผนผังได้เมื่อสถานะเป็น “รอเขียนผัง” (กรอกเลข WBS แล้วบันทึก สถานะจะเปลี่ยนให้เอง)",
-    photo: "แนบภาพหน้างานได้เมื่อคำร้องมีเลข WBS แล้ว",
+    plan: "แนบแผนผังได้เมื่อสถานะเป็น “รอเขียนผัง” (กรอกหมายเลข WBS แล้วบันทึก สถานะจะเปลี่ยนให้เอง)",
+    photo: "แนบภาพหน้างานได้เมื่อคำร้องมีหมายเลข WBS แล้ว",
     estimate: "ทำประมาณการได้เมื่อสถานะเป็น “รอประมาณการ” (แนบแผนผังแล้ว สถานะจะเปลี่ยนให้เอง)"
   };
 
