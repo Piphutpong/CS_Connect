@@ -19,6 +19,8 @@ apps-script/
 
 # architecture notes, including documented weaknesses
 CLAUDE.md
+docs/claude-original.md
+docs/claude-archive.md
 
 # operating manual (member approval, maintenance)
 README.md
